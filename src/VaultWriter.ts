@@ -1,5 +1,5 @@
 import { App, TFile, normalizePath } from "obsidian";
-import { DeepSeekResponse, DeepSeekSettings } from "./types";
+import { DeepSeekResponse, DeepSeekSettings, ContextQAInput, ContextQAResponse } from "./types";
 
 export class VaultWriter {
   constructor(private app: App, private settings: DeepSeekSettings) {}
@@ -11,13 +11,11 @@ export class VaultWriter {
     const folderPath = normalizePath(this.settings.savePath);
     const filePath = normalizePath(`${folderPath}/${filename}`);
 
-    // 确保目录存在
     await this.ensureFolder(folderPath);
 
     const content = this.buildNoteContent(question, response);
     const file = await this.app.vault.create(filePath, content);
 
-    // 自动创建概念页（V2 功能）
     for (const concept of response.concepts) {
       await this.ensureConceptNote(concept);
     }
@@ -25,15 +23,32 @@ export class VaultWriter {
     return file;
   }
 
-  private buildNoteContent(question: string, response: DeepSeekResponse): string {
-    const conceptLinks = response.concepts
-      .map((c) => `- [[${c}]]`)
-      .join("\n");
+  async writeContextQANote(input: ContextQAInput, response: ContextQAResponse): Promise<TFile> {
+    const date = new Date().toISOString().slice(0, 10);
+    const safeTitle = this.sanitizeFilename(input.question).slice(0, 50);
+    const filename = `${date}-ctx-${safeTitle}.md`;
+    const folderPath = normalizePath(this.settings.savePath);
+    const filePath = normalizePath(`${folderPath}/${filename}`);
 
+    await this.ensureFolder(folderPath);
+
+    const content = this.buildContextNoteContent(input, response);
+    const file = await this.app.vault.create(filePath, content);
+
+    for (const concept of response.concepts) {
+      await this.ensureConceptNote(concept);
+    }
+
+    await this.appendBacklink(input.sourceNote, file.path, input.question);
+
+    return file;
+  }
+
+  private buildNoteContent(question: string, response: DeepSeekResponse): string {
+    const conceptLinks = response.concepts.map((c) => `- [[${c}]]`).join("\n");
     const relationLines = response.relations
       .map((r) => `- [[${r.from}]] -${r.relation}-> [[${r.to}]]`)
       .join("\n");
-
     const tagLine = response.tags.map((t) => `#${t.replace(/\s+/g, "_")}`).join(" ");
 
     return `# ${question}
@@ -53,6 +68,63 @@ ${relationLines || "- 暂无"}
 ## Tags
 ${tagLine || "暂无标签"}
 `;
+  }
+
+  private buildContextNoteContent(input: ContextQAInput, response: ContextQAResponse): string {
+    const conceptLinks = response.concepts.map((c) => `- [[${c}]]`).join("\n");
+    const relationLines = response.relations
+      .map((r) => `- [[${r.from}]] -${r.relation}-> [[${r.to}]]`)
+      .join("\n");
+    const tagLine = response.tags.map((t) => `#${t.replace(/\s+/g, "_")}`).join(" ");
+    const suggestedLines = response.suggested_questions.map((q) => `- ${q}`).join("\n");
+    const sourceLink = input.sourceNote ? `[[${input.sourceNote}]]` : "未知来源";
+
+    return `# ${input.question}
+
+## 来源片段
+> ${input.context.split("\n").join("\n> ")}
+
+来源：${sourceLink}
+
+## Question
+${input.question}
+
+## Answer
+${response.answer}
+
+## Concepts
+${conceptLinks || "- 暂无"}
+
+## Relations
+${relationLines || "- 暂无"}
+
+## 延伸问题
+${suggestedLines || "- 暂无"}
+
+## Tags
+${tagLine || "暂无标签"}
+`;
+  }
+
+  private async appendBacklink(sourceNotePath: string, qaFilePath: string, question: string): Promise<void> {
+    if (!sourceNotePath) return;
+    const sourceFile = this.app.vault.getAbstractFileByPath(sourceNotePath) as TFile | null;
+    if (!sourceFile) return;
+
+    const content = await this.app.vault.read(sourceFile);
+    const backlinkSection = "## 相关问答";
+    const link = `- [[${qaFilePath}|${question}]]`;
+
+    if (content.includes(link)) return;
+
+    if (content.includes(backlinkSection)) {
+      await this.app.vault.modify(
+        sourceFile,
+        content.replace(backlinkSection, `${backlinkSection}\n${link}`)
+      );
+    } else {
+      await this.app.vault.modify(sourceFile, content.trimEnd() + `\n\n${backlinkSection}\n${link}\n`);
+    }
   }
 
   async ensureConceptNote(concept: string): Promise<void> {

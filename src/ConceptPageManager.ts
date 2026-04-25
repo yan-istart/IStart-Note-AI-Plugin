@@ -1,5 +1,5 @@
-import { App, TFile, parseYaml, stringifyYaml } from "obsidian";
-import { ConceptCompletionResult, CompletionDepth } from "./types";
+import { App, TFile, parseYaml, stringifyYaml, normalizePath } from "obsidian";
+import { ConceptCompletionResult, CompletionDepth, DeepSeekSettings } from "./types";
 
 export interface ConceptPageInfo {
   file: TFile;
@@ -11,7 +11,7 @@ export interface ConceptPageInfo {
 }
 
 export class ConceptPageManager {
-  constructor(private app: App) {}
+  constructor(private app: App, private settings?: DeepSeekSettings) {}
 
   /** 判断当前打开的文件是否是待补全的概念页 */
   async analyzeCurrentFile(): Promise<ConceptPageInfo | null> {
@@ -77,6 +77,9 @@ export class ConceptPageManager {
       : updatedBody;
 
     await this.app.vault.modify(file, newContent);
+
+    // 为关联概念预创建空概念页到正确路径，避免点击双链时落到根目录
+    await this.ensureRelatedConceptNotes(result.related_concepts.map((c) => c.name));
   }
 
   buildPreviewMarkdown(result: ConceptCompletionResult, depth: CompletionDepth): string {
@@ -173,5 +176,28 @@ export class ConceptPageManager {
       updated_at: today,
       ...(result.tags.length > 0 ? { tags: result.tags } : {}),
     };
+  }
+
+  private async ensureRelatedConceptNotes(concepts: string[]): Promise<void> {
+    const folderPath = normalizePath(
+      this.settings?.conceptsPath ?? "Knowledge/Concepts"
+    );
+
+    // 确保目录存在
+    if (!this.app.vault.getAbstractFileByPath(folderPath)) {
+      await this.app.vault.createFolder(folderPath);
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+
+    for (const concept of concepts) {
+      const filePath = normalizePath(`${folderPath}/${concept}.md`);
+      if (!this.app.vault.getAbstractFileByPath(filePath)) {
+        await this.app.vault.create(
+          filePath,
+          `---\ntype: concept\nname: ${concept}\nstatus: empty\ncompletion_status: pending\ncreated_from: concept-completion\ncreated_at: ${today}\n---\n\n# ${concept}\n\n## 定义\n\n## 核心解释\n\n## 示例\n\n## 关联概念\n\n## 相关问题\n\n## 来源\n`
+        );
+      }
+    }
   }
 }

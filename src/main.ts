@@ -10,6 +10,8 @@ import { DepthSelectModal, PreviewModal, BatchScanModal } from "./ConceptComplet
 import { QuestionClassifier } from "./QuestionClassifier";
 import { QuestionGraphManager } from "./QuestionGraphManager";
 import { QuestionClassifyModal } from "./QuestionClassifyModal";
+import { ContextQAClient } from "./ContextQAClient";
+import { ContextQAModal } from "./ContextQAModal";
 
 export default class DeepSeekPlugin extends Plugin {
   settings: DeepSeekSettings;
@@ -44,6 +46,22 @@ export default class DeepSeekPlugin extends Plugin {
       callback: () => this.scanAndBatchComplete(),
     });
 
+    // 命令：框选提问
+    this.addCommand({
+      id: "context-qa",
+      name: "基于选中内容提问",
+      hotkeys: [{ modifiers: ["Mod", "Shift"], key: "q" }],
+      editorCallback: (editor) => {
+        const selection = editor.getSelection().trim();
+        if (!selection) {
+          new Notice("请先选中一段文字");
+          return;
+        }
+        const activeFile = this.app.workspace.getActiveFile();
+        this.openContextQAModal(selection, activeFile?.path ?? "");
+      },
+    });
+
     // 命令：问题图谱索引
     this.addCommand({
       id: "open-question-index",
@@ -59,10 +77,10 @@ export default class DeepSeekPlugin extends Plugin {
 
         menu.addItem((item) => {
           item
-            .setTitle("DeepSeek：补全此概念页")
+            .setTitle("IStart-Note-AI：补全此概念页")
             .setIcon("brain")
             .onClick(async () => {
-              const manager = new ConceptPageManager(this.app);
+              const manager = new ConceptPageManager(this.app, this.settings);
               const info = await manager.analyzeFile(file);
               if (!info) {
                 new Notice("该文件不是概念页");
@@ -82,8 +100,22 @@ export default class DeepSeekPlugin extends Plugin {
     // 编辑器内右键菜单
     this.registerEvent(
       this.app.workspace.on("editor-menu", (menu, editor) => {
-        // 检查选中文字是否是 [[概念]] 格式
         const selection = editor.getSelection().trim();
+
+        // 框选提问入口（有选中内容时显示）
+        if (selection) {
+          menu.addItem((item) => {
+            item
+              .setTitle("IStart-Note-AI：基于选中内容提问")
+              .setIcon("message-circle")
+              .onClick(() => {
+                const activeFile = this.app.workspace.getActiveFile();
+                this.openContextQAModal(selection, activeFile?.path ?? "");
+              });
+          });
+        }
+
+        // 概念补全入口
         const linkMatch = selection.match(/^\[\[(.+?)(?:\|.+?)?\]\]$/) ||
           selection.match(/^(.+)$/);
         const conceptName = linkMatch?.[1];
@@ -91,16 +123,14 @@ export default class DeepSeekPlugin extends Plugin {
 
         menu.addItem((item) => {
           item
-            .setTitle(`DeepSeek：补全概念 "${conceptName}"`)
+            .setTitle(`IStart-Note-AI：补全概念 "${conceptName}"`)
             .setIcon("brain")
             .onClick(async () => {
-              const manager = new ConceptPageManager(this.app);
-              // 尝试找到对应概念页文件
+              const manager = new ConceptPageManager(this.app, this.settings);
               const conceptsPath = this.settings.conceptsPath || "Knowledge/Concepts";
               const filePath = `${conceptsPath}/${conceptName}.md`;
               let file = this.app.vault.getAbstractFileByPath(filePath) as TFile | null;
 
-              // 不存在则先创建
               if (!file) {
                 const writer = new VaultWriter(this.app, this.settings);
                 await writer.ensureConceptNote(conceptName);
@@ -122,15 +152,81 @@ export default class DeepSeekPlugin extends Plugin {
             });
         });
 
-        // 当前文件是概念页时，也提供补全入口
         menu.addItem((item) => {
           item
-            .setTitle("DeepSeek：补全当前概念页")
+            .setTitle("IStart-Note-AI：补全当前概念页")
             .setIcon("brain")
             .onClick(() => this.completeCurrentConcept());
         });
       })
     );
+  }
+
+  private openContextQAModal(selectedText: string, sourceNotePath: string) {
+    new ContextQAModal(this.app, selectedText, (question) => {
+      this.processContextQA(question, selectedText, sourceNotePath);
+    }).open();
+  }
+
+  private async processContextQA(question: string, context: string, sourceNotePath: string) {
+    const notice = new Notice("⏳ 基于上下文思考中...", 0);
+
+    try {
+      const client = new ContextQAClient(this.settings);
+      const graphManager = new QuestionGraphManager(this.app, this.settings);
+
+      // 获取周围段落作为补充上下文（取文件前 500 字）
+      let surroundingContext: string | undefined;
+      if (sourceNotePath) {
+        const sourceFile = this.app.vault.getAbstractFileByPath(sourceNotePath) as TFile | null;
+        if (sourceFile) {
+          const fullContent = await this.app.vault.read(sourceFile);
+          surroundingContext = fullContent.slice(0, 500);
+        }
+      }
+
+      const [response, history] = await Promise.all([
+        client.ask({ question, context, sourceNote: sourceNotePath, surroundingContext }),
+        graphManager.getQuestionHistory(),
+      ]);
+
+      notice.hide();
+
+      // 分类
+      const classifier = new QuestionClassifier(this.settings);
+      const classifyNotice = new Notice("🔍 分析问题关系...", 0);
+      const classification = await classifier.classify(question, history);
+      classifyNotice.hide();
+
+      new QuestionClassifyModal(this.app, question, classification, async (confirmed) => {
+        const writeNotice = new Notice("✍️ 写入笔记...", 0);
+        try {
+          const writer = new VaultWriter(this.app, this.settings);
+          const file = await writer.writeContextQANote(
+            { question, context, sourceNote: sourceNotePath, surroundingContext },
+            response
+          );
+
+          await graphManager.attachClassification(file, question, confirmed, response.concepts);
+          await graphManager.appendRecommendations(file, confirmed);
+          await graphManager.updateQuestionIndex(question, confirmed, file.path);
+
+          writeNotice.hide();
+          new Notice(`✅ 上下文笔记已生成：${file.name}`);
+
+          const leaf = this.app.workspace.getLeaf(false);
+          await leaf.openFile(file);
+        } catch (err) {
+          writeNotice.hide();
+          new Notice(`❌ 写入失败：${err.message}`);
+          console.error("[IStart-Note-AI]", err);
+        }
+      }).open();
+    } catch (err) {
+      notice.hide();
+      new Notice(`❌ 错误：${err.message}`);
+      console.error("[IStart-Note-AI]", err);
+    }
   }
 
   private openQuestionModal() {
@@ -212,7 +308,7 @@ export default class DeepSeekPlugin extends Plugin {
   }
 
   private async completeCurrentConcept() {
-    const manager = new ConceptPageManager(this.app);
+    const manager = new ConceptPageManager(this.app, this.settings);
     const info = await manager.analyzeCurrentFile();
 
     if (!info) {
@@ -241,7 +337,7 @@ export default class DeepSeekPlugin extends Plugin {
       const result = await completer.complete(conceptName, depth, context);
       notice.hide();
 
-      const manager = new ConceptPageManager(this.app);
+      const manager = new ConceptPageManager(this.app, this.settings);
       const previewMd = manager.buildPreviewMarkdown(result, depth);
 
       new PreviewModal(
@@ -267,7 +363,7 @@ export default class DeepSeekPlugin extends Plugin {
 
   private async scanAndBatchComplete() {
     const notice = new Notice("🔍 扫描空概念页中...", 0);
-    const manager = new ConceptPageManager(this.app);
+    const manager = new ConceptPageManager(this.app, this.settings);
     const empties = await manager.scanEmptyConcepts();
     notice.hide();
 

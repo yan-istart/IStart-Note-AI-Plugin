@@ -1,9 +1,9 @@
 {
-  "id": "obsidian-deepseek-knowledge",
-  "name": "DeepSeek Knowledge Graph",
-  "version": "1.0.0",
+  "id": "istart-note-ai",
+  "name": "IStart-Note-AI",
+  "version": "1.3.0",
   "minAppVersion": "1.0.0",
-  "description": "通过 DeepSeek AI 自动构建个人知识图谱，将问答转化为结构化双链笔记",
+  "description": "基于 DeepSeek AI 的知识图谱插件：框选提问、概念补全、问题图谱、自动双链",
   "author": "Your Name",
   "authorUrl": "",
   "isDesktopOnly": false

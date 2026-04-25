@@ -1,7 +1,7 @@
 {
-  "name": "obsidian-deepseek-knowledge",
-  "version": "1.0.0",
-  "description": "DeepSeek Knowledge Graph plugin for Obsidian",
+  "name": "istart-note-ai",
+  "version": "1.3.0",
+  "description": "IStart-Note-AI: DeepSeek-powered knowledge graph plugin for Obsidian",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",

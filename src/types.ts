@@ -52,3 +52,18 @@ export interface Relation {
   relation: string;
   to: string;
 }
+
+export interface ContextQAInput {
+  question: string;
+  context: string;           // 框选内容
+  sourceNote: string;        // 来源文件路径
+  surroundingContext?: string; // 上下文段落（可选）
+}
+
+export interface ContextQAResponse {
+  answer: string;
+  concepts: string[];
+  relations: Relation[];
+  suggested_questions: string[];
+  tags: string[];
+}
