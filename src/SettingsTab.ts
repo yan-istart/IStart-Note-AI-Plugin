@@ -65,6 +65,19 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName("概念页保存路径")
+      .setDesc("概念页存储目录（相对于 Vault 根目录）")
+      .addText((text) =>
+        text
+          .setPlaceholder("Knowledge/Concepts")
+          .setValue(this.plugin.settings.conceptsPath)
+          .onChange(async (value) => {
+            this.plugin.settings.conceptsPath = value.trim() || "Knowledge/Concepts";
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
       .setName("自动打开 Graph View")
       .setDesc("生成笔记后自动打开图谱视图")
       .addToggle((toggle) =>

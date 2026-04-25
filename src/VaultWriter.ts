@@ -55,18 +55,39 @@ ${tagLine || "暂无标签"}
 `;
   }
 
-  private async ensureConceptNote(concept: string): Promise<void> {
-    const folderPath = normalizePath("Knowledge/Concepts");
+  async ensureConceptNote(concept: string): Promise<void> {
+    const folderPath = normalizePath(this.settings.conceptsPath || "Knowledge/Concepts");
     const filePath = normalizePath(`${folderPath}/${concept}.md`);
 
     await this.ensureFolder(folderPath);
 
     const exists = this.app.vault.getAbstractFileByPath(filePath);
     if (!exists) {
-      await this.app.vault.create(
-        filePath,
-        `# ${concept}\n\n## 定义\n\n## 关联\n\n## 来源\n`
-      );
+      const today = new Date().toISOString().slice(0, 10);
+      const content = `---
+type: concept
+name: ${concept}
+status: empty
+completion_status: pending
+created_from: Q&A
+created_at: ${today}
+---
+
+# ${concept}
+
+## 定义
+
+## 核心解释
+
+## 示例
+
+## 关联概念
+
+## 相关问题
+
+## 来源
+`;
+      await this.app.vault.create(filePath, content);
     }
   }
 
