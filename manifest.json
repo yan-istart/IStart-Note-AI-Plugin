@@ -1,7 +1,7 @@
 {
   "id": "istart-note-ai",
   "name": "IStart-Note-AI",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "minAppVersion": "1.0.0",
   "description": "基于 DeepSeek AI 的知识图谱插件：框选提问、概念补全、问题图谱、自动双链",
   "author": "Your Name",

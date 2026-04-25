@@ -12,6 +12,8 @@ import { QuestionGraphManager } from "./QuestionGraphManager";
 import { QuestionClassifyModal } from "./QuestionClassifyModal";
 import { ContextQAClient } from "./ContextQAClient";
 import { ContextQAModal } from "./ContextQAModal";
+import { SectionAppender } from "./SectionAppender";
+import { SectionAppendModal, SectionPreviewModal } from "./SectionAppendModal";
 
 export default class DeepSeekPlugin extends Plugin {
   settings: DeepSeekSettings;
@@ -59,6 +61,25 @@ export default class DeepSeekPlugin extends Plugin {
         }
         const activeFile = this.app.workspace.getActiveFile();
         this.openContextQAModal(selection, activeFile?.path ?? "");
+      },
+    });
+
+    // 命令：补充当前章节
+    this.addCommand({
+      id: "append-current-section",
+      name: "为当前章节补充内容",
+      editorCallback: (editor) => {
+        const cursor = editor.getCursor();
+        const content = editor.getValue();
+        const appender = new SectionAppender(this.app, this.settings);
+        const sectionName = appender.getSectionAtCursor(content, cursor.line);
+        if (!sectionName) {
+          new Notice("请将光标置于某个章节（## 标题）内");
+          return;
+        }
+        const activeFile = this.app.workspace.getActiveFile();
+        if (!activeFile) return;
+        this.runSectionAppend(activeFile, sectionName, content);
       },
     });
 
@@ -111,6 +132,24 @@ export default class DeepSeekPlugin extends Plugin {
               .onClick(() => {
                 const activeFile = this.app.workspace.getActiveFile();
                 this.openContextQAModal(selection, activeFile?.path ?? "");
+              });
+          });
+        }
+
+        // 章节补充入口（光标在 ## 章节内时显示）
+        const cursor = editor.getCursor();
+        const fullContent = editor.getValue();
+        const appender = new SectionAppender(this.app, this.settings);
+        const sectionAtCursor = appender.getSectionAtCursor(fullContent, cursor.line);
+        if (sectionAtCursor) {
+          menu.addItem((item) => {
+            item
+              .setTitle(`IStart-Note-AI：补充"${sectionAtCursor}"内容`)
+              .setIcon("plus-circle")
+              .onClick(() => {
+                const activeFile = this.app.workspace.getActiveFile();
+                if (!activeFile) return;
+                this.runSectionAppend(activeFile, sectionAtCursor, fullContent);
               });
           });
         }
@@ -358,6 +397,54 @@ export default class DeepSeekPlugin extends Plugin {
       notice.hide();
       new Notice(`❌ 补全失败：${err.message}`);
       console.error("[DeepSeek Plugin]", err);
+    }
+  }
+
+  private async runSectionAppend(file: TFile, sectionName: string, content: string) {
+    const appender = new SectionAppender(this.app, this.settings);
+    const section = appender.extractSection(content, sectionName);
+    const existingItems = section?.existing
+      .split("\n")
+      .filter((l) => l.trim().startsWith("-"))
+      .length ?? 0;
+
+    // 获取概念名（文件名或 frontmatter.name）
+    const meta = this.app.metadataCache.getFileCache(file);
+    const conceptName = (meta?.frontmatter?.name as string) || file.basename;
+
+    new SectionAppendModal(this.app, sectionName, existingItems, (count) => {
+      this.generateAndPreviewSection(file, conceptName, sectionName, section?.existing ?? "", count);
+    }).open();
+  }
+
+  private async generateAndPreviewSection(
+    file: TFile,
+    conceptName: string,
+    sectionName: string,
+    existingContent: string,
+    count: number
+  ) {
+    const notice = new Notice(`⏳ 生成"${sectionName}"补充内容...`, 0);
+    try {
+      const appender = new SectionAppender(this.app, this.settings);
+      const result = await appender.generate(conceptName, sectionName, existingContent, count);
+      notice.hide();
+
+      new SectionPreviewModal(
+        this.app,
+        sectionName,
+        result.items,
+        async () => {
+          await appender.appendToSection(file, sectionName, result.items);
+          new Notice(`✅ 已追加 ${result.items.length} 条内容到"${sectionName}"`);
+        },
+        () => {
+          this.generateAndPreviewSection(file, conceptName, sectionName, existingContent, count);
+        }
+      ).open();
+    } catch (err) {
+      notice.hide();
+      new Notice(`❌ 生成失败：${err.message}`);
     }
   }
 
