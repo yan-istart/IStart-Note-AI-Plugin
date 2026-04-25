@@ -65,6 +65,19 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName("问题索引路径")
+      .setDesc("问题图谱索引页存储目录")
+      .addText((text) =>
+        text
+          .setPlaceholder("Knowledge/Questions")
+          .setValue(this.plugin.settings.questionsIndexPath)
+          .onChange(async (value) => {
+            this.plugin.settings.questionsIndexPath = value.trim() || "Knowledge/Questions";
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
       .setName("概念页保存路径")
       .setDesc("概念页存储目录（相对于 Vault 根目录）")
       .addText((text) =>

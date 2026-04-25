@@ -5,6 +5,7 @@ export interface DeepSeekSettings {
   savePath: string;
   autoOpenGraph: boolean;
   conceptsPath: string;
+  questionsIndexPath: string;
 }
 
 export const DEFAULT_SETTINGS: DeepSeekSettings = {
@@ -14,9 +15,21 @@ export const DEFAULT_SETTINGS: DeepSeekSettings = {
   savePath: "Knowledge/Q&A",
   autoOpenGraph: false,
   conceptsPath: "Knowledge/Concepts",
+  questionsIndexPath: "Knowledge/Questions",
 };
 
 export type CompletionDepth = "light" | "standard";
+
+export type QuestionCategory = "new" | "refinement" | "expansion";
+
+export interface QuestionClassification {
+  category: QuestionCategory;
+  parent: string | null;       // 父问题标题（refinement 时有值）
+  related: string[];           // 相关问题标题列表
+  confidence: number;          // 0-1
+  refinements: string[];       // 推荐深化问题
+  expansions: string[];        // 推荐扩展问题
+}
 
 export interface ConceptCompletionResult {
   definition: string;

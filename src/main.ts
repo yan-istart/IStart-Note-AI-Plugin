@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile } from "obsidian";
+import { Notice, Plugin, TFile, normalizePath } from "obsidian";
 import { DeepSeekSettings, DEFAULT_SETTINGS, CompletionDepth } from "./types";
 import { DeepSeekClient } from "./DeepSeekClient";
 import { VaultWriter } from "./VaultWriter";
@@ -7,6 +7,9 @@ import { DeepSeekSettingsTab } from "./SettingsTab";
 import { ConceptCompleter } from "./ConceptCompleter";
 import { ConceptPageManager } from "./ConceptPageManager";
 import { DepthSelectModal, PreviewModal, BatchScanModal } from "./ConceptCompletionModal";
+import { QuestionClassifier } from "./QuestionClassifier";
+import { QuestionGraphManager } from "./QuestionGraphManager";
+import { QuestionClassifyModal } from "./QuestionClassifyModal";
 
 export default class DeepSeekPlugin extends Plugin {
   settings: DeepSeekSettings;
@@ -41,10 +44,15 @@ export default class DeepSeekPlugin extends Plugin {
       callback: () => this.scanAndBatchComplete(),
     });
 
+    // 命令：问题图谱索引
+    this.addCommand({
+      id: "open-question-index",
+      name: "打开问题索引",
+      callback: () => this.openQuestionIndex(),
+    });
+
     // 设置页
     this.addSettingTab(new DeepSeekSettingsTab(this.app, this));
-
-    // 文件列表右键菜单
     this.registerEvent(
       this.app.workspace.on("file-menu", (menu, file) => {
         if (!(file instanceof TFile) || file.extension !== "md") return;
@@ -132,30 +140,75 @@ export default class DeepSeekPlugin extends Plugin {
   }
 
   private async processQuestion(question: string) {
+    // Step 1: 并行调用 DeepSeek 回答 + 问题分类
     const notice = new Notice("⏳ DeepSeek 思考中...", 0);
 
     try {
       const client = new DeepSeekClient(this.settings);
-      const response = await client.ask(question);
+      const graphManager = new QuestionGraphManager(this.app, this.settings);
 
-      const writer = new VaultWriter(this.app, this.settings);
-      const file = await writer.writeQANote(question, response);
+      const [response, history] = await Promise.all([
+        client.ask(question),
+        graphManager.getQuestionHistory(),
+      ]);
 
       notice.hide();
-      new Notice(`✅ 笔记已生成：${file.name}`);
 
-      const leaf = this.app.workspace.getLeaf(false);
-      await leaf.openFile(file);
+      // Step 2: 分类（后台静默进行，不阻塞笔记生成）
+      const classifier = new QuestionClassifier(this.settings);
+      const classifyNotice = new Notice("🔍 分析问题关系...", 0);
+      const classification = await classifier.classify(question, history);
+      classifyNotice.hide();
 
-      if (this.settings.autoOpenGraph) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (this.app as any).commands.executeCommandById("graph:open");
-      }
+      // Step 3: 弹出分类确认弹窗
+      new QuestionClassifyModal(this.app, question, classification, async (confirmed) => {
+        const writeNotice = new Notice("✍️ 写入笔记...", 0);
+        try {
+          const writer = new VaultWriter(this.app, this.settings);
+          const file = await writer.writeQANote(question, response);
+
+          // Step 4: 附加问题图谱 frontmatter
+          await graphManager.attachClassification(file, question, confirmed, response.concepts);
+
+          // Step 5: 追加推荐问题
+          await graphManager.appendRecommendations(file, confirmed);
+
+          // Step 6: 更新问题索引页
+          await graphManager.updateQuestionIndex(question, confirmed, file.path);
+
+          writeNotice.hide();
+          new Notice(`✅ 笔记已生成：${file.name}`);
+
+          const leaf = this.app.workspace.getLeaf(false);
+          await leaf.openFile(file);
+
+          if (this.settings.autoOpenGraph) {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (this.app as any).commands.executeCommandById("graph:open");
+          }
+        } catch (err) {
+          writeNotice.hide();
+          new Notice(`❌ 写入失败：${err.message}`);
+          console.error("[DeepSeek Plugin]", err);
+        }
+      }).open();
     } catch (err) {
       notice.hide();
       new Notice(`❌ 错误：${err.message}`);
       console.error("[DeepSeek Plugin]", err);
     }
+  }
+
+  private async openQuestionIndex() {
+    const indexFolder = normalizePath(this.settings.questionsIndexPath);
+    const indexPath = normalizePath(`${indexFolder}/问题索引.md`);
+    let file = this.app.vault.getAbstractFileByPath(indexPath) as TFile | null;
+    if (!file) {
+      await this.app.vault.createFolder(indexFolder).catch(() => {});
+      file = await this.app.vault.create(indexPath, "# 问题索引\n\n## 核心问题\n\n## 深化问题\n\n## 扩展问题\n");
+    }
+    const leaf = this.app.workspace.getLeaf(false);
+    await leaf.openFile(file);
   }
 
   private async completeCurrentConcept() {
