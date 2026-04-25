@@ -1,0 +1,10 @@
+{
+  "id": "obsidian-deepseek-knowledge",
+  "name": "DeepSeek Knowledge Graph",
+  "version": "1.0.0",
+  "minAppVersion": "1.0.0",
+  "description": "通过 DeepSeek AI 自动构建个人知识图谱，将问答转化为结构化双链笔记",
+  "author": "Your Name",
+  "authorUrl": "",
+  "isDesktopOnly": false
+}
