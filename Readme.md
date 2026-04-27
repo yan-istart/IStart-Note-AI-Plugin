@@ -1,171 +1,177 @@
 # IStart-Note-AI
 
-基于 DeepSeek AI 的 Obsidian 知识图谱插件。将提问行为转化为结构化双链笔记，自动构建个人知识网络。
+Generate structured knowledge notes from questions and selected text using DeepSeek AI, with automatic concept pages, bidirectional links, and a question graph.
 
 ---
 
-## 功能概览
+## Features
 
-| 功能 | 描述 |
-|------|------|
-| 普通提问 | 输入问题 → DeepSeek 回答 → 自动生成结构化笔记 |
-| 框选提问 | 选中文本 → 基于上下文提问 → 生成带来源引用的笔记 |
-| 问题分类 | 自动判断问题类型（新问题 / 深化 / 扩展）并建立关联 |
-| 概念补全 | 按需补全空概念页，支持轻量 / 标准两种深度 |
-| 章节追加 | 对已有章节（如"示例"）按需补充更多条目 |
-| 批量扫描 | 扫描 Vault 中所有空概念页，批量补全 |
-| 问题索引 | 自动维护问题图谱索引页 |
-
----
-
-## 安装
-
-### 手动安装
-
-1. 构建插件（见下方开发指南）
-2. 将 `dist/` 目录下的文件复制到 Vault 的 `.obsidian/plugins/istart-note-ai/`
-3. 在 Obsidian 设置 → 第三方插件中启用 **IStart-Note-AI**
-
-### 目录结构要求
-
-插件会自动创建以下目录（可在设置中修改路径）：
-
-```
-Knowledge/
-├── Q&A/          # 问答笔记
-├── Concepts/     # 概念页
-└── Questions/    # 问题索引
-```
+| Feature | Description |
+|---------|-------------|
+| Ask a question | Input a question, get a DeepSeek answer, and generate a structured note automatically. |
+| Context Q&A | Select text in any note, ask a question based on it, and generate a note with source reference and backlink. |
+| Question classification | Automatically classify questions as new, refinement, or expansion, and link them to related questions. |
+| Concept completion | Fill in empty concept pages on demand, with light or standard depth. |
+| Section append | Add more items to any existing section (e.g. Examples) without overwriting existing content. |
+| Batch scan | Scan all empty concept pages in the vault and complete them in bulk. |
+| Question index | Automatically maintain a question graph index page. |
 
 ---
 
-## 配置
+## Requirements
 
-进入 Obsidian 设置 → IStart-Note-AI：
-
-| 配置项 | 说明 | 默认值 |
-|--------|------|--------|
-| API Key | DeepSeek API Key，在 [platform.deepseek.com](https://platform.deepseek.com) 获取 | 空 |
-| Base URL | API 地址 | `https://api.deepseek.com` |
-| 模型 | `deepseek-chat` 或 `deepseek-reasoner` | `deepseek-chat` |
-| Q&A 保存路径 | 问答笔记存储目录 | `Knowledge/Q&A` |
-| 概念页路径 | 概念页存储目录 | `Knowledge/Concepts` |
-| 问题索引路径 | 问题图谱索引目录 | `Knowledge/Questions` |
-| 自动打开 Graph View | 生成笔记后自动打开图谱 | 关闭 |
+- Obsidian 1.4.0 or later.
+- A [DeepSeek API key](https://platform.deepseek.com).
 
 ---
 
-## 使用方式
+## Installation
 
-### 普通提问
+### From the community plugin directory (recommended)
 
-- 快捷键：`Cmd/Ctrl + Shift + D`
-- 侧边栏点击脑图标
-- 命令面板：`向 DeepSeek 提问并生成知识笔记`
+1. Open Obsidian settings → Community plugins → Browse.
+2. Search for **IStart-Note-AI**.
+3. Click Install, then Enable.
 
-输入问题后，插件会：
-1. 调用 DeepSeek 生成回答
-2. 弹出问题分类确认弹窗（可手动调整类型）
-3. 生成结构化 Markdown 笔记，包含 Answer / Concepts / Relations / 推荐问题
-4. 自动创建相关概念页（空节点）
-5. 更新问题索引页
+### Manual installation
 
-### 框选提问
-
-1. 在任意笔记中选中一段文字
-2. 右键 → **IStart-Note-AI：基于选中内容提问**
-   或快捷键 `Cmd/Ctrl + Shift + Q`
-3. 在弹窗中输入针对该内容的问题
-4. 生成的笔记包含来源引用，并在原笔记末尾追加反向链接
-
-### 章节内容追加
-
-对概念页任意章节（示例、关联概念、相关问题等）补充更多条目：
-
-1. 将光标置于目标章节内（如 `## 示例` 下方任意位置）
-2. 右键 → `IStart-Note-AI：补充"示例"内容`
-   或命令面板：`为当前章节补充内容`
-3. 选择本次新增条目数（2 / 3 / 5 / 8）
-4. 预览生成结果，确认追加或重新生成
-
-DeepSeek 会读取该章节现有内容作为上下文，**不重复已有条目**，风格保持一致。
-
-### 概念页补全
-
-**单个补全：**
-- 打开概念页 → 命令面板：`补全当前概念页`
-- 编辑器内选中 `[[概念名]]` → 右键 → `IStart-Note-AI：补全概念 "xxx"`
-- 文件列表右键任意 `.md` 文件 → `IStart-Note-AI：补全此概念页`
-
-**批量补全：**
-- 命令面板：`扫描空概念页`
-- 从列表中选择（最多 5 个）→ 选择补全深度 → 确认
-
-补全深度：
-- **轻量**：定义 + 关联概念
-- **标准**：定义 + 核心解释 + 示例 + 关联概念 + 相关问题
-
-所有补全内容在写入前会弹出预览窗口，支持重新生成或取消。
-
-### 问题索引
-
-- 命令面板：`打开问题索引`
-- 每次提问后自动更新对应索引页
+1. Build the plugin (see [Development](#development)).
+2. Copy the contents of `dist/` to your vault's `.obsidian/plugins/istart-note-ai/` folder.
+3. Enable the plugin in Obsidian settings → Community plugins.
 
 ---
 
-## 笔记结构
+## Configuration
 
-### Q&A 笔记（普通提问）
+Open Obsidian settings → IStart-Note-AI.
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| API key | Your DeepSeek API key from [platform.deepseek.com](https://platform.deepseek.com). | — |
+| Base URL | API endpoint. | `https://api.deepseek.com` |
+| Model | `deepseek-chat` or `deepseek-reasoner`. | `deepseek-chat` |
+| Q&A folder | Folder for question-and-answer notes. | `Knowledge/Q&A` |
+| Concepts folder | Folder for concept pages. | `Knowledge/Concepts` |
+| Questions folder | Folder for the question graph index. | `Knowledge/Questions` |
+| Open graph view | Open the graph view automatically after generating a note. | Off |
+
+The plugin creates these folders automatically on first use.
+
+---
+
+## Usage
+
+### Ask a question
+
+- Hotkey: `Cmd/Ctrl + Shift + D`
+- Ribbon icon (brain icon in the left sidebar)
+- Command palette: `Ask DeepSeek and generate a knowledge note`
+
+After submitting a question, the plugin:
+
+1. Calls DeepSeek and generates an answer.
+2. Shows a classification dialog to confirm the question type (new, refinement, or expansion).
+3. Creates a structured Markdown note with Answer, Concepts, Relations, and suggested follow-up questions.
+4. Creates empty concept pages for all extracted concepts.
+5. Updates the question index page.
+
+### Context Q&A
+
+1. Select any text in a note.
+2. Right-click → **IStart-Note-AI: Ask based on selection**, or use `Cmd/Ctrl + Shift + Q`.
+3. Enter your question in the dialog.
+4. The generated note includes the source quote and a backlink is added to the original note.
+
+### Section append
+
+Add more items to any section that already has content:
+
+1. Place the cursor inside a section (e.g. below `## Examples`).
+2. Right-click → **IStart-Note-AI: Append to "Examples"**, or use the command palette: `Append content to current section`.
+3. Choose how many items to generate (2, 3, 5, or 8).
+4. Review the preview, then confirm to append or regenerate.
+
+DeepSeek reads the existing section content as context and avoids duplicating items.
+
+### Concept completion
+
+**Single page:**
+
+- Open a concept page → command palette: `Complete current concept page`.
+- Select `[[concept name]]` in the editor → right-click → `IStart-Note-AI: Complete concept "..."`.
+- Right-click any `.md` file in the file list → `IStart-Note-AI: Complete this concept page`.
+
+**Batch:**
+
+- Command palette: `Scan empty concept pages`.
+- Select up to 5 pages, choose a depth, and confirm.
+
+Completion depth options:
+
+- **Light**: Definition and related concepts.
+- **Standard**: Definition, explanation, examples, related concepts, and related questions.
+
+All generated content is shown in a preview before being written to the file.
+
+### Question index
+
+- Command palette: `Open question index`.
+- The index is updated automatically after each question.
+
+---
+
+## Note structure
+
+### Q&A note
 
 ```markdown
 ---
 type: question
-question: 五行是什么？
+question: What are the five elements?
 category: new
 parent: null
 related: []
-concepts: [五行, 木, 火, 土, 金, 水]
+concepts: [Five elements, Wood, Fire, Earth, Metal, Water]
 status: linked
 created_at: 2026-04-25
 ---
 
-# 五行是什么？
+# What are the five elements?
 
 ## Question
 ## Answer
 ## Concepts
 ## Relations
 ## Tags
-## 推荐问题
-### 深化
-### 扩展
+## Suggested questions
+### Refinement
+### Expansion
 ```
 
-### Q&A 笔记（框选提问）
+### Context Q&A note
 
 ```markdown
-# 为什么阴阳平衡会影响系统稳定？
+# Why does yin-yang balance affect system stability?
 
-## 来源片段
-> 阴阳平衡决定系统稳定性
+## Source
+> Yin-yang balance determines system stability.
 
-来源：[[原始笔记路径]]
+Source: [[path/to/original-note]]
 
 ## Question
 ## Answer
 ## Concepts
 ## Relations
-## 延伸问题
+## Suggested questions
 ## Tags
 ```
 
-### 概念页
+### Concept page
 
 ```markdown
 ---
 type: concept
-name: 五行
+name: Five elements
 status: completed
 completion_status: completed
 created_from: Q&A
@@ -173,105 +179,106 @@ created_at: 2026-04-25
 updated_at: 2026-04-25
 ---
 
-# 五行
+# Five elements
 
-## 定义
-## 核心解释
-## 示例
-## 关联概念
-## 相关问题
-## 来源
+## Definition
+## Explanation
+## Examples
+## Related concepts
+## Related questions
+## Sources
 ```
 
 ---
 
-## 开发指南
+## Development
 
-### 环境要求
+### Requirements
 
-- Node.js >= 16
-- npm >= 8
+- Node.js 16 or later.
+- npm 8 or later.
 
-### 本地开发
+### Setup
 
 ```bash
 cd obsidian-deepseek-plugin
 npm install
-npm run dev        # 监听模式，输出到 dist/main.js
 ```
 
-### 生产构建
+### Build
 
 ```bash
-npm run build      # 输出到 dist/main.js + dist/manifest.json
+npm run dev      # Watch mode, outputs to dist/main.js
+npm run build    # Production build, outputs to dist/
 ```
 
-### 项目结构
+### Project structure
 
 ```
 src/
-├── main.ts                    # 插件入口，注册命令 / 菜单 / 设置
-├── types.ts                   # 全局类型定义
-├── DeepSeekClient.ts          # 普通提问 API 调用
-├── ContextQAClient.ts         # 框选提问 API 调用（带上下文）
-├── VaultWriter.ts             # 笔记写入（Q&A / Context Q&A / 概念页）
-├── QuestionModal.ts           # 普通提问弹窗
-├── ContextQAModal.ts          # 框选提问弹窗
-├── QuestionClassifier.ts      # 问题分类（new / refinement / expansion）
-├── QuestionClassifyModal.ts   # 分类确认弹窗
-├── QuestionGraphManager.ts    # 问题图谱：frontmatter / 索引页 / 推荐问题
-├── ConceptCompleter.ts        # 概念补全 API 调用
-├── ConceptPageManager.ts      # 概念页识别 / 增量写入 / 批量扫描
-├── ConceptCompletionModal.ts  # 深度选择 / 预览确认 / 批量扫描弹窗
-├── SectionAppender.ts             # 章节内容提取、DeepSeek 追加生成、写入
-├── SectionAppendModal.ts          # 数量选择弹窗 + 预览确认弹窗
+├── main.ts                   # Plugin entry point: commands, menus, settings
+├── types.ts                  # Shared type definitions
+├── DeepSeekClient.ts         # API client for standard Q&A
+├── ContextQAClient.ts        # API client for context-aware Q&A
+├── VaultWriter.ts            # Note creation and backlink management
+├── QuestionModal.ts          # Question input dialog
+├── ContextQAModal.ts         # Context Q&A input dialog
+├── QuestionClassifier.ts     # Question classification (new / refinement / expansion)
+├── QuestionClassifyModal.ts  # Classification confirmation dialog
+├── QuestionGraphManager.ts   # Question graph: frontmatter, index page, suggestions
+├── ConceptCompleter.ts       # API client for concept completion
+├── ConceptPageManager.ts     # Concept page analysis, incremental write, batch scan
+├── ConceptCompletionModal.ts # Depth selection, preview, and batch scan dialogs
+├── SectionAppender.ts        # Section extraction, append generation, and write
+├── SectionAppendModal.ts     # Count selection and preview dialogs
+└── SettingsTab.ts            # Settings tab UI
 ```
 
-### 扩展开发
+### Extending the plugin
 
-**新增 AI 功能**：参考 `ContextQAClient.ts` 的模式，实现 `ask()` 方法并返回结构化 JSON。
-
-**新增命令**：在 `main.ts` 的 `onload()` 中调用 `this.addCommand()`。
-
-**新增右键菜单项**：在 `editor-menu` 或 `file-menu` 事件监听中追加 `menu.addItem()`。
-
-**修改笔记模板**：编辑 `VaultWriter.ts` 中的 `buildNoteContent()` 或 `buildContextNoteContent()`。
-
-**修改 Prompt**：编辑对应 Client 文件中的 prompt 常量。
+- To add a new AI feature, follow the pattern in `ContextQAClient.ts`: implement an `ask()` method that returns structured JSON.
+- To add a command, call `this.addCommand()` in `main.ts` `onload()`.
+- To add a context menu item, add `menu.addItem()` inside the `editor-menu` or `file-menu` event listener in `main.ts`.
+- To change a note template, edit `buildNoteContent()` or `buildContextNoteContent()` in `VaultWriter.ts`.
+- To change a prompt, edit the prompt constant in the corresponding client file.
 
 ---
 
-## 版本历史
+## Changelog
 
-### v1.4.0
-- 新增章节内容追加功能（对已有章节按需补充更多条目）
-- 右键菜单自动识别光标所在章节
-- 追加内容不重复已有条目，风格一致
-- 支持预览确认 / 重新生成
+### 1.4.0
 
-### v1.3.0
-- 新增框选提问（Context Q&A）功能
-- 框选提问支持上下文传入、来源引用、反向链接
-- 插件更名为 IStart-Note-AI
+- Added section append: add more items to any existing section without overwriting content.
+- Context menu automatically detects the section at the cursor position.
+- Generated items avoid duplicating existing content.
 
-### v1.2.0
-- 新增问题图谱：自动分类（new / refinement / expansion）
-- 新增问题索引页自动维护
-- 新增推荐深化 / 扩展问题
+### 1.3.0
 
-### v1.1.0
-- 新增概念页按需补全（轻量 / 标准）
-- 新增批量扫描空概念页
-- 新增预览确认弹窗
-- 新增右键菜单支持
+- Added context Q&A: ask questions based on selected text.
+- Context Q&A includes source quote, backlink to the original note.
+- Renamed plugin to IStart-Note-AI.
 
-### v1.0.0
-- 基础 Q&A 提问与笔记生成
-- 自动创建概念页与双链
-- DeepSeek API 配置
+### 1.2.0
+
+- Added question graph: automatic classification (new, refinement, expansion).
+- Added question index page.
+- Added suggested follow-up questions.
+
+### 1.1.0
+
+- Added concept completion (light and standard depth).
+- Added batch scan for empty concept pages.
+- Added preview dialog before writing.
+- Added context menu support.
+
+### 1.0.0
+
+- Basic Q&A note generation.
+- Automatic concept page creation and bidirectional links.
+- DeepSeek API configuration.
 
 ---
 
 ## License
 
-MIT
+MIT. See [LICENSE](LICENSE).
