@@ -1,5 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type DeepSeekPlugin from "./main";
+import { BaiduAuthModal } from "./BaiduAuthModal";
 
 export class DeepSeekSettingsTab extends PluginSettingTab {
   constructor(app: App, private plugin: DeepSeekPlugin) {
@@ -101,5 +102,148 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
             await this.plugin.saveSettings();
           })
       );
+
+    // ── 百度云同步 ──────────────────────────────────────────
+    containerEl.createEl("h3", { text: "百度网盘同步" });
+
+    new Setting(containerEl)
+      .setName("启用百度云同步")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.baiduSync.enabled).onChange(async (v) => {
+          this.plugin.settings.baiduSync.enabled = v;
+          await this.plugin.saveSettings();
+          this.display();
+        })
+      );
+
+    if (this.plugin.settings.baiduSync.enabled) {
+      new Setting(containerEl)
+        .setName("App ID")
+        .setDesc("百度开放平台应用的 App Key")
+        .addText((text) =>
+          text
+            .setPlaceholder("your-app-id")
+            .setValue(this.plugin.settings.baiduSync.appId)
+            .onChange(async (v) => {
+              this.plugin.settings.baiduSync.appId = v.trim();
+              await this.plugin.saveSettings();
+            })
+        );
+
+      new Setting(containerEl)
+        .setName("App Secret")
+        .setDesc("百度开放平台应用的 Secret Key")
+        .addText((text) => {
+          text
+            .setPlaceholder("your-app-secret")
+            .setValue(this.plugin.settings.baiduSync.appSecret)
+            .onChange(async (v) => {
+              this.plugin.settings.baiduSync.appSecret = v.trim();
+              await this.plugin.saveSettings();
+            });
+          text.inputEl.type = "password";
+          return text;
+        });
+
+      const tokenStatus = this.plugin.settings.baiduSync.accessToken
+        ? `已授权（过期时间：${this.plugin.settings.baiduSync.tokenExpiresAt?.slice(0, 10) ?? "未知"}）`
+        : "未授权";
+
+      new Setting(containerEl)
+        .setName("授权状态")
+        .setDesc(tokenStatus)
+        .addButton((btn) =>
+          btn.setButtonText("重新授权").onClick(() => {
+            new BaiduAuthModal(
+              this.app,
+              this.plugin.settings.baiduSync,
+              async (accessToken, refreshToken, expiresAt) => {
+                this.plugin.settings.baiduSync.accessToken = accessToken;
+                this.plugin.settings.baiduSync.refreshToken = refreshToken;
+                this.plugin.settings.baiduSync.tokenExpiresAt = expiresAt;
+                await this.plugin.saveSettings();
+                this.display();
+              }
+            ).open();
+          })
+        );
+
+      new Setting(containerEl)
+        .setName("远端备份路径")
+        .setDesc("百度网盘中的备份根目录")
+        .addText((text) =>
+          text
+            .setPlaceholder("/apps/istart-note-ai")
+            .setValue(this.plugin.settings.baiduSync.remotePath)
+            .onChange(async (v) => {
+              this.plugin.settings.baiduSync.remotePath = v.trim() || "/apps/istart-note-ai";
+              await this.plugin.saveSettings();
+            })
+        );
+
+      new Setting(containerEl)
+        .setName("自动备份")
+        .setDesc("每次生成笔记后自动备份到百度云")
+        .addToggle((t) =>
+          t.setValue(this.plugin.settings.baiduSync.autoBackup).onChange(async (v) => {
+            this.plugin.settings.baiduSync.autoBackup = v;
+            await this.plugin.saveSettings();
+          })
+        );
+
+      new Setting(containerEl)
+        .setName("忽略规则")
+        .setDesc("正则表达式，匹配的文件路径将被跳过")
+        .addText((text) =>
+          text
+            .setPlaceholder("node_modules|.git")
+            .setValue(this.plugin.settings.baiduSync.ignorePattern)
+            .onChange(async (v) => {
+              this.plugin.settings.baiduSync.ignorePattern = v.trim();
+              await this.plugin.saveSettings();
+            })
+        );
+
+      new Setting(containerEl)
+        .setName("单文件大小限制（MB）")
+        .addText((text) =>
+          text
+            .setPlaceholder("100")
+            .setValue(String(this.plugin.settings.baiduSync.fileSizeLimitMB))
+            .onChange(async (v) => {
+              const n = parseInt(v);
+              if (!isNaN(n) && n > 0) {
+                this.plugin.settings.baiduSync.fileSizeLimitMB = n;
+                await this.plugin.saveSettings();
+              }
+            })
+        );
+
+      // 配置同步
+      containerEl.createEl("h4", { text: "配置同步" });
+      containerEl.createEl("p", {
+        text: "将路径、模型等偏好设置同步到百度云，在多台设备间共享（不含 API Key 和 Token 等凭证）。",
+        attr: { style: "font-size: 12px; color: var(--text-muted); margin-bottom: 8px;" },
+      });
+
+      new Setting(containerEl)
+        .setName("推送配置到百度云")
+        .setDesc("将当前设置上传，其他设备可拉取同步")
+        .addButton((btn) =>
+          btn.setButtonText("推送").onClick(async () => {
+            await this.plugin.pushConfig();
+          })
+        );
+
+      new Setting(containerEl)
+        .setName("从百度云拉取配置")
+        .setDesc("拉取最新配置并应用（不覆盖凭证）")
+        .addButton((btn) =>
+          btn.setButtonText("拉取").onClick(async () => {
+            await this.plugin.pullConfig();
+            this.display();
+          })
+        );
+    }
   }
 }

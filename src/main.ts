@@ -14,6 +14,11 @@ import { ContextQAClient } from "./ContextQAClient";
 import { ContextQAModal } from "./ContextQAModal";
 import { SectionAppender } from "./SectionAppender";
 import { SectionAppendModal, SectionPreviewModal } from "./SectionAppendModal";
+import { BaiduSyncService } from "./BaiduSyncService";
+import { BaiduAuthModal } from "./BaiduAuthModal";
+import { BaiduSyncModal } from "./BaiduSyncModal";
+import { DEFAULT_BAIDU_SYNC_CONFIG } from "./types";
+import { BaiduSyncView, SYNC_VIEW_TYPE } from "./BaiduSyncView";
 
 export default class DeepSeekPlugin extends Plugin {
   settings: DeepSeekSettings;
@@ -21,10 +26,18 @@ export default class DeepSeekPlugin extends Plugin {
   async onload() {
     await this.loadSettings();
 
-    // 侧边栏图标
+    // 侧边栏图标：提问
     this.addRibbonIcon("brain", "DeepSeek 提问", () => {
       this.openQuestionModal();
     });
+
+    // 侧边栏图标：百度云同步
+    this.addRibbonIcon("cloud", "百度云同步状态", () => {
+      this.activateSyncView();
+    });
+
+    // 注册同步状态视图
+    this.registerView(SYNC_VIEW_TYPE, (leaf) => new BaiduSyncView(leaf, this));
 
     // 命令：提问
     this.addCommand({
@@ -88,6 +101,27 @@ export default class DeepSeekPlugin extends Plugin {
       id: "open-question-index",
       name: "打开问题索引",
       callback: () => this.openQuestionIndex(),
+    });
+
+    // 命令：百度云同步
+    this.addCommand({
+      id: "baidu-sync",
+      name: "百度网盘同步 / 备份",
+      callback: () => this.openBaiduSyncModal(),
+    });
+
+    // 命令：打开同步状态面板
+    this.addCommand({
+      id: "baidu-sync-view",
+      name: "打开百度云同步状态面板",
+      callback: () => this.activateSyncView(),
+    });
+
+    // 命令：百度云授权
+    this.addCommand({
+      id: "baidu-auth",
+      name: "百度网盘重新授权",
+      callback: () => this.openBaiduAuthModal(),
     });
 
     // 设置页
@@ -255,6 +289,9 @@ export default class DeepSeekPlugin extends Plugin {
 
           const leaf = this.app.workspace.getLeaf(false);
           await leaf.openFile(file);
+
+          // 自动备份
+          this.triggerAutoBackup(file.path);
         } catch (err) {
           writeNotice.hide();
           new Notice(`❌ 写入失败：${err.message}`);
@@ -321,6 +358,9 @@ export default class DeepSeekPlugin extends Plugin {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (this.app as any).commands.executeCommandById("graph:open");
           }
+
+          // 自动备份
+          this.triggerAutoBackup(file.path);
         } catch (err) {
           writeNotice.hide();
           new Notice(`❌ 写入失败：${err.message}`);
@@ -482,11 +522,101 @@ export default class DeepSeekPlugin extends Plugin {
     }).open();
   }
 
+  private async activateSyncView() {
+    const { workspace } = this.app;
+    let leaf = workspace.getLeavesOfType(SYNC_VIEW_TYPE)[0];
+    if (!leaf) {
+      leaf = workspace.getRightLeaf(false) ?? workspace.getLeaf(true);
+      await leaf.setViewState({ type: SYNC_VIEW_TYPE, active: true });
+    }
+    workspace.revealLeaf(leaf);
+  }
+
+  private openBaiduSyncModal() {
+    if (!this.settings.baiduSync.enabled) {
+      new Notice("请先在设置中启用百度云同步");
+      return;
+    }
+    new BaiduSyncModal(this.app, this.settings.baiduSync, async (accessToken, expiresAt) => {
+      this.settings.baiduSync.accessToken = accessToken;
+      this.settings.baiduSync.tokenExpiresAt = expiresAt;
+      await this.saveSettings();
+    }).open();
+  }
+
+  private openBaiduAuthModal() {
+    if (!this.settings.baiduSync.enabled) {
+      new Notice("请先在设置中启用百度云同步");
+      return;
+    }
+    new BaiduAuthModal(this.app, this.settings.baiduSync, async (accessToken, refreshToken, expiresAt) => {
+      this.settings.baiduSync.accessToken = accessToken;
+      this.settings.baiduSync.refreshToken = refreshToken;
+      this.settings.baiduSync.tokenExpiresAt = expiresAt;
+      await this.saveSettings();
+    }).open();
+  }
+
+  /** 自动备份触发（生成笔记后调用） */
+  private async triggerAutoBackup(filePath: string) {
+    const cfg = this.settings.baiduSync;
+    if (!cfg.enabled || !cfg.autoBackup || !cfg.accessToken) return;
+
+    try {
+      const service = new BaiduSyncService(this.app, cfg);
+      const tokenOk = await service.ensureValidToken();
+      if (!tokenOk) return;
+
+      // 只备份这一个文件所在的目录
+      const folder = filePath.includes("/") ? filePath.substring(0, filePath.lastIndexOf("/")) : "";
+      await service.backup(folder);
+    } catch {
+      // 自动备份失败静默处理，不打扰用户
+    }
+  }
+
   async loadSettings() {
     this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
+    // 确保 baiduSync 字段完整（兼容旧版本配置）
+    this.settings.baiduSync = Object.assign({}, DEFAULT_BAIDU_SYNC_CONFIG, this.settings.baiduSync);
+
+    // 启动时静默拉取远端配置（如果已授权）
+    if (this.settings.baiduSync.enabled && this.settings.baiduSync.accessToken) {
+      this.pullConfig(true).catch(() => {});
+    }
   }
 
   async saveSettings() {
     await this.saveData(this.settings);
+  }
+
+  /** 推送当前配置（不含凭证）到百度云 */
+  async pushConfig() {
+    const cfg = this.settings.baiduSync;
+    if (!cfg.enabled || !cfg.accessToken) {
+      new Notice("请先启用百度云同步并完成授权");
+      return;
+    }
+    const service = new BaiduSyncService(this.app, cfg);
+    const deviceId = (this.app.vault.adapter as any).basePath ?? "unknown-device";
+    const ok = await service.pushConfig(this.settings, deviceId);
+    new Notice(ok ? "✅ 配置已推送到百度云" : "❌ 配置推送失败");
+  }
+
+  /** 从百度云拉取配置并应用 */
+  async pullConfig(silent = false) {
+    const cfg = this.settings.baiduSync;
+    if (!cfg.enabled || !cfg.accessToken) return;
+
+    const service = new BaiduSyncService(this.app, cfg);
+    const remote = await service.pullConfig(undefined);
+    if (!remote) {
+      if (!silent) new Notice("远端无配置或已是最新");
+      return;
+    }
+
+    this.settings = BaiduSyncService.applyRemoteConfig(this.settings, remote);
+    await this.saveData(this.settings);
+    if (!silent) new Notice(`✅ 已从百度云拉取配置（由 ${remote.deviceId} 于 ${remote.updatedAt.slice(0, 10)} 推送）`);
   }
 }

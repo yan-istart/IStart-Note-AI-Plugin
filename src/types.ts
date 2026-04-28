@@ -6,7 +6,35 @@ export interface DeepSeekSettings {
   autoOpenGraph: boolean;
   conceptsPath: string;
   questionsIndexPath: string;
+  // 百度云同步配置
+  baiduSync: BaiduSyncConfig;
 }
+
+export interface BaiduSyncConfig {
+  enabled: boolean;
+  appId: string;           // 百度开放平台 App ID
+  appSecret: string;       // App Secret
+  accessToken: string;
+  refreshToken: string;
+  tokenExpiresAt: string;  // ISO 时间字符串
+  remotePath: string;      // 远端备份根目录，如 /apps/istart-note-ai
+  autoBackup: boolean;     // 每次生成笔记后自动备份
+  ignorePattern: string;   // 忽略规则（正则）
+  fileSizeLimitMB: number; // 单文件大小限制
+}
+
+export const DEFAULT_BAIDU_SYNC_CONFIG: BaiduSyncConfig = {
+  enabled: false,
+  appId: "",
+  appSecret: "",
+  accessToken: "",
+  refreshToken: "",
+  tokenExpiresAt: "",
+  remotePath: "/apps/istart-note-ai",
+  autoBackup: false,
+  ignorePattern: "",
+  fileSizeLimitMB: 100,
+};
 
 export const DEFAULT_SETTINGS: DeepSeekSettings = {
   apiKey: "",
@@ -16,7 +44,32 @@ export const DEFAULT_SETTINGS: DeepSeekSettings = {
   autoOpenGraph: false,
   conceptsPath: "Knowledge/Concepts",
   questionsIndexPath: "Knowledge/Questions",
+  baiduSync: { ...DEFAULT_BAIDU_SYNC_CONFIG },
 };
+
+/**
+ * 可跨设备同步的配置（不含凭证）
+ * 存储在百度云：{remotePath}/istart-config.json
+ */
+export interface SyncableConfig {
+  // DeepSeek
+  baseUrl: string;
+  model: "deepseek-chat" | "deepseek-reasoner";
+  // 路径
+  savePath: string;
+  conceptsPath: string;
+  questionsIndexPath: string;
+  // 行为
+  autoOpenGraph: boolean;
+  // 同步规则（不含凭证）
+  baiduRemotePath: string;
+  baiduAutoBackup: boolean;
+  baiduIgnorePattern: string;
+  baiduFileSizeLimitMB: number;
+  // 元信息
+  updatedAt: string; // ISO，用于多设备冲突判断
+  deviceId: string;  // 最后更新的设备标识
+}
 
 export type CompletionDepth = "light" | "standard";
 

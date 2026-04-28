@@ -15,6 +15,7 @@ Generate structured knowledge notes from questions and selected text using DeepS
 | Section append | Add more items to any existing section (e.g. Examples) without overwriting existing content. |
 | Batch scan | Scan all empty concept pages in the vault and complete them in bulk. |
 | Question index | Automatically maintain a question graph index page. |
+| Baidu Cloud sync | Incremental backup and restore of vault files to Baidu Netdisk. |
 
 ---
 
@@ -117,6 +118,45 @@ All generated content is shown in a preview before being written to the file.
 
 - Command palette: `Open question index`.
 - The index is updated automatically after each question.
+
+---
+
+## Baidu Netdisk sync
+
+### Setup
+
+1. Create an app at [Baidu Open Platform](https://pan.baidu.com/union/home) and get your App Key and Secret Key.
+2. Open plugin settings → Baidu Netdisk sync → enable it.
+3. Fill in App ID and App Secret.
+4. Click "Re-authorize" to complete the OAuth flow.
+
+### Backup
+
+- Command palette: `Baidu Netdisk sync / backup`.
+- Choose "Backup to Baidu Cloud", optionally specify a subfolder.
+- Only files newer than the remote copy are uploaded (incremental).
+- Hidden files, files matching the ignore pattern, and files exceeding the size limit are skipped.
+
+### Restore
+
+- Command palette: `Baidu Netdisk sync / backup`.
+- Choose "Restore from Baidu Cloud".
+- Toggle "Overwrite local files" to control whether existing local files are replaced.
+
+### Auto backup
+
+Enable "Auto backup" in settings to automatically back up the note folder after each Q&A or context Q&A note is generated.
+
+### Settings
+
+| Setting | Description | Default |
+|---------|-------------|---------|
+| App ID | Baidu Open Platform App Key. | — |
+| App Secret | Baidu Open Platform Secret Key. | — |
+| Remote path | Root folder in Baidu Netdisk. | `/apps/istart-note-ai` |
+| Auto backup | Back up automatically after each note is generated. | Off |
+| Ignore pattern | Regex pattern for paths to skip. | — |
+| File size limit | Maximum file size to upload (MB). | `100` |
 
 ---
 
@@ -231,6 +271,10 @@ src/
 ├── ConceptCompletionModal.ts # Depth selection, preview, and batch scan dialogs
 ├── SectionAppender.ts        # Section extraction, append generation, and write
 ├── SectionAppendModal.ts     # Count selection and preview dialogs
+├── BaiduPanClient.ts         # Baidu Netdisk REST API client (OAuth, upload, download)
+├── BaiduSyncService.ts       # Incremental backup and restore logic
+├── BaiduAuthModal.ts         # OAuth authorization dialog
+├── BaiduSyncModal.ts         # Sync operation dialog (backup / restore)
 └── SettingsTab.ts            # Settings tab UI
 ```
 
@@ -245,6 +289,13 @@ src/
 ---
 
 ## Changelog
+
+### 1.5.0
+
+- Added Baidu Netdisk sync: incremental backup and restore.
+- OAuth authorization flow with token auto-refresh.
+- Auto backup after note generation (optional).
+- Ignore pattern and file size limit support.
 
 ### 1.4.0
 
