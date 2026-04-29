@@ -1,12 +1,14 @@
 {
   "name": "istart-note-ai",
-  "version": "1.3.0",
+  "version": "1.5.0",
   "description": "IStart-Note-AI: DeepSeek-powered knowledge graph plugin for Obsidian",
   "main": "main.js",
   "scripts": {
     "dev": "node esbuild.config.mjs",
     "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
-    "version": "node version-bump.mjs && git add manifest.json versions.json"
+    "version": "node scripts/version-bump.mjs && git add manifest.json versions.json",
+    "release": "bash scripts/release.sh",
+    "submit": "bash scripts/submit-plugin.sh"
   },
   "keywords": [],
   "author": "",
