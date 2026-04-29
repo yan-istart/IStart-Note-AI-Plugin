@@ -1,0 +1,41 @@
+name: Release Obsidian Plugin
+
+on:
+  push:
+    tags:
+      - "*"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "18.x"
+
+      - name: Build plugin
+        run: |
+          npm install
+          npm run build
+
+      - name: Create release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          tag="${GITHUB_REF#refs/tags/}"
+          # Upload main.js and manifest.json from dist/
+          # Also upload styles.css if it exists
+          assets="dist/main.js dist/manifest.json"
+          if [ -f "styles.css" ]; then
+            assets="$assets styles.css"
+          fi
+          gh release create "$tag" \
+            --title="$tag" \
+            --generate-notes \
+            --draft \
+            $assets
