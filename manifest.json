@@ -1,7 +1,7 @@
 {
   "id": "istart-note-ai",
   "name": "IStart-Note-AI",
-  "version": "1.5.5",
+  "version": "1.5.6",
   "minAppVersion": "1.4.0",
   "description": "Generate structured knowledge notes from questions and selected text using DeepSeek AI, with automatic concept pages, bidirectional links, and a question graph.",
   "author": "Yan",

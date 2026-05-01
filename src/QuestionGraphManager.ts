@@ -93,7 +93,8 @@ export class QuestionGraphManager {
       await this.app.vault.create(indexPath, body);
     }
 
-    const indexFile = this.app.vault.getAbstractFileByPath(indexPath) as TFile;
+    const indexFile = this.app.vault.getAbstractFileByPath(indexPath);
+    if (!indexFile || !(indexFile instanceof TFile)) return;
     let content = await this.app.vault.read(indexFile);
 
     // 避免重复插入

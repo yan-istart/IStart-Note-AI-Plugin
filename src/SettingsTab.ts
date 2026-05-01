@@ -137,9 +137,9 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
           text
             .setPlaceholder("your-app-secret")
             .setValue(this.plugin.settings.baiduSync.appSecret)
-            .onChange(async (v) => {
+            .onChange((v) => {
               this.plugin.settings.baiduSync.appSecret = v.trim();
-              await this.plugin.saveSettings();
+              void this.plugin.saveSettings();
             });
           text.inputEl.type = "password";
           return text;

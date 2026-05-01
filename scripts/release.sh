@@ -116,8 +116,10 @@ update_versions() {
 # Build
 # ---------------------------------------------------------------------------
 build_plugin() {
-  info "Installing dependencies..."
-  (cd "$PROJECT_DIR" && npm install --silent)
+  if [[ ! -d "$PROJECT_DIR/node_modules" ]]; then
+    info "Installing dependencies..."
+    (cd "$PROJECT_DIR" && npm install)
+  fi
 
   info "Building plugin (production)..."
   (cd "$PROJECT_DIR" && npm run build)

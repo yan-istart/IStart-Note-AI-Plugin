@@ -65,7 +65,7 @@ export class PreviewModal extends Modal {
 
     const previewEl = contentEl.createDiv({ attr: { style: "max-height: 60vh; overflow-y: auto; border: 1px solid var(--background-modifier-border); border-radius: 4px; padding: 12px; margin-bottom: 16px;" } });
 
-    MarkdownRenderer.render(this.app, this.previewMd, previewEl, "", this.component);
+    void MarkdownRenderer.render(this.app, this.previewMd, previewEl, "", this.component);
 
     new Setting(contentEl)
       .addButton((btn) =>
