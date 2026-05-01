@@ -11,14 +11,14 @@ export class QuestionModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-    contentEl.createEl("h2", { text: "向 DeepSeek 提问" });
+    new Setting(contentEl).setName("向 DeepSeek 提问").setHeading();
 
     const textArea = contentEl.createEl("textarea", {
       attr: {
         placeholder: "输入你的问题...",
         rows: "4",
-        style: "width:100%; resize:vertical; padding:8px; font-size:14px;",
       },
+      cls: "istart-question-textarea",
     });
 
     textArea.addEventListener("input", () => {

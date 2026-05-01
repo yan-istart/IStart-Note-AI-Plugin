@@ -135,11 +135,23 @@ build_plugin() {
 create_tag() {
   local version="$1"
 
-  # Check for uncommitted changes
-  if ! git -C "$PROJECT_DIR" diff --quiet || ! git -C "$PROJECT_DIR" diff --cached --quiet; then
-    info "Committing version bump..."
-    git -C "$PROJECT_DIR" add manifest.json package.json versions.json
-    git -C "$PROJECT_DIR" commit -m "chore: bump version to $version"
+  # Stage and commit any uncommitted changes (source code, styles, etc.)
+  local has_changes=false
+  if [[ -n "$(git -C "$PROJECT_DIR" status --porcelain)" ]]; then
+    has_changes=true
+  fi
+
+  if [[ "$has_changes" == "true" ]]; then
+    info "Staging all changes..."
+    git -C "$PROJECT_DIR" add -A
+
+    # Show what will be committed
+    echo ""
+    git -C "$PROJECT_DIR" diff --cached --stat
+    echo ""
+
+    info "Committing: release $version"
+    git -C "$PROJECT_DIR" commit -m "release: $version"
   fi
 
   # Check if tag already exists
@@ -187,7 +199,6 @@ create_github_release() {
   # uploaded filenames are clean.
   local staging
   staging=$(mktemp -d)
-  trap 'rm -rf "$staging"' RETURN
 
   cp "$PROJECT_DIR/dist/main.js"      "$staging/main.js"
   cp "$PROJECT_DIR/dist/manifest.json" "$staging/manifest.json"
@@ -206,6 +217,8 @@ create_github_release() {
     --title "$version" \
     --generate-notes \
     "${assets[@]}"
+
+  rm -rf "$staging"
 
   ok "Release created: $version"
   echo ""

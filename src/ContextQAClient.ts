@@ -1,3 +1,4 @@
+import { requestUrl } from "obsidian";
 import { DeepSeekSettings, ContextQAInput, ContextQAResponse, Relation } from "./types";
 
 const buildPrompt = (input: ContextQAInput): string => `请基于以下上下文回答问题。
@@ -35,7 +36,8 @@ export class ContextQAClient {
       throw new Error("请先在插件设置中配置 API Key");
     }
 
-    const response = await fetch(`${this.settings.baseUrl}/v1/chat/completions`, {
+    const res = await requestUrl({
+      url: `${this.settings.baseUrl}/v1/chat/completions`,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -46,14 +48,14 @@ export class ContextQAClient {
         messages: [{ role: "user", content: buildPrompt(input) }],
         temperature: 0.6,
       }),
+      throw: false,
     });
 
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`API 错误: ${response.status} - ${err}`);
+    if (res.status !== 200) {
+      throw new Error(`API 错误: ${res.status} - ${res.text}`);
     }
 
-    const data = await response.json();
+    const data = res.json;
     const content = data.choices?.[0]?.message?.content ?? "";
     return this.parse(content);
   }
@@ -64,13 +66,13 @@ export class ContextQAClient {
     const jsonStr = jsonMatch ? jsonMatch[1] : content;
 
     try {
-      const p = JSON.parse(jsonStr.trim());
+      const p = JSON.parse(jsonStr.trim()) as Record<string, unknown>;
       return {
-        answer: p.answer || "",
-        concepts: Array.isArray(p.concepts) ? p.concepts : [],
+        answer: (p.answer as string) || "",
+        concepts: Array.isArray(p.concepts) ? p.concepts as string[] : [],
         relations: Array.isArray(p.relations) ? p.relations as Relation[] : [],
-        suggested_questions: Array.isArray(p.suggested_questions) ? p.suggested_questions : [],
-        tags: Array.isArray(p.tags) ? p.tags : [],
+        suggested_questions: Array.isArray(p.suggested_questions) ? p.suggested_questions as string[] : [],
+        tags: Array.isArray(p.tags) ? p.tags as string[] : [],
       };
     } catch {
       return { answer: content, concepts: [], relations: [], suggested_questions: [], tags: [] };

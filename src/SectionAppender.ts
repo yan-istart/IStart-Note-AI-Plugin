@@ -1,4 +1,4 @@
-import { App, TFile } from "obsidian";
+import { App, TFile, requestUrl } from "obsidian";
 import { DeepSeekSettings } from "./types";
 
 export interface SectionAppendResult {
@@ -71,7 +71,8 @@ export class SectionAppender {
       .replace("{{existing}}", existingContent || "（暂无内容）")
       .replace("{{count}}", String(count));
 
-    const response = await fetch(`${this.settings.baseUrl}/v1/chat/completions`, {
+    const res = await requestUrl({
+      url: `${this.settings.baseUrl}/v1/chat/completions`,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -82,14 +83,14 @@ export class SectionAppender {
         messages: [{ role: "user", content: prompt }],
         temperature: 0.7,
       }),
+      throw: false,
     });
 
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`API 错误: ${response.status} - ${err}`);
+    if (res.status !== 200) {
+      throw new Error(`API 错误: ${res.status} - ${res.text}`);
     }
 
-    const data = await response.json();
+    const data = res.json;
     const raw = data.choices?.[0]?.message?.content ?? "";
     return this.parse(raw, sectionName);
   }
@@ -132,8 +133,8 @@ export class SectionAppender {
     const jsonStr = jsonMatch ? jsonMatch[1] : content;
 
     try {
-      const p = JSON.parse(jsonStr.trim());
-      const items: string[] = Array.isArray(p.items) ? p.items : [];
+      const p = JSON.parse(jsonStr.trim()) as Record<string, unknown>;
+      const items: string[] = Array.isArray(p.items) ? p.items as string[] : [];
       return { items, raw: this.formatItems(items, sectionName) };
     } catch {
       // 降级：把每行当作一个条目

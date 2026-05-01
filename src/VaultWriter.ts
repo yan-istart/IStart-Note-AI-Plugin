@@ -171,6 +171,6 @@ created_at: ${today}
   }
 
   private sanitizeFilename(name: string): string {
-    return name.replace(/[\\/:*?"<>|#\[\]]/g, "-").trim();
+    return name.replace(/[\\/:*?"<>|#[\]]/g, "-").trim();
   }
 }

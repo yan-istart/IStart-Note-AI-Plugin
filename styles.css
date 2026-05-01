@@ -1,0 +1,165 @@
+/* IStart-Note-AI Plugin Styles */
+
+/* ── Baidu Sync View ─────────────────────────────── */
+
+.istart-sync-root {
+  padding: 12px;
+  overflow-y: auto;
+  height: 100%;
+}
+
+.istart-sync-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+}
+
+.istart-sync-header h4 {
+  margin: 0;
+  font-size: 14px;
+}
+
+.istart-sync-hint {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.istart-sync-btn-row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+
+.istart-sync-btn {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--background-modifier-border);
+  color: var(--text-normal);
+  border: none;
+}
+
+.istart-sync-btn-cta {
+  padding: 4px 10px;
+  font-size: 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+}
+
+.istart-sync-scan-time {
+  font-size: 11px;
+  color: var(--text-faint);
+  margin-bottom: 8px;
+}
+
+.istart-sync-status-msg {
+  color: var(--text-muted);
+}
+
+.istart-sync-success {
+  color: var(--text-success);
+}
+
+.istart-sync-summary {
+  display: flex;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+  font-size: 12px;
+}
+
+.istart-sync-badge {
+  font-weight: 500;
+}
+
+.istart-sync-badge-upload {
+  color: var(--text-success);
+}
+
+.istart-sync-badge-download {
+  color: var(--interactive-accent);
+}
+
+.istart-sync-badge-conflict {
+  color: var(--text-warning);
+}
+
+.istart-sync-badge-unchanged {
+  color: var(--text-faint);
+}
+
+.istart-sync-file-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 4px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  font-size: 12px;
+  gap: 8px;
+}
+
+.istart-sync-file-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.istart-sync-file-icon {
+  flex-shrink: 0;
+}
+
+.istart-sync-file-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-normal);
+}
+
+.istart-sync-file-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.istart-sync-small-btn {
+  padding: 2px 6px;
+  font-size: 11px;
+  border-radius: 3px;
+  cursor: pointer;
+  background: var(--background-modifier-border);
+  border: none;
+  color: var(--text-normal);
+}
+
+/* ── Question Modal ───────────────────────────── */
+
+.istart-question-textarea {
+  width: 100%;
+  resize: vertical;
+  padding: 8px;
+  font-size: 14px;
+}
+
+/* ── Settings Tab ────────────────────────────────── */
+
+.istart-settings-config-hint {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin-bottom: 8px;
+}
+
+/* ── Baidu Sync Modal ────────────────────────────── */
+
+.istart-sync-modal-remote-path {
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 4px 0 12px;
+}

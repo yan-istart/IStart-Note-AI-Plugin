@@ -1,3 +1,4 @@
+import { requestUrl } from "obsidian";
 import { DeepSeekSettings, DeepSeekResponse } from "./types";
 
 const SYSTEM_PROMPT = `你是一个知识图谱构建助手。用户会向你提问，你需要：
@@ -24,7 +25,8 @@ export class DeepSeekClient {
       throw new Error("请先在插件设置中配置 DeepSeek API Key");
     }
 
-    const response = await fetch(`${this.settings.baseUrl}/v1/chat/completions`, {
+    const res = await requestUrl({
+      url: `${this.settings.baseUrl}/v1/chat/completions`,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -38,14 +40,14 @@ export class DeepSeekClient {
         ],
         temperature: 0.7,
       }),
+      throw: false,
     });
 
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`DeepSeek API 错误: ${response.status} - ${err}`);
+    if (res.status !== 200) {
+      throw new Error(`DeepSeek API 错误: ${res.status} - ${res.text}`);
     }
 
-    const data = await response.json();
+    const data = res.json;
     const content = data.choices?.[0]?.message?.content;
 
     if (!content) {
@@ -56,22 +58,20 @@ export class DeepSeekClient {
   }
 
   private parseResponse(content: string): DeepSeekResponse {
-    // 提取 JSON，兼容模型可能包裹 markdown 代码块的情况
     const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) ||
       content.match(/(\{[\s\S]*\})/);
 
     const jsonStr = jsonMatch ? jsonMatch[1] : content;
 
     try {
-      const parsed = JSON.parse(jsonStr.trim());
+      const parsed = JSON.parse(jsonStr.trim()) as Record<string, unknown>;
       return {
-        answer: parsed.answer || "",
-        concepts: Array.isArray(parsed.concepts) ? parsed.concepts : [],
-        relations: Array.isArray(parsed.relations) ? parsed.relations : [],
-        tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+        answer: (parsed.answer as string) || "",
+        concepts: Array.isArray(parsed.concepts) ? parsed.concepts as string[] : [],
+        relations: Array.isArray(parsed.relations) ? parsed.relations as DeepSeekResponse["relations"] : [],
+        tags: Array.isArray(parsed.tags) ? parsed.tags as string[] : [],
       };
     } catch {
-      // 解析失败时，至少保留回答内容
       return {
         answer: content,
         concepts: [],

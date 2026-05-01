@@ -1,3 +1,4 @@
+import { requestUrl } from "obsidian";
 import { DeepSeekSettings, QuestionClassification } from "./types";
 
 const CLASSIFY_PROMPT = `你是一个知识图谱助手，负责对用户的问题进行分类和关联。
@@ -36,7 +37,8 @@ export class QuestionClassifier {
       .replace("{{history}}", history.length > 0 ? history.map((q, i) => `${i + 1}. ${q}`).join("\n") : "（无历史问题）");
 
     try {
-      const response = await fetch(`${this.settings.baseUrl}/v1/chat/completions`, {
+      const res = await requestUrl({
+        url: `${this.settings.baseUrl}/v1/chat/completions`,
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -47,11 +49,12 @@ export class QuestionClassifier {
           messages: [{ role: "user", content: prompt }],
           temperature: 0.3,
         }),
+        throw: false,
       });
 
-      if (!response.ok) throw new Error(`API ${response.status}`);
+      if (res.status !== 200) throw new Error(`API ${res.status}`);
 
-      const data = await response.json();
+      const data = res.json;
       const content = data.choices?.[0]?.message?.content ?? "";
       return this.parse(content);
     } catch {
@@ -65,14 +68,14 @@ export class QuestionClassifier {
     const jsonStr = jsonMatch ? jsonMatch[1] : content;
 
     try {
-      const p = JSON.parse(jsonStr.trim());
+      const p = JSON.parse(jsonStr.trim()) as Record<string, unknown>;
       return {
-        category: ["new", "refinement", "expansion"].includes(p.category) ? p.category : "new",
+        category: (["new", "refinement", "expansion"].includes(p.category as string) ? p.category : "new") as QuestionClassification["category"],
         parent: typeof p.parent === "string" ? p.parent : null,
-        related: Array.isArray(p.related) ? p.related : [],
+        related: Array.isArray(p.related) ? p.related as string[] : [],
         confidence: typeof p.confidence === "number" ? p.confidence : 0.5,
-        refinements: Array.isArray(p.refinements) ? p.refinements : [],
-        expansions: Array.isArray(p.expansions) ? p.expansions : [],
+        refinements: Array.isArray(p.refinements) ? p.refinements as string[] : [],
+        expansions: Array.isArray(p.expansions) ? p.expansions as string[] : [],
       };
     } catch {
       return this.defaultClassification();

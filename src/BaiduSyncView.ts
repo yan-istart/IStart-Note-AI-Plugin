@@ -1,6 +1,6 @@
-import { ItemView, Notice, WorkspaceLeaf } from "obsidian";
+import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import { BaiduSyncService } from "./BaiduSyncService";
-import { BaiduSyncMeta, SyncAction, SyncPlan } from "./BaiduSyncMeta";
+import { BaiduSyncMeta, SyncAction } from "./BaiduSyncMeta";
 import { BaiduPanClient } from "./BaiduPanClient";
 import type DeepSeekPlugin from "./main";
 
@@ -28,75 +28,78 @@ export class BaiduSyncView extends ItemView {
   getDisplayText(): string { return "百度云同步状态"; }
   getIcon(): string { return "cloud"; }
 
-  async onOpen() {
+  onOpen(): Promise<void> {
     this.render();
+    return Promise.resolve();
   }
 
-  async onClose() {}
+  onClose(): Promise<void> {
+    return Promise.resolve();
+  }
 
   // ── 渲染 ───────────────────────────────────────────────────
 
   private render() {
     const root = this.containerEl.children[1] as HTMLElement;
     root.empty();
-    root.style.cssText = "padding: 12px; overflow-y: auto; height: 100%;";
+    root.addClass("istart-sync-root");
 
     // 标题栏
-    const header = root.createDiv({ attr: { style: "display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;" } });
-    header.createEl("h4", { text: "百度云同步状态", attr: { style: "margin:0; font-size:14px;" } });
+    const header = root.createDiv({ cls: "istart-sync-header" });
+    header.createEl("h4", { text: "百度云同步状态" });
 
     const cfg = this.plugin.settings.baiduSync;
     if (!cfg.enabled || !cfg.accessToken) {
       root.createEl("p", {
         text: "请先在设置中启用百度云同步并完成授权。",
-        attr: { style: "color: var(--text-muted); font-size: 13px;" },
+        cls: "istart-sync-hint",
       });
       return;
     }
 
     // 操作按钮行
-    const btnRow = root.createDiv({ attr: { style: "display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px;" } });
+    const btnRow = root.createDiv({ cls: "istart-sync-btn-row" });
 
-    this.makeBtn(btnRow, "🔍 扫描状态", "default", () => this.scan());
-    this.makeBtn(btnRow, "⬆ 强制备份", "default", () => this.forceBackup());
-    this.makeBtn(btnRow, "⬇ 强制更新", "default", () => this.forceUpdate());
-    this.makeBtn(btnRow, "⇄ 双向同步", "cta", () => this.runSync());
+    this.makeBtn(btnRow, "🔍 扫描状态", "default", () => { void this.scan(); });
+    this.makeBtn(btnRow, "⬆ 强制备份", "default", () => { void this.forceBackup(); });
+    this.makeBtn(btnRow, "⬇ 强制更新", "default", () => { void this.forceUpdate(); });
+    this.makeBtn(btnRow, "⇄ 双向同步", "cta", () => { void this.runSync(); });
 
     // 上次扫描时间
     if (this.lastScanTime) {
       root.createEl("p", {
         text: `上次扫描：${this.lastScanTime.toLocaleTimeString()}`,
-        attr: { style: "font-size: 11px; color: var(--text-faint); margin-bottom: 8px;" },
+        cls: "istart-sync-scan-time",
       });
     }
 
     if (this.isScanning) {
-      root.createEl("p", { text: "⏳ 扫描中...", attr: { style: "color: var(--text-muted);" } });
+      root.createEl("p", { text: "⏳ 扫描中...", cls: "istart-sync-status-msg" });
       return;
     }
 
     if (this.statusList.length === 0 && this.lastScanTime) {
-      root.createEl("p", { text: "✅ 已是最新，无需同步", attr: { style: "color: var(--text-success);" } });
+      root.createEl("p", { text: "✅ 已是最新，无需同步", cls: "istart-sync-success" });
       return;
     }
 
     if (this.statusList.length === 0) {
-      root.createEl("p", { text: "点击「扫描状态」查看同步情况", attr: { style: "color: var(--text-muted); font-size: 13px;" } });
+      root.createEl("p", { text: "点击「扫描状态」查看同步情况", cls: "istart-sync-hint" });
       return;
     }
 
     // 统计摘要
     const counts = this.countByAction();
-    const summaryEl = root.createDiv({ attr: { style: "display:flex; gap:12px; flex-wrap:wrap; margin-bottom:12px; font-size:12px;" } });
-    if (counts.upload) this.makeBadge(summaryEl, `↑ ${counts.upload} 待上传`, "#4caf50");
-    if (counts.download) this.makeBadge(summaryEl, `↓ ${counts.download} 待下载`, "#2196f3");
-    if (counts.conflict) this.makeBadge(summaryEl, `⚠ ${counts.conflict} 冲突`, "#ff9800");
-    if (counts.unchanged) this.makeBadge(summaryEl, `✓ ${counts.unchanged} 已同步`, "#9e9e9e");
+    const summaryEl = root.createDiv({ cls: "istart-sync-summary" });
+    if (counts.upload) this.makeBadge(summaryEl, `↑ ${counts.upload} 待上传`, "istart-sync-badge-upload");
+    if (counts.download) this.makeBadge(summaryEl, `↓ ${counts.download} 待下载`, "istart-sync-badge-download");
+    if (counts.conflict) this.makeBadge(summaryEl, `⚠ ${counts.conflict} 冲突`, "istart-sync-badge-conflict");
+    if (counts.unchanged) this.makeBadge(summaryEl, `✓ ${counts.unchanged} 已同步`, "istart-sync-badge-unchanged");
 
     // 文件列表（只显示需要操作的）
     const actionItems = this.statusList.filter((s) => s.action !== SyncAction.Unchanged);
     if (actionItems.length === 0) {
-      root.createEl("p", { text: "✅ 所有文件已同步", attr: { style: "color: var(--text-success);" } });
+      root.createEl("p", { text: "✅ 所有文件已同步", cls: "istart-sync-success" });
       return;
     }
 
@@ -107,46 +110,32 @@ export class BaiduSyncView extends ItemView {
   }
 
   private renderFileRow(container: HTMLElement, item: FileStatus) {
-    const row = container.createDiv({
-      attr: {
-        style: [
-          "display:flex",
-          "align-items:center",
-          "justify-content:space-between",
-          "padding:6px 4px",
-          "border-bottom:1px solid var(--background-modifier-border)",
-          "font-size:12px",
-          "gap:8px",
-        ].join(";"),
-      },
-    });
+    const row = container.createDiv({ cls: "istart-sync-file-row" });
 
     // 状态图标 + 文件名
-    const left = row.createDiv({ attr: { style: "display:flex; align-items:center; gap:6px; min-width:0; flex:1;" } });
-    left.createSpan({ text: this.actionIcon(item.action), attr: { style: "flex-shrink:0;" } });
+    const left = row.createDiv({ cls: "istart-sync-file-left" });
+    left.createSpan({ text: this.actionIcon(item.action), cls: "istart-sync-file-icon" });
     left.createSpan({
       text: item.path.split("/").pop() ?? item.path,
-      attr: {
-        title: item.path,
-        style: "overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color: var(--text-normal);",
-      },
+      cls: "istart-sync-file-name",
+      attr: { title: item.path },
     });
 
     // 操作按钮
-    const right = row.createDiv({ attr: { style: "display:flex; gap:4px; flex-shrink:0;" } });
+    const right = row.createDiv({ cls: "istart-sync-file-actions" });
 
     if (item.action === SyncAction.Upload || item.action === SyncAction.LocalOnly) {
-      this.makeSmallBtn(right, "上传", () => this.uploadOne(item.path));
+      this.makeSmallBtn(right, "上传", () => { void this.uploadOne(item.path); });
     }
     if (item.action === SyncAction.Download || item.action === SyncAction.RemoteOnly) {
-      this.makeSmallBtn(right, "下载", () => this.downloadOne(item));
+      this.makeSmallBtn(right, "下载", () => { void this.downloadOne(item); });
     }
     if (item.action === SyncAction.Conflict) {
-      this.makeSmallBtn(right, "用本地", () => this.resolveConflict(item, "local"));
-      this.makeSmallBtn(right, "用远端", () => this.resolveConflict(item, "remote"));
+      this.makeSmallBtn(right, "用本地", () => { void this.resolveConflict(item, "local"); });
+      this.makeSmallBtn(right, "用远端", () => { void this.resolveConflict(item, "remote"); });
     }
     if (item.action === SyncAction.LocalDeleted) {
-      this.makeSmallBtn(right, "删远端", () => this.deleteRemote(item.path));
+      this.makeSmallBtn(right, "删远端", () => { void this.deleteRemote(item.path); });
     }
   }
 
@@ -165,7 +154,6 @@ export class BaiduSyncView extends ItemView {
       if (!tokenOk) { new Notice("Token 已过期，请重新授权"); return; }
       await this.plugin.saveSettings();
 
-      // 直接复用 BaiduSyncMeta 的计划逻辑
       const client = new BaiduPanClient(cfg);
       const remoteRoot = cfg.remotePath;
 
@@ -204,7 +192,7 @@ export class BaiduSyncView extends ItemView {
       }));
       this.lastScanTime = new Date();
     } catch (e) {
-      new Notice("扫描失败：" + e.message);
+      new Notice("扫描失败：" + (e as Error).message);
     } finally {
       this.isScanning = false;
       this.render();
@@ -265,10 +253,10 @@ export class BaiduSyncView extends ItemView {
 
   private async uploadOne(path: string) {
     const cfg = this.plugin.settings.baiduSync;
-    const file = this.app.vault.getAbstractFileByPath(path);
-    if (!file) return;
+    const abstract = this.app.vault.getAbstractFileByPath(path);
+    if (!abstract || !(abstract instanceof TFile)) return;
     const client = new BaiduPanClient(cfg);
-    const content = await this.app.vault.readBinary(file as any);
+    const content = await this.app.vault.readBinary(abstract);
     const remotePath = `${cfg.remotePath}/${path}`.replace(/\/+/g, "/");
     const ok = await client.uploadFile(content, remotePath);
     new Notice(ok ? `✅ 已上传：${path.split("/").pop()}` : `❌ 上传失败：${path}`);
@@ -286,7 +274,7 @@ export class BaiduSyncView extends ItemView {
     if (dir && !(await this.app.vault.adapter.exists(dir))) await this.app.vault.adapter.mkdir(dir);
 
     const existing = this.app.vault.getAbstractFileByPath(item.path);
-    if (existing) await this.app.vault.modifyBinary(existing as any, content);
+    if (existing instanceof TFile) await this.app.vault.modifyBinary(existing, content);
     else await this.app.vault.createBinary(item.path, content);
 
     new Notice(`✅ 已下载：${item.path.split("/").pop()}`);
@@ -334,26 +322,19 @@ export class BaiduSyncView extends ItemView {
   }
 
   private makeBtn(container: HTMLElement, text: string, type: "default" | "cta", onClick: () => void) {
-    const btn = container.createEl("button", { text });
-    btn.style.cssText = `
-      padding: 4px 10px; font-size: 12px; border-radius: 4px; cursor: pointer;
-      background: ${type === "cta" ? "var(--interactive-accent)" : "var(--background-modifier-border)"};
-      color: ${type === "cta" ? "var(--text-on-accent)" : "var(--text-normal)"};
-      border: none;
-    `;
+    const btn = container.createEl("button", {
+      text,
+      cls: type === "cta" ? "istart-sync-btn-cta" : "istart-sync-btn",
+    });
     btn.addEventListener("click", onClick);
   }
 
   private makeSmallBtn(container: HTMLElement, text: string, onClick: () => void) {
-    const btn = container.createEl("button", { text });
-    btn.style.cssText = "padding: 2px 6px; font-size: 11px; border-radius: 3px; cursor: pointer; background: var(--background-modifier-border); border: none; color: var(--text-normal);";
+    const btn = container.createEl("button", { text, cls: "istart-sync-small-btn" });
     btn.addEventListener("click", onClick);
   }
 
-  private makeBadge(container: HTMLElement, text: string, color: string) {
-    container.createSpan({
-      text,
-      attr: { style: `color: ${color}; font-weight: 500;` },
-    });
+  private makeBadge(container: HTMLElement, text: string, cls: string) {
+    container.createSpan({ text, cls: `istart-sync-badge ${cls}` });
   }
 }

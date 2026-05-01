@@ -1,3 +1,4 @@
+import { requestUrl } from "obsidian";
 import { DeepSeekSettings, CompletionDepth, ConceptCompletionResult } from "./types";
 
 const LIGHT_PROMPT = `你是一个个人知识图谱助手。请为以下概念生成简明的定义和关联概念。
@@ -63,7 +64,8 @@ export class ConceptCompleter {
       .replace("{{source_answer}}", context.sourceAnswer || "无")
       .replace("{{related_concepts}}", (context.relatedConcepts || []).join("、") || "无");
 
-    const response = await fetch(`${this.settings.baseUrl}/v1/chat/completions`, {
+    const res = await requestUrl({
+      url: `${this.settings.baseUrl}/v1/chat/completions`,
       method: "POST",
       headers: {
         "Content-Type": "application/json",
@@ -74,14 +76,14 @@ export class ConceptCompleter {
         messages: [{ role: "user", content: prompt }],
         temperature: 0.5,
       }),
+      throw: false,
     });
 
-    if (!response.ok) {
-      const err = await response.text();
-      throw new Error(`DeepSeek API 错误: ${response.status} - ${err}`);
+    if (res.status !== 200) {
+      throw new Error(`DeepSeek API 错误: ${res.status} - ${res.text}`);
     }
 
-    const data = await response.json();
+    const data = res.json;
     const content = data.choices?.[0]?.message?.content ?? "";
     return this.parse(content);
   }
@@ -92,14 +94,14 @@ export class ConceptCompleter {
     const jsonStr = jsonMatch ? jsonMatch[1] : content;
 
     try {
-      const p = JSON.parse(jsonStr.trim());
+      const p = JSON.parse(jsonStr.trim()) as Record<string, unknown>;
       return {
-        definition: p.definition || "",
-        explanation: p.explanation || "",
-        examples: Array.isArray(p.examples) ? p.examples : [],
-        related_concepts: Array.isArray(p.related_concepts) ? p.related_concepts : [],
-        related_questions: Array.isArray(p.related_questions) ? p.related_questions : [],
-        tags: Array.isArray(p.tags) ? p.tags : [],
+        definition: (p.definition as string) || "",
+        explanation: (p.explanation as string) || "",
+        examples: Array.isArray(p.examples) ? p.examples as string[] : [],
+        related_concepts: Array.isArray(p.related_concepts) ? p.related_concepts as ConceptCompletionResult["related_concepts"] : [],
+        related_questions: Array.isArray(p.related_questions) ? p.related_questions as string[] : [],
+        tags: Array.isArray(p.tags) ? p.tags as string[] : [],
       };
     } catch {
       return {

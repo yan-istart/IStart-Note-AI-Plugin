@@ -75,7 +75,7 @@ export class BaiduSyncModal extends Modal {
 
     contentEl.createEl("p", {
       text: `远端路径：${this.config.remotePath}/${this.folder || "(vault root)"}`,
-      attr: { style: "font-size: 12px; color: var(--text-muted); margin: 4px 0 12px;" },
+      cls: "istart-sync-modal-remote-path",
     });
 
     const modeLabels: Record<SyncMode, string> = {
@@ -141,10 +141,8 @@ export class BaiduSyncModal extends Modal {
   }
 
   private async runBackup(service: BaiduSyncService) {
-    let done = 0, total = 0;
     const notice = new Notice("⏳ 备份中...", 0);
     const result = await service.backup(this.folder, (c, t, file) => {
-      done = c; total = t;
       notice.setMessage(`⏳ 备份中 (${c}/${t})：${file.split("/").pop()}`);
     });
     notice.hide();

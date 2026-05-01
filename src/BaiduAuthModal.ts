@@ -50,11 +50,11 @@ export class BaiduAuthModal extends Modal {
 
   private async submit() {
     if (!this.code) {
-      new Notice("请输入授权码");
+      new Notice("请输入授权码。");
       return;
     }
     if (!this.config.appId || !this.config.appSecret) {
-      new Notice("请先在设置中填写 App ID 和 App Secret");
+      new Notice("请先在设置中填写 App ID 和 App Secret。");
       return;
     }
 

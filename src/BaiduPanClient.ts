@@ -164,7 +164,7 @@ export class BaiduPanClient {
     const chunks = this.splitChunks(bytes);
     const blockMd5List = chunks.map((c) => md5(c));
 
-    console.log(`[BaiduPan] upload ${remotePath}, size=${bytes.length}, chunks=${chunks.length}`);
+    console.debug(`[BaiduPan] upload ${remotePath}, size=${bytes.length}, chunks=${chunks.length}`);
 
     // Step 1: precreate
     const uploadId = await this.precreate(remotePath, bytes.length, blockMd5List);

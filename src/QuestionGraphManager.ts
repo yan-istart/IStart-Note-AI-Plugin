@@ -14,7 +14,7 @@ export class QuestionGraphManager {
   constructor(private app: App, private settings: DeepSeekSettings) {}
 
   /** 读取所有历史问题标题（用于分类时提供上下文） */
-  async getQuestionHistory(): Promise<string[]> {
+  getQuestionHistory(): string[] {
     const folder = normalizePath(this.settings.savePath);
     const files = this.app.vault.getMarkdownFiles()
       .filter((f) => f.path.startsWith(folder))
@@ -137,6 +137,6 @@ export class QuestionGraphManager {
   }
 
   private sanitize(name: string): string {
-    return name.replace(/[\\/:*?"<>|#\[\]]/g, "-").trim();
+    return name.replace(/[\\/:*?"<>|#[\]]/g, "-").trim();
   }
 }

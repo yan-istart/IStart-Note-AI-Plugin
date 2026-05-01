@@ -10,10 +10,10 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    containerEl.createEl("h2", { text: "DeepSeek Knowledge Graph 设置" });
+    new Setting(containerEl).setName("DeepSeek Knowledge Graph 设置").setHeading();
 
     new Setting(containerEl)
-      .setName("API Key")
+      .setName("API key")
       .setDesc("DeepSeek API Key（在 platform.deepseek.com 获取）")
       .addText((text) =>
         text
@@ -92,7 +92,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
-      .setName("自动打开 Graph View")
+      .setName("自动打开 Graph view")
       .setDesc("生成笔记后自动打开图谱视图")
       .addToggle((toggle) =>
         toggle
@@ -104,7 +104,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
       );
 
     // ── 百度云同步 ──────────────────────────────────────────
-    containerEl.createEl("h3", { text: "百度网盘同步" });
+    new Setting(containerEl).setName("百度网盘同步").setHeading();
 
     new Setting(containerEl)
       .setName("启用百度云同步")
@@ -131,7 +131,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         );
 
       new Setting(containerEl)
-        .setName("App Secret")
+        .setName("App secret")
         .setDesc("百度开放平台应用的 Secret Key")
         .addText((text) => {
           text
@@ -220,10 +220,10 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         );
 
       // 配置同步
-      containerEl.createEl("h4", { text: "配置同步" });
+      new Setting(containerEl).setName("配置同步").setHeading();
       containerEl.createEl("p", {
         text: "将路径、模型等偏好设置同步到百度云，在多台设备间共享（不含 API Key 和 Token 等凭证）。",
-        attr: { style: "font-size: 12px; color: var(--text-muted); margin-bottom: 8px;" },
+        cls: "istart-settings-config-hint",
       });
 
       new Setting(containerEl)

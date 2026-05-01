@@ -1,5 +1,5 @@
 import { App, Modal, Setting, MarkdownRenderer, Component } from "obsidian";
-import { CompletionDepth, ConceptCompletionResult } from "./types";
+import { CompletionDepth } from "./types";
 
 export class DepthSelectModal extends Modal {
   private depth: CompletionDepth = "standard";

@@ -1,6 +1,6 @@
-import { App, Notice, TFile, normalizePath } from "obsidian";
+import { App, Notice, TFile } from "obsidian";
 import { BaiduSyncConfig, DeepSeekSettings, SyncableConfig } from "./types";
-import { BaiduPanClient, BaiduFileEntry } from "./BaiduPanClient";
+import { BaiduPanClient } from "./BaiduPanClient";
 import { BaiduSyncMeta, SyncAction, SyncPlan } from "./BaiduSyncMeta";
 
 const META_FILENAME = "istart-sync-meta.json";
@@ -82,21 +82,19 @@ export class BaiduSyncService {
               meta.delete(plan.path);
               result.deleted++;
             } else {
-              // 默认不删远端，只清理 meta
               meta.delete(plan.path);
               result.skipped++;
             }
             break;
 
           case SyncAction.RemoteDeleted:
-            // 远端删了，本地也删（谨慎：默认不执行）
             meta.delete(plan.path);
             result.skipped++;
             break;
         }
       } catch (err) {
         result.failed++;
-        result.errors.push(`${plan.path}: ${err.message}`);
+        result.errors.push(`${plan.path}: ${(err as Error).message}`);
       }
     }
 
@@ -124,7 +122,7 @@ export class BaiduSyncService {
     const uploadPlans = plans.filter((p) =>
       p.action === SyncAction.Upload ||
       p.action === SyncAction.LocalOnly ||
-      p.action === SyncAction.Conflict // 冲突时备份模式以本地为准
+      p.action === SyncAction.Conflict
     );
 
     let done = 0;
@@ -135,7 +133,7 @@ export class BaiduSyncService {
         await this.doUpload(plan, meta, result);
       } catch (err) {
         result.failed++;
-        result.errors.push(`${plan.path}: ${err.message}`);
+        result.errors.push(`${plan.path}: ${(err as Error).message}`);
       }
     }
 
@@ -176,7 +174,7 @@ export class BaiduSyncService {
         result.downloaded++;
       } catch (err) {
         result.failed++;
-        result.errors.push(`${localPath}: ${err.message}`);
+        result.errors.push(`${localPath}: ${(err as Error).message}`);
       }
     }
 
@@ -197,9 +195,6 @@ export class BaiduSyncService {
 
   // ── 配置同步 ───────────────────────────────────────────────
 
-  /**
-   * 上传当前配置（不含凭证）到百度云
-   */
   async pushConfig(settings: DeepSeekSettings, deviceId: string): Promise<boolean> {
     const syncable: SyncableConfig = {
       baseUrl: settings.baseUrl,
@@ -221,10 +216,6 @@ export class BaiduSyncService {
     return this.client.uploadFile(bytes.buffer, remotePath);
   }
 
-  /**
-   * 从百度云拉取配置，返回远端配置（如果比本地新）
-   * 返回 null 表示远端无配置或本地已是最新
-   */
   async pullConfig(localUpdatedAt?: string): Promise<SyncableConfig | null> {
     const remotePath = `${this.config.remotePath}/${CONFIG_FILENAME}`.replace(/\/+/g, "/");
     try {
@@ -233,7 +224,6 @@ export class BaiduSyncService {
 
       const remote: SyncableConfig = JSON.parse(new TextDecoder().decode(buf));
 
-      // 如果本地有时间戳且不比远端旧，跳过
       if (localUpdatedAt && new Date(localUpdatedAt) >= new Date(remote.updatedAt)) {
         return null;
       }
@@ -244,9 +234,6 @@ export class BaiduSyncService {
     }
   }
 
-  /**
-   * 将远端配置合并到本地 settings（不覆盖凭证字段）
-   */
   static applyRemoteConfig(settings: DeepSeekSettings, remote: SyncableConfig): DeepSeekSettings {
     return {
       ...settings,
@@ -257,7 +244,7 @@ export class BaiduSyncService {
       questionsIndexPath: remote.questionsIndexPath,
       autoOpenGraph: remote.autoOpenGraph,
       baiduSync: {
-        ...settings.baiduSync, // 保留本地凭证
+        ...settings.baiduSync,
         remotePath: remote.baiduRemotePath,
         autoBackup: remote.baiduAutoBackup,
         ignorePattern: remote.baiduIgnorePattern,
@@ -269,18 +256,18 @@ export class BaiduSyncService {
   // ── 私有方法 ───────────────────────────────────────────────
 
   private async doUpload(plan: SyncPlan, meta: BaiduSyncMeta, result: SyncResult) {
-    const file = this.app.vault.getAbstractFileByPath(plan.path) as TFile | null;
-    if (!file || !(file instanceof TFile)) return;
-    if (this.shouldIgnore(file)) { result.skipped++; return; }
+    const abstract = this.app.vault.getAbstractFileByPath(plan.path);
+    if (!abstract || !(abstract instanceof TFile)) return;
+    if (this.shouldIgnore(abstract)) { result.skipped++; return; }
 
     const remotePath = this.toRemotePath(plan.path, "");
     const remoteDir = remotePath.substring(0, remotePath.lastIndexOf("/"));
     if (remoteDir) await this.client.mkdir(remoteDir);
 
-    const content = await this.app.vault.readBinary(file);
+    const content = await this.app.vault.readBinary(abstract);
     const ok = await this.client.uploadFile(content, remotePath);
     if (ok) {
-      meta.recordSync(plan.path, file.stat.mtime, Math.floor(Date.now() / 1000), file.stat.size);
+      meta.recordSync(plan.path, abstract.stat.mtime, Math.floor(Date.now() / 1000), abstract.stat.size);
       result.uploaded++;
     } else {
       result.failed++;
@@ -294,8 +281,9 @@ export class BaiduSyncService {
     if (!content) { result.failed++; result.errors.push(`Download failed: ${plan.path}`); return; }
 
     await this.writeLocalFile(plan.path, content);
-    const file = this.app.vault.getAbstractFileByPath(plan.path) as TFile;
-    meta.recordSync(plan.path, file?.stat.mtime ?? Date.now(), plan.remoteMtime ?? 0, content.byteLength);
+    const abstract = this.app.vault.getAbstractFileByPath(plan.path);
+    const mtime = (abstract instanceof TFile) ? abstract.stat.mtime : Date.now();
+    meta.recordSync(plan.path, mtime, plan.remoteMtime ?? 0, content.byteLength);
     result.downloaded++;
   }
 
@@ -313,10 +301,9 @@ export class BaiduSyncService {
     } else if (strategy === "remote") {
       await this.doDownload(plan, remoteRoot, meta, result);
     } else {
-      // keep-both：本地文件重命名加 .conflict 后缀，再下载远端版本
       const conflictPath = plan.path.replace(/(\.\w+)?$/, `.conflict$1`);
-      const file = this.app.vault.getAbstractFileByPath(plan.path) as TFile | null;
-      if (file) await this.app.vault.rename(file, conflictPath);
+      const abstract = this.app.vault.getAbstractFileByPath(plan.path);
+      if (abstract instanceof TFile) await this.app.vault.rename(abstract, conflictPath);
 
       await this.doDownload(plan, remoteRoot, meta, result);
       new Notice(`⚠️ 冲突：${plan.path}，本地版本已保存为 ${conflictPath}`);
@@ -367,7 +354,7 @@ export class BaiduSyncService {
       for (const e of entries) {
         if (e.isdir) continue;
         const rel = e.path.replace(remoteRoot + "/", "").replace(/^\//, "");
-        if (rel === META_FILENAME) continue; // 跳过 meta 文件本身
+        if (rel === META_FILENAME) continue;
         map.set(rel, e.server_mtime);
       }
     } catch {
@@ -406,8 +393,8 @@ export class BaiduSyncService {
       const exists = await this.app.vault.adapter.exists(dir);
       if (!exists) await this.app.vault.adapter.mkdir(dir);
     }
-    const existing = this.app.vault.getAbstractFileByPath(localPath) as TFile | null;
-    if (existing) {
+    const existing = this.app.vault.getAbstractFileByPath(localPath);
+    if (existing instanceof TFile) {
       await this.app.vault.modifyBinary(existing, content);
     } else {
       await this.app.vault.createBinary(localPath, content);
