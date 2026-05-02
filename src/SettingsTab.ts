@@ -157,12 +157,11 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
             new BaiduAuthModal(
               this.app,
               this.plugin.settings.baiduSync,
-              async (accessToken, refreshToken, expiresAt) => {
+              (accessToken, refreshToken, expiresAt) => {
                 this.plugin.settings.baiduSync.accessToken = accessToken;
                 this.plugin.settings.baiduSync.refreshToken = refreshToken;
                 this.plugin.settings.baiduSync.tokenExpiresAt = expiresAt;
-                await this.plugin.saveSettings();
-                this.display();
+                void this.plugin.saveSettings().then(() => this.display());
               }
             ).open();
           })
