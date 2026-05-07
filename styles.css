@@ -331,3 +331,17 @@
   font-family: monospace;
   flex-shrink: 0;
 }
+
+
+/* ── Sync Modal Warning ──────────────────────────── */
+
+.istart-sync-modal-warning {
+  color: var(--text-error);
+  font-size: 13px;
+  font-weight: 500;
+  padding: 8px 12px;
+  border: 1px solid var(--text-error);
+  border-radius: 6px;
+  margin: 8px 0 12px;
+  background: rgba(255, 0, 0, 0.05);
+}

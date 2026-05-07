@@ -249,7 +249,25 @@ export default class DeepSeekPlugin extends Plugin {
         const fileMeta = this.app.metadataCache.getFileCache(file);
         const fileType = fileMeta?.frontmatter?.type as string | undefined;
 
-        // 概念页：补全
+        // 通用：智能补全（对任何 md 文件可用）
+        menu.addItem((item) => {
+          item
+            .setTitle("IStart-Note-AI: Smart complete")
+            .setIcon("sparkles")
+            .onClick(() => {
+              void (async () => {
+                const leaf = this.app.workspace.getLeaf(false);
+                await leaf.openFile(file);
+                // 等文件打开后执行智能补全
+                setTimeout(() => {
+                  const editor = this.app.workspace.activeEditor?.editor;
+                  if (editor) void this.runSmartComplete(editor);
+                }, 200);
+              })();
+            });
+        });
+
+        // 概念页：补全概念
         if (fileType === "concept" || file.path.includes("Concepts/")) {
           menu.addItem((item) => {
             item
@@ -291,8 +309,14 @@ export default class DeepSeekPlugin extends Plugin {
               .setTitle("IStart-Note-AI: Generate chapter summary")
               .setIcon("file-text")
               .onClick(() => {
-                const editor = this.app.workspace.activeEditor?.editor;
-                if (editor) void this.runChapterSummary(editor);
+                void (async () => {
+                  const leaf = this.app.workspace.getLeaf(false);
+                  await leaf.openFile(file);
+                  setTimeout(() => {
+                    const editor = this.app.workspace.activeEditor?.editor;
+                    if (editor) void this.runChapterSummary(editor);
+                  }, 200);
+                })();
               });
           });
 
@@ -301,8 +325,14 @@ export default class DeepSeekPlugin extends Plugin {
               .setTitle("IStart-Note-AI: Feynman test")
               .setIcon("help-circle")
               .onClick(() => {
-                const editor = this.app.workspace.activeEditor?.editor;
-                if (editor) void this.runFeynmanTest(editor);
+                void (async () => {
+                  const leaf = this.app.workspace.getLeaf(false);
+                  await leaf.openFile(file);
+                  setTimeout(() => {
+                    const editor = this.app.workspace.activeEditor?.editor;
+                    if (editor) void this.runFeynmanTest(editor);
+                  }, 200);
+                })();
               });
           });
         }
