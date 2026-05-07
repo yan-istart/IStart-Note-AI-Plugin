@@ -139,6 +139,14 @@ export class BaiduSyncService {
 
     result.skipped = plans.length - uploadPlans.length;
     await this.saveMeta(meta);
+
+    // 备份插件本身
+    if (this.config.backupPlugin) {
+      const pluginResult = await this.backupPlugin();
+      result.uploaded += pluginResult.uploaded;
+      result.failed += pluginResult.failed;
+    }
+
     return result;
   }
 
@@ -385,6 +393,72 @@ export class BaiduSyncService {
       try { if (new RegExp(this.config.ignorePattern).test(path)) return true; } catch { /* ignore */ }
     }
     return false;
+  }
+
+  /**
+   * 备份插件本身（main.js, manifest.json, styles.css, data.json）到百度云。
+   * 文件存储在 {remotePath}/_plugin/ 目录下。
+   */
+  async backupPlugin(): Promise<{ uploaded: number; failed: number }> {
+    if (!this.config.backupPlugin) return { uploaded: 0, failed: 0 };
+
+    const pluginDir = ".obsidian/plugins/istart-note-ai";
+    const filesToBackup = ["main.js", "manifest.json", "styles.css", "data.json"];
+    const remotePluginDir = `${this.config.remotePath}/_plugin`.replace(/\/+/g, "/");
+
+    await this.client.mkdir(remotePluginDir);
+
+    let uploaded = 0;
+    let failed = 0;
+
+    for (const fileName of filesToBackup) {
+      const localPath = `${pluginDir}/${fileName}`;
+      try {
+        const exists = await this.app.vault.adapter.exists(localPath);
+        if (!exists) continue;
+
+        const content = await this.app.vault.adapter.readBinary(localPath);
+        const remotePath = `${remotePluginDir}/${fileName}`;
+        const ok = await this.client.uploadFile(content, remotePath);
+        if (ok) uploaded++;
+        else failed++;
+      } catch {
+        // 文件不存在或读取失败，跳过
+      }
+    }
+
+    return { uploaded, failed };
+  }
+
+  /**
+   * 从百度云恢复插件文件到本地。
+   */
+  async restorePlugin(): Promise<{ downloaded: number; failed: number }> {
+    const remotePluginDir = `${this.config.remotePath}/_plugin`.replace(/\/+/g, "/");
+    const pluginDir = ".obsidian/plugins/istart-note-ai";
+
+    // 确保本地插件目录存在
+    const dirExists = await this.app.vault.adapter.exists(pluginDir);
+    if (!dirExists) await this.app.vault.adapter.mkdir(pluginDir);
+
+    const remoteFiles = await this.client.listFiles(remotePluginDir);
+    let downloaded = 0;
+    let failed = 0;
+
+    for (const entry of remoteFiles) {
+      if (entry.isdir) continue;
+      try {
+        const content = await this.client.downloadFile(entry.path);
+        if (!content) { failed++; continue; }
+        const localPath = `${pluginDir}/${entry.server_filename}`;
+        await this.app.vault.adapter.writeBinary(localPath, content);
+        downloaded++;
+      } catch {
+        failed++;
+      }
+    }
+
+    return { downloaded, failed };
   }
 
   private async writeLocalFile(localPath: string, content: ArrayBuffer) {

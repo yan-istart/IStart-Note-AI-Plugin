@@ -19,6 +19,7 @@ export interface BaiduSyncConfig {
   tokenExpiresAt: string;  // ISO 时间字符串
   remotePath: string;      // 远端备份根目录，如 /apps/istart-note-ai
   autoBackup: boolean;     // 每次生成笔记后自动备份
+  backupPlugin: boolean;   // 备份时包含插件本身
   ignorePattern: string;   // 忽略规则（正则）
   fileSizeLimitMB: number; // 单文件大小限制
 }
@@ -32,6 +33,7 @@ export const DEFAULT_BAIDU_SYNC_CONFIG: BaiduSyncConfig = {
   tokenExpiresAt: "",
   remotePath: "/apps/istart-note-ai",
   autoBackup: false,
+  backupPlugin: false,
   ignorePattern: "",
   fileSizeLimitMB: 100,
 };

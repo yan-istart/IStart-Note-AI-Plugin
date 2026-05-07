@@ -191,6 +191,16 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         );
 
       new Setting(containerEl)
+        .setName("备份插件本身")
+        .setDesc("备份时包含插件文件（main.js、配置等），方便换设备恢复")
+        .addToggle((t) =>
+          t.setValue(this.plugin.settings.baiduSync.backupPlugin).onChange(async (v) => {
+            this.plugin.settings.baiduSync.backupPlugin = v;
+            await this.plugin.saveSettings();
+          })
+        );
+
+      new Setting(containerEl)
         .setName("忽略规则")
         .setDesc("正则表达式，匹配的文件路径将被跳过")
         .addText((text) =>
