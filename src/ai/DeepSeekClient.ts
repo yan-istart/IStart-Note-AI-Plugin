@@ -1,5 +1,5 @@
 import { requestUrl } from "obsidian";
-import { DeepSeekSettings, DeepSeekResponse } from "./types";
+import { DeepSeekSettings, DeepSeekResponse } from "../types";
 
 const SYSTEM_PROMPT = `你是一个知识图谱构建助手。用户会向你提问，你需要：
 1. 给出清晰的回答

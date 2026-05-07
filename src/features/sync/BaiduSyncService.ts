@@ -1,5 +1,5 @@
 import { App, Notice, TFile } from "obsidian";
-import { BaiduSyncConfig, DeepSeekSettings, SyncableConfig } from "./types";
+import { BaiduSyncConfig, DeepSeekSettings, SyncableConfig } from "../../types";
 import { BaiduPanClient } from "./BaiduPanClient";
 import { BaiduSyncMeta, SyncAction, SyncPlan } from "./BaiduSyncMeta";
 

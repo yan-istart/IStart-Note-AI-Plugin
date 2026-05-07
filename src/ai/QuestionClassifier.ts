@@ -1,5 +1,5 @@
 import { requestUrl } from "obsidian";
-import { DeepSeekSettings, QuestionClassification } from "./types";
+import { DeepSeekSettings, QuestionClassification } from "../types";
 
 const CLASSIFY_PROMPT = `你是一个知识图谱助手，负责对用户的问题进行分类和关联。
 

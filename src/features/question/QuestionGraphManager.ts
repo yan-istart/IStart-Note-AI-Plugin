@@ -1,5 +1,5 @@
 import { App, TFile, normalizePath, stringifyYaml } from "obsidian";
-import { DeepSeekSettings, QuestionClassification } from "./types";
+import { DeepSeekSettings, QuestionClassification } from "../../types";
 
 export interface QuestionMeta {
   file: TFile;

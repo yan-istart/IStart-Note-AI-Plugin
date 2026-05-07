@@ -1,6 +1,6 @@
 import { App, Modal, Notice, Setting } from "obsidian";
 import { BaiduSyncService } from "./BaiduSyncService";
-import { BaiduSyncConfig } from "./types";
+import { BaiduSyncConfig } from "../../types";
 
 type SyncMode = "sync" | "backup" | "restore";
 type ConflictStrategy = "local" | "remote" | "keep-both";

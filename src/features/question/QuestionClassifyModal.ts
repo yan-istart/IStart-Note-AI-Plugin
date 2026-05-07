@@ -1,5 +1,5 @@
 import { App, Modal, Setting } from "obsidian";
-import { QuestionClassification, QuestionCategory } from "./types";
+import { QuestionClassification, QuestionCategory } from "../../types";
 
 const CATEGORY_LABELS: Record<QuestionCategory, string> = {
   new: "🆕 新问题",

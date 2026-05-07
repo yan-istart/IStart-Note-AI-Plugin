@@ -1,5 +1,5 @@
 import { requestUrl } from "obsidian";
-import { DeepSeekSettings } from "./types";
+import { DeepSeekSettings } from "../types";
 
 export type DiagramType =
   | "auto"

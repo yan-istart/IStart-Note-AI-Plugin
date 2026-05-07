@@ -1,5 +1,5 @@
 import { App, TFile, normalizePath } from "obsidian";
-import { DeepSeekResponse, DeepSeekSettings, ContextQAInput, ContextQAResponse } from "./types";
+import { DeepSeekResponse, DeepSeekSettings, ContextQAInput, ContextQAResponse } from "../types";
 
 export class VaultWriter {
   constructor(private app: App, private settings: DeepSeekSettings) {}

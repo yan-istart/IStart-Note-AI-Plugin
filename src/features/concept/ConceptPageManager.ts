@@ -1,5 +1,5 @@
 import { App, TFile, parseYaml, stringifyYaml, normalizePath } from "obsidian";
-import { ConceptCompletionResult, CompletionDepth, DeepSeekSettings } from "./types";
+import { ConceptCompletionResult, CompletionDepth, DeepSeekSettings } from "../../types";
 
 export interface ConceptPageInfo {
   file: TFile;

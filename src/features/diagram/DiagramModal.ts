@@ -1,5 +1,5 @@
 import { App, Modal, Setting, MarkdownRenderer, Component } from "obsidian";
-import { DiagramType, DiagramResult, DiagramGenerator } from "./DiagramGenerator";
+import { DiagramType, DiagramResult, DiagramGenerator } from "../../ai/DiagramGenerator";
 
 /**
  * 图表类型选择弹窗

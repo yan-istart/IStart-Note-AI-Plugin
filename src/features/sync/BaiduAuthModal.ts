@@ -1,6 +1,6 @@
 import { App, Modal, Notice, Setting } from "obsidian";
 import { BaiduPanClient } from "./BaiduPanClient";
-import { BaiduSyncConfig } from "./types";
+import { BaiduSyncConfig } from "../../types";
 
 export class BaiduAuthModal extends Modal {
   private code = "";

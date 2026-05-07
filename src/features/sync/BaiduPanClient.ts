@@ -9,8 +9,8 @@
  */
 
 import { requestUrl } from "obsidian";
-import { BaiduSyncConfig } from "./types";
-import { md5 } from "./md5";
+import { BaiduSyncConfig } from "../../types";
+import { md5 } from "../../util/md5";
 
 const PAN_API = "https://pan.baidu.com/rest/2.0/xpan";
 const UPLOAD_API = "https://d.pcs.baidu.com/rest/2.0/pcs/superfile2";

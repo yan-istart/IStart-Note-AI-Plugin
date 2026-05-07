@@ -1,5 +1,5 @@
 import { requestUrl } from "obsidian";
-import { DeepSeekSettings, ContextQAInput, ContextQAResponse, Relation } from "./types";
+import { DeepSeekSettings, ContextQAInput, ContextQAResponse, Relation } from "../types";
 
 const buildPrompt = (input: ContextQAInput): string => `请基于以下上下文回答问题。
 

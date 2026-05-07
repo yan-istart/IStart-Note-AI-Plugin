@@ -1,5 +1,5 @@
 import { App, TFile, requestUrl } from "obsidian";
-import { DeepSeekSettings } from "./types";
+import { DeepSeekSettings } from "../types";
 
 export interface SectionAppendResult {
   items: string[];   // 新增条目列表

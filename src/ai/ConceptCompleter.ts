@@ -1,5 +1,5 @@
 import { requestUrl } from "obsidian";
-import { DeepSeekSettings, CompletionDepth, ConceptCompletionResult } from "./types";
+import { DeepSeekSettings, CompletionDepth, ConceptCompletionResult } from "../types";
 
 const LIGHT_PROMPT = `你是一个个人知识图谱助手。请为以下概念生成简明的定义和关联概念。
 

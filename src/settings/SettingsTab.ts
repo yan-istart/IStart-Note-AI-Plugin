@@ -1,6 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
-import type DeepSeekPlugin from "./main";
-import { BaiduAuthModal } from "./BaiduAuthModal";
+import type DeepSeekPlugin from "../main";
+import { BaiduAuthModal } from "../features/sync/BaiduAuthModal";
 
 export class DeepSeekSettingsTab extends PluginSettingTab {
   constructor(app: App, private plugin: DeepSeekPlugin) {

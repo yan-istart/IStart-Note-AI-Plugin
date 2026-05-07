@@ -2,7 +2,7 @@ import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
 import { BaiduSyncService } from "./BaiduSyncService";
 import { BaiduSyncMeta, SyncAction } from "./BaiduSyncMeta";
 import { BaiduPanClient } from "./BaiduPanClient";
-import type DeepSeekPlugin from "./main";
+import type DeepSeekPlugin from "../../main";
 
 export const SYNC_VIEW_TYPE = "istart-baidu-sync-view";
 
