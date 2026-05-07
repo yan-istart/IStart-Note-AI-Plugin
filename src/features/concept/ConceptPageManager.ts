@@ -65,15 +65,15 @@ export class ConceptPageManager {
   ): Promise<void> {
     const content = await this.app.vault.read(file);
     const { frontmatter, body } = this.splitFrontmatter(content);
-    const existingSections = this.getExistingSections(body);
 
-    // 清除空占位标题（只有标题没有内容的 section）
+    // 先清除空占位标题，再判断哪些 section 已有内容
     const cleanedBody = this.removeEmptySections(body);
+    const existingSections = this.getExistingSections(cleanedBody);
 
     const newSections = this.buildSections(result, existingSections, depth);
     const updatedFrontmatter = this.updateFrontmatter(frontmatter, result);
 
-    // 合并：保留有内容的部分 + 追加新内容
+    // 合并：cleanedBody 只保留顶级标题和有内容的 section，新内容追加
     const updatedBody = this.mergeSections(cleanedBody, newSections);
 
     const newContent = updatedFrontmatter
