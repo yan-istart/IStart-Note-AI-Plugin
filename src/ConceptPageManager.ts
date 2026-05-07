@@ -85,10 +85,11 @@ export class ConceptPageManager {
     // 为关联概念预创建空概念页
     await this.ensureRelatedConceptNotes(result.related_concepts.map((c) => c.name));
 
-    // 更新 domain MOC 索引
+    // 更新 domain MOC 索引 + 移动文件到 domain 子目录
     if (result.domain) {
       const conceptName = (frontmatter?.name as string) || file.basename;
-      await this.updateDomainIndex(result.domain, conceptName, file.path);
+      const movedFile = await this.moveTodomainFolder(file, result.domain);
+      await this.updateDomainIndex(result.domain, conceptName, movedFile.path);
     }
   }
 
@@ -141,19 +142,22 @@ export class ConceptPageManager {
   // ── Domain MOC 索引 ─────────────────────────────────────────
 
   /**
-   * 维护 domain 索引页：Concepts/_索引_{domain}.md
-   * 每次补全概念后，将该概念链接加入对应 domain 的索引页。
+   * 维护 domain 索引页：{domain}/_索引.md
+   * 包含概念列表和 Mermaid 概览图。
    */
   private async updateDomainIndex(domain: string, conceptName: string, conceptPath: string): Promise<void> {
     const folderPath = normalizePath(this.settings?.conceptsPath ?? "Knowledge/Concepts");
-    const indexFileName = `_索引_${this.sanitize(domain)}.md`;
-    const indexPath = normalizePath(`${folderPath}/${indexFileName}`);
+    const domainFolder = normalizePath(`${folderPath}/${this.sanitize(domain)}`);
+    const indexPath = normalizePath(`${domainFolder}/_索引.md`);
 
-    const link = `- [[${conceptPath}|${conceptName}]]`;
+    const link = `- [[${conceptName}]]`;
 
     const existing = this.app.vault.getAbstractFileByPath(indexPath);
     if (!existing) {
-      // 创建新的 domain 索引页
+      // 确保目录存在
+      if (!this.app.vault.getAbstractFileByPath(domainFolder)) {
+        await this.app.vault.createFolder(domainFolder);
+      }
       const content = `---\ntype: domain-index\ndomain: ${domain}\n---\n\n# ${domain}\n\n${link}\n`;
       await this.app.vault.create(indexPath, content);
       return;
@@ -164,10 +168,68 @@ export class ConceptPageManager {
     const content = await this.app.vault.read(existing);
 
     // 避免重复
-    if (content.includes(`[[${conceptPath}|${conceptName}]]`)) return;
+    if (content.includes(`[[${conceptName}]]`)) return;
 
-    // 追加到末尾
-    await this.app.vault.modify(existing, content.trimEnd() + `\n${link}\n`);
+    // 在 Mermaid 块之前插入链接（如果有 Mermaid 块的话），否则追加到末尾
+    const mermaidIdx = content.indexOf("```mermaid");
+    if (mermaidIdx > 0) {
+      const before = content.slice(0, mermaidIdx).trimEnd();
+      const after = content.slice(mermaidIdx);
+      await this.app.vault.modify(existing, `${before}\n${link}\n\n${after}`);
+    } else {
+      await this.app.vault.modify(existing, content.trimEnd() + `\n${link}\n`);
+    }
+  }
+
+  /**
+   * 重新生成某个 domain 索引页的 Mermaid 概览图。
+   * 聚合该 domain 下所有概念的 relations。
+   */
+  async rebuildDomainMermaid(domain: string): Promise<void> {
+    const folderPath = normalizePath(this.settings?.conceptsPath ?? "Knowledge/Concepts");
+    const domainFolder = normalizePath(`${folderPath}/${this.sanitize(domain)}`);
+    const indexPath = normalizePath(`${domainFolder}/_索引.md`);
+
+    const indexFile = this.app.vault.getAbstractFileByPath(indexPath);
+    if (!indexFile || !(indexFile instanceof TFile)) return;
+
+    // 收集该 domain 下所有概念的关系
+    const relations: { from: string; relation: string; to: string }[] = [];
+    const files = this.app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(domainFolder) && f.name !== "_索引.md");
+
+    for (const f of files) {
+      const content = await this.app.vault.read(f);
+      // 从"关联概念"section 提取关系
+      const sectionMatch = content.match(/## 关联概念\n([\s\S]*?)(?=\n##|$)/);
+      if (!sectionMatch) continue;
+      const conceptName = f.basename;
+      const lines = sectionMatch[1].split("\n").filter((l) => l.startsWith("- [["));
+      for (const line of lines) {
+        const m = line.match(/- \[\[(.+?)\]\]：(.+)/);
+        if (m) {
+          relations.push({ from: conceptName, relation: m[2].split("（")[0].trim(), to: m[1] });
+        }
+      }
+    }
+
+    if (relations.length === 0) return;
+
+    // 生成 Mermaid
+    const mermaidLines = relations.map((r) => {
+      return `    ${this.mermaidEscape(r.from)} -->|${this.mermaidEscape(r.relation)}| ${this.mermaidEscape(r.to)}`;
+    });
+    const mermaidBlock = `\n## 领域概览\n\n\`\`\`mermaid\ngraph TD\n${mermaidLines.join("\n")}\n\`\`\`\n`;
+
+    // 替换或追加 Mermaid 块
+    let content = await this.app.vault.read(indexFile);
+    const existingMermaid = content.match(/\n## 领域概览\n[\s\S]*?```mermaid[\s\S]*?```\n?/);
+    if (existingMermaid) {
+      content = content.replace(existingMermaid[0], mermaidBlock);
+    } else {
+      content = content.trimEnd() + "\n" + mermaidBlock;
+    }
+
+    await this.app.vault.modify(indexFile, content);
   }
 
   // ── private helpers ──────────────────────────────────────────
@@ -235,6 +297,18 @@ export class ConceptPageManager {
       parts.push(`## 相关问题\n${result.related_questions.map((q) => `- ${q}`).join("\n")}`);
     }
 
+    // Mermaid 关系图
+    if (!existing.has("关系图") && result.related_concepts.length > 0) {
+      const conceptName = result.definition ? result.definition.split("，")[0].split("。")[0].slice(0, 10) : "本概念";
+      const mermaidLines = result.related_concepts.map((c) => {
+        const safeFrom = this.mermaidEscape(conceptName);
+        const safeTo = this.mermaidEscape(c.name);
+        const safeRel = this.mermaidEscape(c.relation);
+        return `    ${safeFrom} -->|${safeRel}| ${safeTo}`;
+      });
+      parts.push(`## 关系图\n\n\`\`\`mermaid\ngraph LR\n${mermaidLines.join("\n")}\n\`\`\``);
+    }
+
     return parts.join("\n\n");
   }
 
@@ -264,15 +338,27 @@ export class ConceptPageManager {
     const folderPath = normalizePath(
       this.settings?.conceptsPath ?? "Knowledge/Concepts"
     );
+    const uncategorizedPath = normalizePath(`${folderPath}/_未分类`);
 
-    if (!this.app.vault.getAbstractFileByPath(folderPath)) {
-      await this.app.vault.createFolder(folderPath);
+    // 确保 _未分类 目录存在
+    if (!this.app.vault.getAbstractFileByPath(uncategorizedPath)) {
+      if (!this.app.vault.getAbstractFileByPath(folderPath)) {
+        await this.app.vault.createFolder(folderPath);
+      }
+      await this.app.vault.createFolder(uncategorizedPath);
     }
 
     const today = new Date().toISOString().slice(0, 10);
 
     for (const concept of concepts) {
-      const filePath = normalizePath(`${folderPath}/${concept}.md`);
+      // 检查是否已存在于任何子目录
+      const allFiles = this.app.vault.getMarkdownFiles();
+      const existing = allFiles.find(
+        (f) => f.path.startsWith(folderPath) && f.basename === concept
+      );
+      if (existing) continue;
+
+      const filePath = normalizePath(`${uncategorizedPath}/${concept}.md`);
       if (!this.app.vault.getAbstractFileByPath(filePath)) {
         await this.app.vault.create(
           filePath,
@@ -284,5 +370,39 @@ export class ConceptPageManager {
 
   private sanitize(name: string): string {
     return name.replace(/[\\/:*?"<>|#[\]]/g, "-").trim();
+  }
+
+  /** Escape special characters for Mermaid node/edge labels */
+  private mermaidEscape(text: string): string {
+    // Mermaid doesn't allow certain chars in node IDs; use quotes for labels
+    return text.replace(/[[\](){}|<>#&]/g, "").replace(/"/g, "'").trim() || "?";
+  }
+
+  /**
+   * 补全后将概念页移动到对应 domain 子目录。
+   * 使用 Obsidian 的 rename API，会自动更新所有引用。
+   */
+  async moveTodomainFolder(file: TFile, domain: string): Promise<TFile> {
+    const folderPath = normalizePath(this.settings?.conceptsPath ?? "Knowledge/Concepts");
+    const domainFolder = normalizePath(`${folderPath}/${this.sanitize(domain)}`);
+    const targetPath = normalizePath(`${domainFolder}/${file.name}`);
+
+    // 如果已经在目标位置，不移动
+    if (file.path === targetPath) return file;
+
+    // 确保 domain 子目录存在
+    if (!this.app.vault.getAbstractFileByPath(domainFolder)) {
+      await this.app.vault.createFolder(domainFolder);
+    }
+
+    // 如果目标已存在同名文件，不移动（避免覆盖）
+    if (this.app.vault.getAbstractFileByPath(targetPath)) return file;
+
+    // 移动文件（Obsidian 会自动更新所有双链引用）
+    await this.app.vault.rename(file, targetPath);
+
+    // 返回移动后的文件引用
+    const moved = this.app.vault.getAbstractFileByPath(targetPath);
+    return (moved instanceof TFile) ? moved : file;
   }
 }

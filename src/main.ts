@@ -19,6 +19,8 @@ import { BaiduAuthModal } from "./BaiduAuthModal";
 import { BaiduSyncModal } from "./BaiduSyncModal";
 import { DEFAULT_BAIDU_SYNC_CONFIG } from "./types";
 import { BaiduSyncView, SYNC_VIEW_TYPE } from "./BaiduSyncView";
+import { DiagramGenerator, DiagramType } from "./DiagramGenerator";
+import { DiagramTypeModal, DiagramPreviewModal } from "./DiagramModal";
 
 export default class DeepSeekPlugin extends Plugin {
   settings: DeepSeekSettings;
@@ -110,6 +112,36 @@ export default class DeepSeekPlugin extends Plugin {
       callback: () => this.openBaiduAuthModal(),
     });
 
+    // 命令：生成图表/公式（选中文字）
+    this.addCommand({
+      id: "generate-diagram",
+      name: "Generate diagram or formula from selection",
+      editorCallback: (editor) => {
+        const selection = editor.getSelection().trim();
+        if (!selection) {
+          new Notice("请先选中一段文字作为图表/公式的描述");
+          return;
+        }
+        const context = editor.getValue().slice(0, 800);
+        this.openDiagramGenerator(selection, context, editor);
+      },
+    });
+
+    // 命令：智能生成（自动判断类型）
+    this.addCommand({
+      id: "smart-diagram",
+      name: "Smart generate (auto-detect type)",
+      editorCallback: (editor) => {
+        const selection = editor.getSelection().trim();
+        if (!selection) {
+          new Notice("请先选中一段文字");
+          return;
+        }
+        const context = editor.getValue().slice(0, 800);
+        void this.runDiagramGeneration(selection, "auto", context, editor);
+      },
+    });
+
     this.addSettingTab(new DeepSeekSettingsTab(this.app, this));
 
     this.registerEvent(
@@ -154,6 +186,17 @@ export default class DeepSeekPlugin extends Plugin {
                 this.openContextQAModal(selection, activeFile?.path ?? "");
               });
           });
+
+          // 图表/公式生成入口
+          menu.addItem((item) => {
+            item
+              .setTitle("IStart-Note-AI: Generate diagram / formula")
+              .setIcon("bar-chart-2")
+              .onClick(() => {
+                const context = editor.getValue().slice(0, 800);
+                this.openDiagramGenerator(selection, context, editor);
+              });
+          });
         }
 
         const cursor = editor.getCursor();
@@ -186,16 +229,34 @@ export default class DeepSeekPlugin extends Plugin {
               void (async () => {
                 const manager = new ConceptPageManager(this.app, this.settings);
                 const conceptsPath = this.settings.conceptsPath || "Knowledge/Concepts";
-                const filePath = `${conceptsPath}/${conceptName}.md`;
-                let conceptFile = this.app.vault.getAbstractFileByPath(filePath);
 
-                if (!conceptFile || !(conceptFile instanceof TFile)) {
-                  const writer = new VaultWriter(this.app, this.settings);
-                  await writer.ensureConceptNote(conceptName);
-                  conceptFile = this.app.vault.getAbstractFileByPath(filePath);
+                // 在所有子目录中查找概念文件
+                let conceptFile: TFile | null = null;
+                const allFiles = this.app.vault.getMarkdownFiles();
+                const found = allFiles.find(
+                  (f) => f.path.startsWith(conceptsPath) && f.basename === conceptName
+                );
+                if (found) {
+                  conceptFile = found;
                 }
 
-                if (!conceptFile || !(conceptFile instanceof TFile)) {
+                if (!conceptFile) {
+                  const writer = new VaultWriter(this.app, this.settings);
+                  await writer.ensureConceptNote(conceptName);
+                  // 重新查找（现在在 _未分类/ 下）
+                  const created = allFiles.find(
+                    (f) => f.path.startsWith(conceptsPath) && f.basename === conceptName
+                  );
+                  if (created) conceptFile = created;
+                  else {
+                    // 直接用路径查找
+                    const uncatPath = `${conceptsPath}/_未分类/${conceptName}.md`;
+                    const uncatFile = this.app.vault.getAbstractFileByPath(uncatPath);
+                    if (uncatFile instanceof TFile) conceptFile = uncatFile;
+                  }
+                }
+
+                if (!conceptFile) {
                   new Notice(`无法找到或创建概念页：${conceptName}`);
                   return;
                 }
@@ -543,6 +604,91 @@ export default class DeepSeekPlugin extends Plugin {
         await this.saveSettings();
       })();
     }).open();
+  }
+
+  // ── 图表/公式生成 ─────────────────────────────────────────
+
+  private openDiagramGenerator(selection: string, context: string, editor: import("obsidian").Editor) {
+    new DiagramTypeModal(this.app, (type) => {
+      void this.runDiagramGeneration(selection, type, context, editor);
+    }).open();
+  }
+
+  private async runDiagramGeneration(
+    selection: string,
+    type: DiagramType,
+    context: string,
+    editor: import("obsidian").Editor
+  ) {
+    const notice = new Notice(`⏳ 生成${type === "auto" ? "图表" : type}中...`, 0);
+
+    try {
+      const generator = new DiagramGenerator(this.settings);
+      const result = await generator.generate(selection, type, context);
+      notice.hide();
+
+      const formatted = generator.formatForInsert(result);
+
+      new DiagramPreviewModal(
+        this.app,
+        result,
+        formatted,
+        () => {
+          // 插入到选中文字下方
+          const cursor = editor.getCursor("to");
+          const insertPos = { line: cursor.line + 1, ch: 0 };
+          const insertText = `\n${formatted}\n`;
+          editor.replaceRange(insertText, insertPos);
+          new Notice(`✅ 已插入${result.typeName}`);
+        },
+        () => {
+          void this.runDiagramGeneration(selection, type, context, editor);
+        },
+        (instruction) => {
+          void this.runDiagramRefine(result.code, instruction, editor);
+        }
+      ).open();
+    } catch (err) {
+      notice.hide();
+      new Notice(`❌ 生成失败：${(err as Error).message}`);
+    }
+  }
+
+  private async runDiagramRefine(
+    existingCode: string,
+    instruction: string,
+    editor: import("obsidian").Editor
+  ) {
+    const notice = new Notice("⏳ 优化图表中...", 0);
+
+    try {
+      const generator = new DiagramGenerator(this.settings);
+      const result = await generator.refine(existingCode, instruction);
+      notice.hide();
+
+      const formatted = generator.formatForInsert(result);
+
+      new DiagramPreviewModal(
+        this.app,
+        result,
+        formatted,
+        () => {
+          const cursor = editor.getCursor("to");
+          const insertPos = { line: cursor.line + 1, ch: 0 };
+          editor.replaceRange(`\n${formatted}\n`, insertPos);
+          new Notice(`✅ 已插入优化后的${result.typeName}`);
+        },
+        () => {
+          void this.runDiagramRefine(existingCode, instruction, editor);
+        },
+        (newInstruction) => {
+          void this.runDiagramRefine(result.code, newInstruction, editor);
+        }
+      ).open();
+    } catch (err) {
+      notice.hide();
+      new Notice(`❌ 优化失败：${(err as Error).message}`);
+    }
   }
 
   private async triggerAutoBackup(filePath: string) {

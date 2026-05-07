@@ -129,10 +129,19 @@ ${tagLine || "暂无标签"}
 
   async ensureConceptNote(concept: string): Promise<void> {
     const folderPath = normalizePath(this.settings.conceptsPath || "Knowledge/Concepts");
-    const filePath = normalizePath(`${folderPath}/${concept}.md`);
 
-    await this.ensureFolder(folderPath);
+    // 先检查是否已存在于任何子目录中（可能已被分类）
+    const allFiles = this.app.vault.getMarkdownFiles();
+    const existingFile = allFiles.find(
+      (f) => f.path.startsWith(folderPath) && f.basename === concept
+    );
+    if (existingFile) return;
 
+    // 新概念放入 _未分类/ 子目录，补全后会自动移动到 domain 目录
+    const uncategorizedPath = normalizePath(`${folderPath}/_未分类`);
+    await this.ensureFolder(uncategorizedPath);
+
+    const filePath = normalizePath(`${uncategorizedPath}/${concept}.md`);
     const exists = this.app.vault.getAbstractFileByPath(filePath);
     if (!exists) {
       const today = new Date().toISOString().slice(0, 10);
