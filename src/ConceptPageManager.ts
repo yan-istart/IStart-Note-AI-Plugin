@@ -24,7 +24,6 @@ export class ConceptPageManager {
     const content = await this.app.vault.read(file);
     const { frontmatter, body } = this.splitFrontmatter(content);
 
-    // 必须是 concept 类型，或者在 Concepts 目录下
     const isConceptType = frontmatter?.type === "concept";
     const isInConceptsFolder = file.path.includes("Concepts/");
     if (!isConceptType && !isInConceptsFolder) return null;
@@ -68,9 +67,14 @@ export class ConceptPageManager {
     const { frontmatter, body } = this.splitFrontmatter(content);
     const existingSections = this.getExistingSections(body);
 
+    // 清除空占位标题（只有标题没有内容的 section）
+    const cleanedBody = this.removeEmptySections(body);
+
     const newSections = this.buildSections(result, existingSections, depth);
     const updatedFrontmatter = this.updateFrontmatter(frontmatter, result);
-    const updatedBody = this.mergeSections(body, newSections);
+
+    // 合并：保留有内容的部分 + 追加新内容
+    const updatedBody = this.mergeSections(cleanedBody, newSections);
 
     const newContent = updatedFrontmatter
       ? `---\n${stringifyYaml(updatedFrontmatter)}---\n\n${updatedBody}`
@@ -78,12 +82,92 @@ export class ConceptPageManager {
 
     await this.app.vault.modify(file, newContent);
 
-    // 为关联概念预创建空概念页到正确路径，避免点击双链时落到根目录
+    // 为关联概念预创建空概念页
     await this.ensureRelatedConceptNotes(result.related_concepts.map((c) => c.name));
+
+    // 更新 domain MOC 索引
+    if (result.domain) {
+      const conceptName = (frontmatter?.name as string) || file.basename;
+      await this.updateDomainIndex(result.domain, conceptName, file.path);
+    }
   }
 
   buildPreviewMarkdown(result: ConceptCompletionResult, depth: CompletionDepth): string {
     return this.buildSections(result, new Set(), depth);
+  }
+
+  // ── 空占位清除 ──────────────────────────────────────────────
+
+  /**
+   * 移除 body 中所有"只有标题没有正文内容"的 section。
+   * 保留有实际内容的 section 和顶级标题（# xxx）。
+   */
+  private removeEmptySections(body: string): string {
+    const lines = body.split("\n");
+    const result: string[] = [];
+    let i = 0;
+
+    while (i < lines.length) {
+      const line = lines[i];
+
+      // 检测 ## 标题行
+      if (/^##\s+/.test(line)) {
+        // 收集该 section 的内容（直到下一个 ## 或文件末尾）
+        const sectionLines: string[] = [line];
+        let j = i + 1;
+        while (j < lines.length && !/^##\s+/.test(lines[j])) {
+          sectionLines.push(lines[j]);
+          j++;
+        }
+
+        // 判断 section 是否有实际内容（非空行）
+        const contentLines = sectionLines.slice(1).filter((l) => l.trim().length > 0);
+        if (contentLines.length > 0) {
+          // 有内容，保留
+          result.push(...sectionLines);
+        }
+        // 没内容则跳过（不加入 result）
+
+        i = j;
+      } else {
+        result.push(line);
+        i++;
+      }
+    }
+
+    return result.join("\n");
+  }
+
+  // ── Domain MOC 索引 ─────────────────────────────────────────
+
+  /**
+   * 维护 domain 索引页：Concepts/_索引_{domain}.md
+   * 每次补全概念后，将该概念链接加入对应 domain 的索引页。
+   */
+  private async updateDomainIndex(domain: string, conceptName: string, conceptPath: string): Promise<void> {
+    const folderPath = normalizePath(this.settings?.conceptsPath ?? "Knowledge/Concepts");
+    const indexFileName = `_索引_${this.sanitize(domain)}.md`;
+    const indexPath = normalizePath(`${folderPath}/${indexFileName}`);
+
+    const link = `- [[${conceptPath}|${conceptName}]]`;
+
+    const existing = this.app.vault.getAbstractFileByPath(indexPath);
+    if (!existing) {
+      // 创建新的 domain 索引页
+      const content = `---\ntype: domain-index\ndomain: ${domain}\n---\n\n# ${domain}\n\n${link}\n`;
+      await this.app.vault.create(indexPath, content);
+      return;
+    }
+
+    if (!(existing instanceof TFile)) return;
+
+    const content = await this.app.vault.read(existing);
+
+    // 避免重复
+    if (content.includes(`[[${conceptPath}|${conceptName}]]`)) return;
+
+    // 追加到末尾
+    await this.app.vault.modify(existing, content.trimEnd() + `\n${link}\n`);
   }
 
   // ── private helpers ──────────────────────────────────────────
@@ -100,10 +184,8 @@ export class ConceptPageManager {
 
   private checkIsEmpty(frontmatter: Record<string, unknown> | null, body: string): boolean {
     if (frontmatter?.status === "empty" || frontmatter?.completion_status === "pending") return true;
-    // 检查 ## 定义 下是否有正文
     const defMatch = body.match(/##\s*定义\s*\n([\s\S]*?)(?=\n##|$)/);
     if (defMatch && defMatch[1].trim().length > 0) return false;
-    // 只有标题和空章节
     const nonEmptyLines = body
       .split("\n")
       .filter((l) => l.trim() && !l.startsWith("#"))
@@ -116,7 +198,6 @@ export class ConceptPageManager {
     const matches = body.matchAll(/^##\s+(.+)/gm);
     for (const m of matches) {
       const heading = m[1].trim();
-      // 检查该 section 是否有内容
       const sectionContent = body
         .slice(body.indexOf(m[0]) + m[0].length)
         .split(/^##\s/m)[0]
@@ -158,8 +239,8 @@ export class ConceptPageManager {
   }
 
   private mergeSections(body: string, newSections: string): string {
-    // 把新内容追加到已有 body 末尾（空章节之后）
     const trimmed = body.trimEnd();
+    // 如果 body 只剩顶级标题（# xxx），直接在后面追加
     return trimmed + (trimmed ? "\n\n" : "") + newSections + "\n";
   }
 
@@ -175,6 +256,7 @@ export class ConceptPageManager {
       completion_status: "completed",
       updated_at: today,
       ...(result.tags.length > 0 ? { tags: result.tags } : {}),
+      ...(result.domain ? { domain: result.domain } : {}),
     };
   }
 
@@ -183,7 +265,6 @@ export class ConceptPageManager {
       this.settings?.conceptsPath ?? "Knowledge/Concepts"
     );
 
-    // 确保目录存在
     if (!this.app.vault.getAbstractFileByPath(folderPath)) {
       await this.app.vault.createFolder(folderPath);
     }
@@ -199,5 +280,9 @@ export class ConceptPageManager {
         );
       }
     }
+  }
+
+  private sanitize(name: string): string {
+    return name.replace(/[\\/:*?"<>|#[\]]/g, "-").trim();
   }
 }

@@ -91,6 +91,7 @@ export interface ConceptCompletionResult {
   related_concepts: { name: string; relation: string; description: string }[];
   related_questions: string[];
   tags: string[];
+  domain?: string; // 知识领域（技术、经济、哲学等）
 }
 
 export interface DeepSeekResponse {
