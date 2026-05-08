@@ -43,6 +43,7 @@ if (prod) {
   await context.rebuild();
   mkdirSync("dist", { recursive: true });
   copyFileSync("manifest.json", "dist/manifest.json");
+  copyFileSync("styles.css", "dist/styles.css");
   process.exit(0);
 } else {
   await context.watch();

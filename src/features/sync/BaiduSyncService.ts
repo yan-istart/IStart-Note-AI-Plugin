@@ -396,69 +396,109 @@ export class BaiduSyncService {
   }
 
   /**
-   * 备份插件本身（main.js, manifest.json, styles.css, data.json）到百度云。
-   * 文件存储在 {remotePath}/_plugin/ 目录下。
+   * 备份插件本身和 Obsidian 关键配置到百度云。
+   * 插件文件存储在 {remotePath}/_plugin/
+   * 配置文件存储在 {remotePath}/_obsidian-config/
    */
   async backupPlugin(): Promise<{ uploaded: number; failed: number }> {
     if (!this.config.backupPlugin) return { uploaded: 0, failed: 0 };
 
-    const pluginDir = ".obsidian/plugins/istart-note-ai";
-    const filesToBackup = ["main.js", "manifest.json", "styles.css", "data.json"];
-    const remotePluginDir = `${this.config.remotePath}/_plugin`.replace(/\/+/g, "/");
-
-    await this.client.mkdir(remotePluginDir);
-
     let uploaded = 0;
     let failed = 0;
 
-    for (const fileName of filesToBackup) {
-      const localPath = `${pluginDir}/${fileName}`;
-      try {
-        const exists = await this.app.vault.adapter.exists(localPath);
-        if (!exists) continue;
+    // 备份插件文件
+    const pluginDir = ".obsidian/plugins/istart-note-ai";
+    const pluginFiles = ["main.js", "manifest.json", "styles.css", "data.json"];
+    const remotePluginDir = `${this.config.remotePath}/_plugin`.replace(/\/+/g, "/");
+    await this.client.mkdir(remotePluginDir);
 
-        const content = await this.app.vault.adapter.readBinary(localPath);
-        const remotePath = `${remotePluginDir}/${fileName}`;
-        const ok = await this.client.uploadFile(content, remotePath);
-        if (ok) uploaded++;
-        else failed++;
-      } catch {
-        // 文件不存在或读取失败，跳过
-      }
+    for (const fileName of pluginFiles) {
+      const result = await this.uploadConfigFile(`${pluginDir}/${fileName}`, `${remotePluginDir}/${fileName}`);
+      if (result === "ok") uploaded++;
+      else if (result === "failed") failed++;
+    }
+
+    // 备份 Obsidian 关键配置
+    const configFiles = [
+      ".obsidian/app.json",                // 全局设置（含移动端工具栏）
+      ".obsidian/hotkeys.json",            // 快捷键
+      ".obsidian/community-plugins.json",  // 已安装插件列表
+      ".obsidian/appearance.json",         // 外观设置
+    ];
+    const remoteConfigDir = `${this.config.remotePath}/_obsidian-config`.replace(/\/+/g, "/");
+    await this.client.mkdir(remoteConfigDir);
+
+    for (const filePath of configFiles) {
+      const fileName = filePath.split("/").pop()!;
+      const result = await this.uploadConfigFile(filePath, `${remoteConfigDir}/${fileName}`);
+      if (result === "ok") uploaded++;
+      else if (result === "failed") failed++;
     }
 
     return { uploaded, failed };
   }
 
+  private async uploadConfigFile(localPath: string, remotePath: string): Promise<"ok" | "failed" | "skipped"> {
+    try {
+      const exists = await this.app.vault.adapter.exists(localPath);
+      if (!exists) return "skipped";
+      const content = await this.app.vault.adapter.readBinary(localPath);
+      const ok = await this.client.uploadFile(content, remotePath);
+      return ok ? "ok" : "failed";
+    } catch {
+      return "skipped";
+    }
+  }
+
   /**
-   * 从百度云恢复插件文件到本地。
+   * 从百度云恢复插件文件和 Obsidian 配置到本地。
    */
   async restorePlugin(): Promise<{ downloaded: number; failed: number }> {
-    const remotePluginDir = `${this.config.remotePath}/_plugin`.replace(/\/+/g, "/");
-    const pluginDir = ".obsidian/plugins/istart-note-ai";
-
-    // 确保本地插件目录存在
-    const dirExists = await this.app.vault.adapter.exists(pluginDir);
-    if (!dirExists) await this.app.vault.adapter.mkdir(pluginDir);
-
-    const remoteFiles = await this.client.listFiles(remotePluginDir);
     let downloaded = 0;
     let failed = 0;
 
-    for (const entry of remoteFiles) {
+    // 恢复插件文件
+    const remotePluginDir = `${this.config.remotePath}/_plugin`.replace(/\/+/g, "/");
+    const pluginDir = ".obsidian/plugins/istart-note-ai";
+    const dirExists = await this.app.vault.adapter.exists(pluginDir);
+    if (!dirExists) await this.app.vault.adapter.mkdir(pluginDir);
+
+    const pluginFiles = await this.client.listFiles(remotePluginDir);
+    for (const entry of pluginFiles) {
       if (entry.isdir) continue;
-      try {
-        const content = await this.client.downloadFile(entry.path);
-        if (!content) { failed++; continue; }
-        const localPath = `${pluginDir}/${entry.server_filename}`;
-        await this.app.vault.adapter.writeBinary(localPath, content);
-        downloaded++;
-      } catch {
-        failed++;
-      }
+      const result = await this.downloadConfigFile(entry.path, `${pluginDir}/${entry.server_filename}`);
+      if (result === "ok") downloaded++;
+      else if (result === "failed") failed++;
+    }
+
+    // 恢复 Obsidian 配置
+    const remoteConfigDir = `${this.config.remotePath}/_obsidian-config`.replace(/\/+/g, "/");
+    const configFiles = await this.client.listFiles(remoteConfigDir);
+    for (const entry of configFiles) {
+      if (entry.isdir) continue;
+      const result = await this.downloadConfigFile(entry.path, `.obsidian/${entry.server_filename}`);
+      if (result === "ok") downloaded++;
+      else if (result === "failed") failed++;
     }
 
     return { downloaded, failed };
+  }
+
+  private async downloadConfigFile(remotePath: string, localPath: string): Promise<"ok" | "failed"> {
+    try {
+      const content = await this.client.downloadFile(remotePath);
+      if (!content) return "failed";
+      // 确保目录存在
+      const dir = localPath.substring(0, localPath.lastIndexOf("/"));
+      if (dir) {
+        const exists = await this.app.vault.adapter.exists(dir);
+        if (!exists) await this.app.vault.adapter.mkdir(dir);
+      }
+      await this.app.vault.adapter.writeBinary(localPath, content);
+      return "ok";
+    } catch {
+      return "failed";
+    }
   }
 
   private async writeLocalFile(localPath: string, content: ArrayBuffer) {
