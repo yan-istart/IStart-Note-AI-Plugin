@@ -64,6 +64,7 @@ export class BaiduSyncView extends ItemView {
     this.makeBtn(btnRow, "⬆ 强制备份", "default", () => { void this.forceBackup(); });
     this.makeBtn(btnRow, "⬇ 强制更新", "default", () => { void this.forceUpdate(); });
     this.makeBtn(btnRow, "⇄ 双向同步", "cta", () => { void this.runSync(); });
+    this.makeBtn(btnRow, "⚠️ 强制覆盖", "default", () => { void this.forceOverwrite(); });
 
     // 上次扫描时间
     if (this.lastScanTime) {
@@ -248,6 +249,54 @@ export class BaiduSyncView extends ItemView {
       result.failed && `❌ ${result.failed}`,
     ].filter(Boolean).join("  ");
     new Notice(parts ? `✅ 同步完成  ${parts}` : "✅ 已是最新");
+    await this.scan();
+  }
+
+  async forceOverwrite() {
+    const cfg = this.plugin.settings.baiduSync;
+    const service = new BaiduSyncService(this.app, cfg);
+    const tokenOk = await service.ensureValidToken();
+    if (!tokenOk) { new Notice("Token 已过期，请重新授权"); return; }
+
+    // 二次确认
+    const confirmed = await new Promise<boolean>((resolve) => {
+      const modal = new (class extends (require("obsidian") as { Modal: new (app: import("obsidian").App) => import("obsidian").Modal }).Modal {
+        onOpen() {
+          this.titleEl.setText("⚠️ 确认强制覆盖");
+          this.contentEl.createEl("p", {
+            text: "此操作将删除本地所有同步文件，然后从云端完整恢复。不可撤销！",
+            cls: "istart-sync-modal-warning",
+          });
+          const { Setting } = require("obsidian") as typeof import("obsidian");
+          new Setting(this.contentEl)
+            .addButton((btn: import("obsidian").ButtonComponent) => btn.setButtonText("确认覆盖").setWarning().onClick(() => { this.close(); resolve(true); }))
+            .addButton((btn: import("obsidian").ButtonComponent) => btn.setButtonText("取消").onClick(() => { this.close(); resolve(false); }));
+        }
+        onClose() { this.contentEl.empty(); resolve(false); }
+      })(this.app);
+      modal.open();
+    });
+
+    if (!confirmed) return;
+
+    const notice = new Notice("⏳ 强制覆盖：清理本地...", 0);
+
+    // 删除本地文件
+    const files = this.app.vault.getFiles().filter(
+      (f) => !f.path.split("/").some((p) => p.startsWith("."))
+    );
+    for (const f of files) {
+      try { await this.app.vault.delete(f); } catch { /* ignore */ }
+    }
+
+    // 从云端恢复
+    notice.setMessage("⏳ 强制覆盖：从云端恢复...");
+    const result = await service.restore("", true, (c, t, file) => {
+      notice.setMessage(`⏳ 恢复中 (${c}/${t})：${file.split("/").pop()}`);
+    });
+    notice.hide();
+
+    new Notice(`✅ 强制覆盖完成：恢复 ${result.downloaded} 个文件`);
     await this.scan();
   }
 
