@@ -4,6 +4,7 @@ import { AssistantResult } from "../../ai/AIAssistant";
 const QUICK_TAGS = [
   { label: "扩写", value: "扩写这段内容" },
   { label: "解释", value: "解释一下" },
+  { label: "深度讲解", value: "深度讲解这个概念，生成结构化知识并创建相关概念链接" },
   { label: "画图", value: "画一个流程图" },
   { label: "补全", value: "补全这个章节" },
   { label: "续写", value: "续写" },
@@ -85,7 +86,8 @@ export class AssistantResultModal extends Modal {
     app: App,
     private result: AssistantResult,
     private onConfirm: () => void,
-    private onRetry: () => void
+    private onRetry: () => void,
+    private onCreateConcept?: () => void
   ) {
     super(app);
     this.component = new Component();
@@ -113,9 +115,8 @@ export class AssistantResultModal extends Modal {
 
     // 按钮
     const btnSetting = new Setting(contentEl);
-    if (this.result.mode !== "show") {
-      btnSetting.addButton((btn) => btn.setButtonText("确认").setCta().onClick(() => { this.close(); this.onConfirm(); }));
-    }
+    btnSetting.addButton((btn) => btn.setButtonText("插入当前文档").setCta().onClick(() => { this.close(); this.onConfirm(); }));
+    btnSetting.addButton((btn) => btn.setButtonText("创建为新概念页").onClick(() => { this.close(); this.onCreateConcept?.(); }));
     btnSetting
       .addButton((btn) => btn.setButtonText("重新生成").onClick(() => { this.close(); this.onRetry(); }))
       .addButton((btn) => btn.setButtonText("关闭").onClick(() => this.close()));

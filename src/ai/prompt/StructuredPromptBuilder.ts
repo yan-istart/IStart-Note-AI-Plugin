@@ -64,6 +64,10 @@ export class StructuredPromptBuilder {
     parts.push(`\n## 输出要求\n`);
     parts.push("直接输出 Markdown 内容，不要包裹在 JSON 或代码块中。");
     parts.push("不要输出任何解释性前缀（如「以下是...」），直接输出正文。");
+    parts.push("\n## 双链规则（必须遵守）\n");
+    parts.push("所有专业术语、概念名词、技术名词必须用 Obsidian 双链格式包裹：[[概念名]]");
+    parts.push("例如：[[TCP]]、[[CAP定理]]、[[微服务]]、[[一致性]]");
+    parts.push("这是 Obsidian 知识库的核心特性，不可省略。");
 
     return parts.join("\n");
   }

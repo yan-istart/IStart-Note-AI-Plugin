@@ -102,7 +102,8 @@ export default class DeepSeekPlugin extends Plugin {
         this.app,
         result,
         () => this.applyResult(result, editor),
-        () => { void this.runAssistant(instruction); }
+        () => { void this.runAssistant(instruction); },
+        () => { void this.createConceptFromContent(result.content, ctx.selection); }
       ).open();
     } catch (err) {
       notice.hide();
@@ -131,8 +132,99 @@ export default class DeepSeekPlugin extends Plugin {
         break;
       }
       case "show":
-        // 不修改文件，结果已在预览弹窗中展示
+        // 用户选择"插入到文档"时，当作 insert 处理
+        {
+          const cursor = editor.getCursor();
+          editor.replaceRange("\n" + result.content + "\n", cursor);
+          new Notice("✅ 已插入");
+        }
         break;
+    }
+
+    // 所有模式都自动创建概念页
+    void this.ensureLinkedConcepts(result.content);
+  }
+
+  /** 将 AI 生成的内容创建为新概念页 */
+  private async createConceptFromContent(content: string, conceptName: string) {
+    const name = conceptName.trim().replace(/\[\[|\]\]/g, "") || "新概念";
+    const conceptsPath = normalizePath(this.settings.conceptsPath || "Knowledge/Concepts");
+    const uncategorizedPath = normalizePath(`${conceptsPath}/_未分类`);
+
+    if (!this.app.vault.getAbstractFileByPath(uncategorizedPath)) {
+      try { await this.app.vault.createFolder(uncategorizedPath); } catch { /* exists */ }
+    }
+
+    const filePath = normalizePath(`${uncategorizedPath}/${name}.md`);
+
+    // 如果已存在，追加内容
+    const existing = this.app.vault.getAbstractFileByPath(filePath);
+    if (existing instanceof TFile) {
+      const oldContent = await this.app.vault.read(existing);
+      await this.app.vault.modify(existing, oldContent.trimEnd() + "\n\n" + content + "\n");
+      new Notice(`✅ 已追加到概念页：${name}`);
+      const leaf = this.app.workspace.getLeaf(false);
+      await leaf.openFile(existing);
+    } else {
+      // 创建新概念页
+      const today = new Date().toISOString().slice(0, 10);
+      const fullContent = `---\ntype: concept\nname: ${name}\nstatus: completed\ncompletion_status: completed\ncreated_from: ai-assistant\ncreated_at: ${today}\n---\n\n# ${name}\n\n${content}\n`;
+      const file = await this.app.vault.create(filePath, fullContent);
+      new Notice(`✅ 已创建概念页：${name}`);
+      const leaf = this.app.workspace.getLeaf(false);
+      await leaf.openFile(file);
+    }
+
+    // 在原文档光标位置插入双链引用
+    const editor = this.app.workspace.activeEditor?.editor;
+    if (editor) {
+      // 不在新打开的文件里插入，这里只是提示用户
+    }
+
+    // 同时创建内容中引用的其他概念页
+    void this.ensureLinkedConcepts(content);
+  }
+
+  /** 扫描内容中的 [[双链]]，为不存在的概念自动创建页面 */
+  private async ensureLinkedConcepts(content: string) {
+    const links = content.match(/\[\[([^\]|]+?)(?:\|[^\]]+?)?\]\]/g);
+    if (!links) return;
+
+    const conceptsPath = normalizePath(this.settings.conceptsPath || "Knowledge/Concepts");
+    const uncategorizedPath = normalizePath(`${conceptsPath}/_未分类`);
+
+    const conceptNames = links
+      .map((l) => l.replace(/\[\[|\]\]/g, "").split("|")[0].trim())
+      .filter((name) => name.length >= 2);
+
+    // 去重
+    const unique = [...new Set(conceptNames)];
+    let created = 0;
+
+    for (const concept of unique) {
+      // 检查是否已存在
+      const existing = this.app.vault.getMarkdownFiles().find(
+        (f) => f.path.startsWith(conceptsPath) && f.basename === concept
+      );
+      if (existing) continue;
+
+      // 确保目录存在
+      if (!this.app.vault.getAbstractFileByPath(uncategorizedPath)) {
+        try { await this.app.vault.createFolder(uncategorizedPath); } catch { /* exists */ }
+      }
+
+      const filePath = normalizePath(`${uncategorizedPath}/${concept}.md`);
+      if (this.app.vault.getAbstractFileByPath(filePath)) continue;
+
+      const today = new Date().toISOString().slice(0, 10);
+      await this.app.vault.create(filePath,
+        `---\ntype: concept\nname: ${concept}\nstatus: empty\ncompletion_status: pending\ncreated_from: ai-assistant\ncreated_at: ${today}\n---\n\n# ${concept}\n\n## 定义\n\n## 核心解释\n\n## 示例\n\n## 关联概念\n\n## 相关问题\n`
+      );
+      created++;
+    }
+
+    if (created > 0) {
+      new Notice(`📝 已创建 ${created} 个新概念页`);
     }
   }
 
@@ -190,17 +282,38 @@ export default class DeepSeekPlugin extends Plugin {
     const content = editor.getValue();
     if (!content.trim()) { new Notice("文档为空"); return; }
 
-    const knownConcepts = this.getKnownConcepts();
-    const beautifier = new MarkdownBeautifier(knownConcepts);
-    const beautified = beautifier.beautify(content);
+    const notice = new Notice("⏳ AI 正在重新组织文档结构...", 0);
+    try {
+      const knownConcepts = this.getKnownConcepts();
+      const style = this.settings.outputStyle ?? "knowledge-base";
+      const assistant = new AIAssistant(this.settings, style, knownConcepts);
 
-    if (beautified === content) {
-      new Notice("✅ 文档已经很整洁，无需美化");
-      return;
+      const ctx: AssistantContext = {
+        selection: "",
+        fileContent: content,
+        fileName: this.app.workspace.getActiveFile()?.basename ?? "",
+        fileType: undefined,
+        cursorLineBefore: "",
+        sectionName: null,
+        sectionEmpty: false,
+      };
+
+      const result = await assistant.run(
+        "美化并重新组织这篇文档。要求：1) 顶部加摘要 Callout；2) 长段落拆分；3) 重要内容用 Callout 卡片；4) 适当加 Mermaid 图；5) 概念加双链；6) 保持原有信息完整不丢失。",
+        ctx
+      );
+      notice.hide();
+
+      new AssistantResultModal(
+        this.app,
+        { ...result, mode: "replace", explanation: "美化文档（将替换全文）" },
+        () => { editor.setValue(result.content); new Notice("✅ 文档已美化"); },
+        () => { void this.beautifyCurrentNote(); }
+      ).open();
+    } catch (err) {
+      notice.hide();
+      new Notice(`❌ 美化失败：${(err as Error).message}`);
     }
-
-    editor.setValue(beautified);
-    new Notice("✅ 文档已美化");
   }
 
   /** 获取已知概念列表（用于自动双链） */
