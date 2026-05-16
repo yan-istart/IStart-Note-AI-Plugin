@@ -4,81 +4,56 @@ AI-powered knowledge management plugin for Obsidian. One unified AI assistant th
 
 ---
 
-## Core Concept
-
-**One input, infinite possibilities.** Instead of memorizing dozens of commands, just tell the AI what you want:
-
-- Select text → click 🧠 → "画个时序图"
-- Cursor in empty section → click 🧠 → (leave blank, AI auto-completes)
-- Reading a chapter → click 🧠 → "总结这章"
-
-The AI understands your context (selected text, current file, cursor position) and acts accordingly.
-
----
-
 ## Features
-
-| Feature | How to use |
-|---------|-----------|
-| **AI Assistant** | 🧠 button or right-click → type any instruction |
-| **Reading Projects** | Command panel → "New reading project" → enter book title |
-| **Baidu Cloud Sync** | Settings → enable sync → backup/restore/force-overwrite |
-| **Knowledge Graph** | Automatic: concepts, relations, and Mermaid diagrams |
 
 ### AI Assistant (unified entry)
 
-The AI assistant handles everything through one input:
+One input handles everything. Select text or place your cursor, then tell the AI what you want:
 
-- **Expand** — select text, ask to expand
+- **Expand** — select text, ask to expand or rewrite
 - **Explain** — select a term, ask to explain
 - **Diagrams** — describe what you want (flowchart, sequence, state, class, ER, Gantt)
 - **Formulas** — describe a math expression, get LaTeX
 - **Complete** — fill empty sections based on context
 - **Continue** — write more from cursor position
 - **Summarize** — summarize the current document
-- **Answer questions** — ask anything about the content
+- **Beautify** — restructure existing content with callouts, links, and visual breaks
 - **Anything else** — just describe it in natural language
+
+Quick tags for common actions: `[扩写]` `[解释]` `[画图]` `[补全]` `[续写]` `[总结]` `[公式]` `[时序图]`
+
+### Structured Output
+
+AI generates content in professional knowledge-base style:
+
+- Short paragraphs with visual breaks
+- Obsidian Callouts (`> [!summary]`, `> [!warning]`, `> [!tip]`)
+- Automatic Mermaid diagrams where appropriate
+- Auto-linked `[[concepts]]` to existing pages
+- Configurable output style (technical, minimal, academic, etc.)
 
 ### Reading Projects
 
 Turn any book into a structured study plan:
 
-1. Enter book title (and optionally paste table of contents)
-2. AI generates:
-   - Reading roadmap with chapter relationships (Mermaid)
-   - Pre-reading questions for each chapter
-   - Core concepts (auto-linked to concept pages)
-3. As you read, record notes in chapter pages
+1. Enter book title (optionally paste table of contents)
+2. AI generates reading roadmap, chapter relationships, and pre-reading questions
+3. Record notes as you read
 4. Generate chapter summaries and take Feynman tests
+5. Supports resume if generation is interrupted
 
-**Supports resume:** If generation is interrupted, re-run to complete missing chapters.
+### Knowledge Organization
 
-### Knowledge Structure
-
-```
-Knowledge/
-├── Reading/
-│   └── Book-Title/
-│       ├── _索引.md          ← Overview + progress + relationship graph
-│       ├── Chapter-1.md      ← Notes with pre-reading questions
-│       └── ...
-├── Concepts/
-│   ├── _未分类/              ← New concepts (before completion)
-│   ├── 技术/                 ← Auto-organized by domain after completion
-│   │   ├── TCP.md
-│   │   └── _索引.md         ← Domain MOC with Mermaid overview
-│   └── ...
-└── Q&A/
-    └── 2026-05-01-question.md
-```
+- Concepts auto-organized into domain subdirectories after completion
+- Domain MOC index pages with Mermaid overview graphs
+- Relationship diagrams in concept pages
+- Question evolution graphs in question index
 
 ### Baidu Cloud Sync
 
-- **Incremental backup** — only uploads changed files
-- **Bidirectional sync** — with conflict resolution
-- **Force overwrite** — reset local to match cloud state
-- **Plugin backup** — includes plugin files + Obsidian config (toolbar, hotkeys, appearance)
-- **Auto backup** — triggers after note generation
+- Incremental backup / bidirectional sync / force overwrite
+- Plugin and Obsidian config backup (toolbar, hotkeys, appearance)
+- Auto backup after note generation
 
 ---
 
@@ -113,10 +88,10 @@ Settings → IStart-Note-AI:
 |---------|-------------|---------|
 | API Key | DeepSeek API key | — |
 | Base URL | API endpoint | `https://api.deepseek.com` |
-| Model | `deepseek-v4-flash` (fast) or `deepseek-v4-pro` (deep reasoning) | `deepseek-v4-flash` |
+| Model | `deepseek-v4-flash` or `deepseek-v4-pro` | `deepseek-v4-flash` |
+| Output style | Knowledge-base, technical, minimal, product, academic, story, dashboard | Knowledge-base |
 | Q&A folder | Where Q&A notes are saved | `Knowledge/Q&A` |
 | Concepts folder | Where concept pages are saved | `Knowledge/Concepts` |
-| Questions folder | Question graph index | `Knowledge/Questions` |
 
 ---
 
@@ -127,112 +102,18 @@ Settings → IStart-Note-AI:
 - **🧠 Ribbon icon** → Opens command panel
 - **Right-click in editor** → "IStart-Note-AI: AI 助手"
 - **Right-click file in sidebar** → "IStart-Note-AI: AI 助手"
-- **Command palette** → Search any command
 
 ### Mobile
 
-- **🧠 Ribbon icon** → Opens command panel (recommended)
-- Add `AI 助手` to mobile toolbar for quick access
-- Select text → tap toolbar button → enter instruction
+- **🧠 Ribbon icon** → Opens command panel
+- Add `AI 助手` to mobile toolbar for one-tap access
 
-### Quick tags
+### Workflow
 
-The AI assistant input has quick tags for common actions:
-
-`[扩写]` `[解释]` `[画图]` `[补全]` `[续写]` `[总结]` `[公式]` `[时序图]`
-
-Tap a tag to fill the instruction, or type your own.
-
----
-
-## Development
-
-### Setup
-
-```bash
-cd obsidian-deepseek-plugin
-npm install
-```
-
-### Build
-
-```bash
-npm run build    # Production → dist/
-npm run dev      # Watch mode
-```
-
-### Project Structure
-
-```
-src/
-├── main.ts                    # Plugin entry (minimal: onload + method implementations)
-├── types.ts                   # Shared type definitions
-├── actions/                   # Action registry (defines all commands/menus)
-│   ├── types.ts
-│   ├── definitions.ts         # All actions defined here
-│   └── registry.ts            # Auto-registers to commands/menus/panel
-├── ai/                        # AI clients (pure API calls, no UI)
-│   ├── AIAssistant.ts         # Unified AI assistant
-│   ├── ReadingPlanner.ts      # Reading project generation
-│   ├── ConceptCompleter.ts    # Concept page completion
-│   ├── SmartCompleter.ts      # Section/expand/continue
-│   ├── DiagramGenerator.ts    # Mermaid/LaTeX generation
-│   ├── SectionAppender.ts     # Section content generation
-│   ├── DeepSeekClient.ts      # Basic Q&A
-│   ├── ContextQAClient.ts     # Context-aware Q&A
-│   └── QuestionClassifier.ts  # Question classification
-├── features/                  # Feature modules (UI + logic)
-│   ├── assistant/             # Unified AI assistant modal
-│   ├── reading/               # Reading project management
-│   ├── concept/               # Concept page management
-│   ├── question/              # Question graph
-│   ├── context-qa/            # Context Q&A modal
-│   ├── section/               # Section append modal
-│   ├── diagram/               # Diagram type/preview modals
-│   ├── sync/                  # Baidu cloud sync
-│   ├── smart-complete/        # Document analysis modal
-│   └── command-panel/         # Unified command panel
-├── vault/                     # Vault file operations
-│   └── VaultWriter.ts
-├── settings/                  # Settings tab
-│   └── SettingsTab.ts
-└── util/
-    └── md5.ts
-```
-
-### Adding a new feature
-
-1. Add AI client in `src/ai/` (if needed)
-2. Add UI in `src/features/your-feature/`
-3. Add action in `src/actions/definitions.ts`
-4. Done — automatically appears in command panel, right-click menu, and command palette
-
----
-
-## Changelog
-
-### 2.0.0
-
-- **Unified AI Assistant** — one input replaces all previous commands
-- **Action Registry** — consistent behavior across panel, right-click, and commands
-- **DeepSeek v4 models** — switched to `deepseek-v4-flash` and `deepseek-v4-pro`
-- **Reading Projects** — book study with pre-reading questions, chapter summaries, Feynman tests
-- **Domain organization** — concepts auto-organized into domain subdirectories
-- **Mermaid diagrams** — auto-generated relationship graphs in concept pages
-- **Obsidian config backup** — toolbar, hotkeys, appearance synced to cloud
-- **Force overwrite** — reset local state from cloud backup
-- **Code restructure** — modular architecture for easy extension
-
-### 1.5.x
-
-- Baidu Netdisk sync with incremental backup/restore
-- Section append, concept completion, context Q&A
-- Question classification and graph
-
-### 1.0.0
-
-- Basic Q&A note generation with DeepSeek
-- Automatic concept pages and bidirectional links
+1. Select text (optional)
+2. Click 🧠 or right-click → AI 助手
+3. Type your request (or tap a quick tag, or leave blank for auto-detect)
+4. Preview result → Confirm
 
 ---
 
