@@ -4,12 +4,14 @@
 #
 # Usage:
 #   ./scripts/release.sh [version]
+#   ./scripts/release.sh --current    # Release current version (no bump, no commit)
 #
 # Examples:
 #   ./scripts/release.sh 1.6.0    # Release version 1.6.0
 #   ./scripts/release.sh patch    # Bump patch version (1.5.0 → 1.5.1)
 #   ./scripts/release.sh minor    # Bump minor version (1.5.0 → 1.6.0)
 #   ./scripts/release.sh major    # Bump major version (1.5.0 → 2.0.0)
+#   ./scripts/release.sh --current # Build + tag + release current manifest version
 #   ./scripts/release.sh          # Interactive prompt
 #
 # Prerequisites:
@@ -244,6 +246,25 @@ main() {
   current_version=$(get_current_version)
   info "Current version: $current_version"
 
+  # --current mode: just build + tag + release, no version bump
+  if [[ "${1:-}" == "--current" ]]; then
+    new_version="$current_version"
+    echo ""
+    info "Release-only mode: using current version ${GREEN}$new_version${NC}"
+    echo ""
+    read -rp "  Build and release $new_version? [y/N] " confirm
+    [[ "$confirm" =~ ^[Yy]$ ]] || { info "Aborted."; exit 0; }
+    echo ""
+
+    build_plugin
+    create_tag "$new_version"
+    create_github_release "$new_version"
+
+    echo -e "${GREEN}🎉 Release $new_version complete!${NC}"
+    echo ""
+    return
+  fi
+
   # Determine new version
   if [[ $# -ge 1 ]]; then
     case "$1" in
@@ -262,13 +283,15 @@ main() {
     echo "    2) minor  → $(bump_version "$current_version" minor)"
     echo "    3) major  → $(bump_version "$current_version" major)"
     echo "    4) custom"
+    echo "    5) current (no bump, just release $current_version)"
     echo ""
-    read -rp "  Choose [1-4]: " choice
+    read -rp "  Choose [1-5]: " choice
     case "$choice" in
       1) new_version=$(bump_version "$current_version" patch) ;;
       2) new_version=$(bump_version "$current_version" minor) ;;
       3) new_version=$(bump_version "$current_version" major) ;;
       4) read -rp "  Enter version (x.y.z): " new_version ;;
+      5) new_version="$current_version" ;;
       *) die "Invalid choice" ;;
     esac
   fi
@@ -284,7 +307,9 @@ main() {
   echo ""
 
   # Steps
-  update_versions "$new_version"
+  if [[ "$new_version" != "$current_version" ]]; then
+    update_versions "$new_version"
+  fi
   build_plugin
   create_tag "$new_version"
   create_github_release "$new_version"
