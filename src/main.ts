@@ -151,53 +151,50 @@ export default class DeepSeekPlugin extends Plugin {
     const conceptsPath = normalizePath(this.settings.conceptsPath || "Knowledge/Concepts");
     const uncategorizedPath = normalizePath(`${conceptsPath}/_未分类`);
 
-    // 记录发起页面信息（在打开新文件之前）
+    // 记录发起页面（必须在切换文件之前）
     const sourceFile = this.app.workspace.getActiveFile();
     const sourcePath = sourceFile?.path ?? "";
-    const sourceEditor = this.app.workspace.activeEditor?.editor ?? null;
 
+    // 1. 先在原文档中把选中词替换为 [[双链]]
+    if (sourceFile && name) {
+      const sourceContent = await this.app.vault.read(sourceFile);
+      const escaped = this.escapeRegex(name);
+      const linked = sourceContent.replace(
+        new RegExp(`(?<!\\[\\[)${escaped}(?!\\]\\])`, "g"),
+        `[[${name}]]`
+      );
+      if (linked !== sourceContent) {
+        await this.app.vault.modify(sourceFile, linked);
+      }
+    }
+
+    // 2. 创建概念页
     if (!this.app.vault.getAbstractFileByPath(uncategorizedPath)) {
       try { await this.app.vault.createFolder(uncategorizedPath); } catch { /* exists */ }
     }
 
     const filePath = normalizePath(`${uncategorizedPath}/${name}.md`);
-    const sourceLink = sourcePath ? `\n\n## 来源\n\n- 来自 [[${sourcePath}]]\n` : "";
+    const sourceLink = sourcePath ? `\n\n## 来源\n\n- [[${sourcePath}]]\n` : "";
 
-    // 如果已存在，追加内容
     const existing = this.app.vault.getAbstractFileByPath(filePath);
     if (existing instanceof TFile) {
       const oldContent = await this.app.vault.read(existing);
-      await this.app.vault.modify(existing, oldContent.trimEnd() + "\n\n" + content + sourceLink);
+      // 追加内容 + 来源（避免重复来源）
+      const appendSource = oldContent.includes(`[[${sourcePath}]]`) ? "" : sourceLink;
+      await this.app.vault.modify(existing, oldContent.trimEnd() + "\n\n" + content + appendSource);
       new Notice(`✅ 已追加到概念页：${name}`);
       const leaf = this.app.workspace.getLeaf(false);
       await leaf.openFile(existing);
     } else {
-      // 创建新概念页（包含来源链接）
       const today = new Date().toISOString().slice(0, 10);
-      const fullContent = `---\ntype: concept\nname: ${name}\nstatus: completed\ncompletion_status: completed\ncreated_from: ai-assistant\nsource: "[[${sourcePath}]]"\ncreated_at: ${today}\n---\n\n# ${name}\n\n${content}${sourceLink}`;
+      const fullContent = `---\ntype: concept\nname: ${name}\nstatus: completed\ncreated_from: ai-assistant\nsource: "[[${sourcePath}]]"\ncreated_at: ${today}\n---\n\n# ${name}\n\n${content}${sourceLink}`;
       const file = await this.app.vault.create(filePath, fullContent);
-      new Notice(`✅ 已创建概念页：${name}`);
+      new Notice(`✅ 已创建概念页：${name}（原文已建立链接）`);
       const leaf = this.app.workspace.getLeaf(false);
       await leaf.openFile(file);
     }
 
-    // 在原文档中将选中的概念词替换为 [[双链]]
-    if (sourceFile && sourceEditor && name) {
-      const selection = sourceEditor.getSelection();
-      if (selection && !selection.includes("[[")) {
-        // 需要回到原文件修改
-        const sourceContent = await this.app.vault.read(sourceFile);
-        const linked = sourceContent.replace(
-          new RegExp(`(?<!\\[\\[)${this.escapeRegex(name)}(?!\\]\\])`, "g"),
-          `[[${name}]]`
-        );
-        if (linked !== sourceContent) {
-          await this.app.vault.modify(sourceFile, linked);
-        }
-      }
-    }
-
-    // 同时创建内容中引用的其他概念页
+    // 3. 创建内容中引用的其他概念页
     void this.ensureLinkedConcepts(content);
   }
 
