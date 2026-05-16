@@ -43,10 +43,10 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
       .setDesc("选择使用的 DeepSeek 模型")
       .addDropdown((drop) =>
         drop
-          .addOption("deepseek-chat", "deepseek-chat（推荐）")
-          .addOption("deepseek-reasoner", "deepseek-reasoner（深度推理）")
+          .addOption("deepseek-v4-flash", "deepseek-v4-flash（快速，推荐）")
+          .addOption("deepseek-v4-pro", "deepseek-v4-pro（深度推理）")
           .setValue(this.plugin.settings.model)
-          .onChange(async (value: "deepseek-chat" | "deepseek-reasoner") => {
+          .onChange(async (value: "deepseek-v4-flash" | "deepseek-v4-pro") => {
             this.plugin.settings.model = value;
             await this.plugin.saveSettings();
           })

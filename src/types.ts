@@ -1,12 +1,11 @@
 export interface DeepSeekSettings {
   apiKey: string;
   baseUrl: string;
-  model: "deepseek-chat" | "deepseek-reasoner";
+  model: "deepseek-v4-flash" | "deepseek-v4-pro";
   savePath: string;
   autoOpenGraph: boolean;
   conceptsPath: string;
   questionsIndexPath: string;
-  // 百度云同步配置
   baiduSync: BaiduSyncConfig;
 }
 
@@ -41,7 +40,7 @@ export const DEFAULT_BAIDU_SYNC_CONFIG: BaiduSyncConfig = {
 export const DEFAULT_SETTINGS: DeepSeekSettings = {
   apiKey: "",
   baseUrl: "https://api.deepseek.com",
-  model: "deepseek-chat",
+  model: "deepseek-v4-flash",
   savePath: "Knowledge/Q&A",
   autoOpenGraph: false,
   conceptsPath: "Knowledge/Concepts",
@@ -56,7 +55,7 @@ export const DEFAULT_SETTINGS: DeepSeekSettings = {
 export interface SyncableConfig {
   // DeepSeek
   baseUrl: string;
-  model: "deepseek-chat" | "deepseek-reasoner";
+  model: "deepseek-v4-flash" | "deepseek-v4-pro";
   // 路径
   savePath: string;
   conceptsPath: string;
