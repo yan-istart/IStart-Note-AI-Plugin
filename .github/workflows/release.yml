@@ -10,6 +10,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      id-token: write
+      attestations: write
     steps:
       - uses: actions/checkout@v4
 
@@ -23,16 +25,22 @@ jobs:
           npm install
           npm run build
 
+      - name: Generate artifact attestations
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: |
+            dist/main.js
+            dist/manifest.json
+            dist/styles.css
+
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          # Upload main.js and manifest.json from dist/
-          # Also upload styles.css if it exists
           assets="dist/main.js dist/manifest.json"
-          if [ -f "styles.css" ]; then
-            assets="$assets styles.css"
+          if [ -f "dist/styles.css" ]; then
+            assets="$assets dist/styles.css"
           fi
           gh release create "$tag" \
             --title="$tag" \

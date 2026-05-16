@@ -2,6 +2,7 @@ export interface DeepSeekSettings {
   apiKey: string;
   baseUrl: string;
   model: "deepseek-v4-flash" | "deepseek-v4-pro";
+  outputStyle: "minimal" | "technical" | "product" | "academic" | "knowledge-base" | "story" | "dashboard";
   savePath: string;
   autoOpenGraph: boolean;
   conceptsPath: string;
@@ -41,6 +42,7 @@ export const DEFAULT_SETTINGS: DeepSeekSettings = {
   apiKey: "",
   baseUrl: "https://api.deepseek.com",
   model: "deepseek-v4-flash",
+  outputStyle: "knowledge-base",
   savePath: "Knowledge/Q&A",
   autoOpenGraph: false,
   conceptsPath: "Knowledge/Concepts",

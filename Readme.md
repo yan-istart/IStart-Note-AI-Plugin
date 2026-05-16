@@ -1,242 +1,151 @@
 # IStart-Note-AI
 
-Generate structured knowledge notes from questions and selected text using DeepSeek AI, with automatic concept pages, bidirectional links, and a question graph.
+AI-powered knowledge management plugin for Obsidian. One unified AI assistant that helps you build structured notes, read books effectively, and visualize knowledge — all through natural language.
+
+---
+
+## Core Concept
+
+**One input, infinite possibilities.** Instead of memorizing dozens of commands, just tell the AI what you want:
+
+- Select text → click 🧠 → "画个时序图"
+- Cursor in empty section → click 🧠 → (leave blank, AI auto-completes)
+- Reading a chapter → click 🧠 → "总结这章"
+
+The AI understands your context (selected text, current file, cursor position) and acts accordingly.
 
 ---
 
 ## Features
 
-| Feature | Description |
-|---------|-------------|
-| Ask a question | Input a question, get a DeepSeek answer, and generate a structured note automatically. |
-| Context Q&A | Select text in any note, ask a question based on it, and generate a note with source reference and backlink. |
-| Question classification | Automatically classify questions as new, refinement, or expansion, and link them to related questions. |
-| Concept completion | Fill in empty concept pages on demand, with light or standard depth. |
-| Section append | Add more items to any existing section (e.g. Examples) without overwriting existing content. |
-| Batch scan | Scan all empty concept pages in the vault and complete them in bulk. |
-| Question index | Automatically maintain a question graph index page. |
-| Baidu Cloud sync | Incremental backup and restore of vault files to Baidu Netdisk. |
+| Feature | How to use |
+|---------|-----------|
+| **AI Assistant** | 🧠 button or right-click → type any instruction |
+| **Reading Projects** | Command panel → "New reading project" → enter book title |
+| **Baidu Cloud Sync** | Settings → enable sync → backup/restore/force-overwrite |
+| **Knowledge Graph** | Automatic: concepts, relations, and Mermaid diagrams |
+
+### AI Assistant (unified entry)
+
+The AI assistant handles everything through one input:
+
+- **Expand** — select text, ask to expand
+- **Explain** — select a term, ask to explain
+- **Diagrams** — describe what you want (flowchart, sequence, state, class, ER, Gantt)
+- **Formulas** — describe a math expression, get LaTeX
+- **Complete** — fill empty sections based on context
+- **Continue** — write more from cursor position
+- **Summarize** — summarize the current document
+- **Answer questions** — ask anything about the content
+- **Anything else** — just describe it in natural language
+
+### Reading Projects
+
+Turn any book into a structured study plan:
+
+1. Enter book title (and optionally paste table of contents)
+2. AI generates:
+   - Reading roadmap with chapter relationships (Mermaid)
+   - Pre-reading questions for each chapter
+   - Core concepts (auto-linked to concept pages)
+3. As you read, record notes in chapter pages
+4. Generate chapter summaries and take Feynman tests
+
+**Supports resume:** If generation is interrupted, re-run to complete missing chapters.
+
+### Knowledge Structure
+
+```
+Knowledge/
+├── Reading/
+│   └── Book-Title/
+│       ├── _索引.md          ← Overview + progress + relationship graph
+│       ├── Chapter-1.md      ← Notes with pre-reading questions
+│       └── ...
+├── Concepts/
+│   ├── _未分类/              ← New concepts (before completion)
+│   ├── 技术/                 ← Auto-organized by domain after completion
+│   │   ├── TCP.md
+│   │   └── _索引.md         ← Domain MOC with Mermaid overview
+│   └── ...
+└── Q&A/
+    └── 2026-05-01-question.md
+```
+
+### Baidu Cloud Sync
+
+- **Incremental backup** — only uploads changed files
+- **Bidirectional sync** — with conflict resolution
+- **Force overwrite** — reset local to match cloud state
+- **Plugin backup** — includes plugin files + Obsidian config (toolbar, hotkeys, appearance)
+- **Auto backup** — triggers after note generation
 
 ---
 
 ## Requirements
 
-- Obsidian 1.4.0 or later.
-- A [DeepSeek API key](https://platform.deepseek.com).
+- Obsidian 1.7.2 or later
+- A [DeepSeek API key](https://platform.deepseek.com)
 
 ---
 
 ## Installation
 
-### From the community plugin directory (recommended)
+### From community plugins (recommended)
 
-1. Open Obsidian settings → Community plugins → Browse.
-2. Search for **IStart-Note-AI**.
-3. Click Install, then Enable.
+1. Settings → Community plugins → Browse
+2. Search **IStart-Note-AI**
+3. Install → Enable
 
-### Manual installation
+### Manual
 
-1. Build the plugin (see [Development](#development)).
-2. Copy the contents of `dist/` to your vault's `.obsidian/plugins/istart-note-ai/` folder.
-3. Enable the plugin in Obsidian settings → Community plugins.
+1. Build: `npm install && npm run build`
+2. Copy `dist/` contents to `.obsidian/plugins/istart-note-ai/`
+3. Enable in Settings → Community plugins
 
 ---
 
 ## Configuration
 
-Open Obsidian settings → IStart-Note-AI.
+Settings → IStart-Note-AI:
 
 | Setting | Description | Default |
 |---------|-------------|---------|
-| API key | Your DeepSeek API key from [platform.deepseek.com](https://platform.deepseek.com). | — |
-| Base URL | API endpoint. | `https://api.deepseek.com` |
-| Model | `deepseek-chat` or `deepseek-reasoner`. | `deepseek-chat` |
-| Q&A folder | Folder for question-and-answer notes. | `Knowledge/Q&A` |
-| Concepts folder | Folder for concept pages. | `Knowledge/Concepts` |
-| Questions folder | Folder for the question graph index. | `Knowledge/Questions` |
-| Open graph view | Open the graph view automatically after generating a note. | Off |
-
-The plugin creates these folders automatically on first use.
+| API Key | DeepSeek API key | — |
+| Base URL | API endpoint | `https://api.deepseek.com` |
+| Model | `deepseek-v4-flash` (fast) or `deepseek-v4-pro` (deep reasoning) | `deepseek-v4-flash` |
+| Q&A folder | Where Q&A notes are saved | `Knowledge/Q&A` |
+| Concepts folder | Where concept pages are saved | `Knowledge/Concepts` |
+| Questions folder | Question graph index | `Knowledge/Questions` |
 
 ---
 
 ## Usage
 
-### Ask a question
+### Desktop
 
-- Hotkey: `Cmd/Ctrl + Shift + D`
-- Ribbon icon (brain icon in the left sidebar)
-- Command palette: `Ask DeepSeek and generate a knowledge note`
+- **🧠 Ribbon icon** → Opens command panel
+- **Right-click in editor** → "IStart-Note-AI: AI 助手"
+- **Right-click file in sidebar** → "IStart-Note-AI: AI 助手"
+- **Command palette** → Search any command
 
-After submitting a question, the plugin:
+### Mobile
 
-1. Calls DeepSeek and generates an answer.
-2. Shows a classification dialog to confirm the question type (new, refinement, or expansion).
-3. Creates a structured Markdown note with Answer, Concepts, Relations, and suggested follow-up questions.
-4. Creates empty concept pages for all extracted concepts.
-5. Updates the question index page.
+- **🧠 Ribbon icon** → Opens command panel (recommended)
+- Add `AI 助手` to mobile toolbar for quick access
+- Select text → tap toolbar button → enter instruction
 
-### Context Q&A
+### Quick tags
 
-1. Select any text in a note.
-2. Right-click → **IStart-Note-AI: Ask based on selection**, or use `Cmd/Ctrl + Shift + Q`.
-3. Enter your question in the dialog.
-4. The generated note includes the source quote and a backlink is added to the original note.
+The AI assistant input has quick tags for common actions:
 
-### Section append
+`[扩写]` `[解释]` `[画图]` `[补全]` `[续写]` `[总结]` `[公式]` `[时序图]`
 
-Add more items to any section that already has content:
-
-1. Place the cursor inside a section (e.g. below `## Examples`).
-2. Right-click → **IStart-Note-AI: Append to "Examples"**, or use the command palette: `Append content to current section`.
-3. Choose how many items to generate (2, 3, 5, or 8).
-4. Review the preview, then confirm to append or regenerate.
-
-DeepSeek reads the existing section content as context and avoids duplicating items.
-
-### Concept completion
-
-**Single page:**
-
-- Open a concept page → command palette: `Complete current concept page`.
-- Select `[[concept name]]` in the editor → right-click → `IStart-Note-AI: Complete concept "..."`.
-- Right-click any `.md` file in the file list → `IStart-Note-AI: Complete this concept page`.
-
-**Batch:**
-
-- Command palette: `Scan empty concept pages`.
-- Select up to 5 pages, choose a depth, and confirm.
-
-Completion depth options:
-
-- **Light**: Definition and related concepts.
-- **Standard**: Definition, explanation, examples, related concepts, and related questions.
-
-All generated content is shown in a preview before being written to the file.
-
-### Question index
-
-- Command palette: `Open question index`.
-- The index is updated automatically after each question.
-
----
-
-## Baidu Netdisk sync
-
-### Setup
-
-1. Create an app at [Baidu Open Platform](https://pan.baidu.com/union/home) and get your App Key and Secret Key.
-2. Open plugin settings → Baidu Netdisk sync → enable it.
-3. Fill in App ID and App Secret.
-4. Click "Re-authorize" to complete the OAuth flow.
-
-### Backup
-
-- Command palette: `Baidu Netdisk sync / backup`.
-- Choose "Backup to Baidu Cloud", optionally specify a subfolder.
-- Only files newer than the remote copy are uploaded (incremental).
-- Hidden files, files matching the ignore pattern, and files exceeding the size limit are skipped.
-
-### Restore
-
-- Command palette: `Baidu Netdisk sync / backup`.
-- Choose "Restore from Baidu Cloud".
-- Toggle "Overwrite local files" to control whether existing local files are replaced.
-
-### Auto backup
-
-Enable "Auto backup" in settings to automatically back up the note folder after each Q&A or context Q&A note is generated.
-
-### Settings
-
-| Setting | Description | Default |
-|---------|-------------|---------|
-| App ID | Baidu Open Platform App Key. | — |
-| App Secret | Baidu Open Platform Secret Key. | — |
-| Remote path | Root folder in Baidu Netdisk. | `/apps/istart-note-ai` |
-| Auto backup | Back up automatically after each note is generated. | Off |
-| Ignore pattern | Regex pattern for paths to skip. | — |
-| File size limit | Maximum file size to upload (MB). | `100` |
-
----
-
-## Note structure
-
-### Q&A note
-
-```markdown
----
-type: question
-question: What are the five elements?
-category: new
-parent: null
-related: []
-concepts: [Five elements, Wood, Fire, Earth, Metal, Water]
-status: linked
-created_at: 2026-04-25
----
-
-# What are the five elements?
-
-## Question
-## Answer
-## Concepts
-## Relations
-## Tags
-## Suggested questions
-### Refinement
-### Expansion
-```
-
-### Context Q&A note
-
-```markdown
-# Why does yin-yang balance affect system stability?
-
-## Source
-> Yin-yang balance determines system stability.
-
-Source: [[path/to/original-note]]
-
-## Question
-## Answer
-## Concepts
-## Relations
-## Suggested questions
-## Tags
-```
-
-### Concept page
-
-```markdown
----
-type: concept
-name: Five elements
-status: completed
-completion_status: completed
-created_from: Q&A
-created_at: 2026-04-25
-updated_at: 2026-04-25
----
-
-# Five elements
-
-## Definition
-## Explanation
-## Examples
-## Related concepts
-## Related questions
-## Sources
-```
+Tap a tag to fill the instruction, or type your own.
 
 ---
 
 ## Development
-
-### Requirements
-
-- Node.js 16 or later.
-- npm 8 or later.
 
 ### Setup
 
@@ -248,85 +157,82 @@ npm install
 ### Build
 
 ```bash
-npm run dev      # Watch mode, outputs to dist/main.js
-npm run build    # Production build, outputs to dist/
+npm run build    # Production → dist/
+npm run dev      # Watch mode
 ```
 
-### Project structure
+### Project Structure
 
 ```
 src/
-├── main.ts                   # Plugin entry point: commands, menus, settings
-├── types.ts                  # Shared type definitions
-├── DeepSeekClient.ts         # API client for standard Q&A
-├── ContextQAClient.ts        # API client for context-aware Q&A
-├── VaultWriter.ts            # Note creation and backlink management
-├── QuestionModal.ts          # Question input dialog
-├── ContextQAModal.ts         # Context Q&A input dialog
-├── QuestionClassifier.ts     # Question classification (new / refinement / expansion)
-├── QuestionClassifyModal.ts  # Classification confirmation dialog
-├── QuestionGraphManager.ts   # Question graph: frontmatter, index page, suggestions
-├── ConceptCompleter.ts       # API client for concept completion
-├── ConceptPageManager.ts     # Concept page analysis, incremental write, batch scan
-├── ConceptCompletionModal.ts # Depth selection, preview, and batch scan dialogs
-├── SectionAppender.ts        # Section extraction, append generation, and write
-├── SectionAppendModal.ts     # Count selection and preview dialogs
-├── BaiduPanClient.ts         # Baidu Netdisk REST API client (OAuth, upload, download)
-├── BaiduSyncService.ts       # Incremental backup and restore logic
-├── BaiduAuthModal.ts         # OAuth authorization dialog
-├── BaiduSyncModal.ts         # Sync operation dialog (backup / restore)
-└── SettingsTab.ts            # Settings tab UI
+├── main.ts                    # Plugin entry (minimal: onload + method implementations)
+├── types.ts                   # Shared type definitions
+├── actions/                   # Action registry (defines all commands/menus)
+│   ├── types.ts
+│   ├── definitions.ts         # All actions defined here
+│   └── registry.ts            # Auto-registers to commands/menus/panel
+├── ai/                        # AI clients (pure API calls, no UI)
+│   ├── AIAssistant.ts         # Unified AI assistant
+│   ├── ReadingPlanner.ts      # Reading project generation
+│   ├── ConceptCompleter.ts    # Concept page completion
+│   ├── SmartCompleter.ts      # Section/expand/continue
+│   ├── DiagramGenerator.ts    # Mermaid/LaTeX generation
+│   ├── SectionAppender.ts     # Section content generation
+│   ├── DeepSeekClient.ts      # Basic Q&A
+│   ├── ContextQAClient.ts     # Context-aware Q&A
+│   └── QuestionClassifier.ts  # Question classification
+├── features/                  # Feature modules (UI + logic)
+│   ├── assistant/             # Unified AI assistant modal
+│   ├── reading/               # Reading project management
+│   ├── concept/               # Concept page management
+│   ├── question/              # Question graph
+│   ├── context-qa/            # Context Q&A modal
+│   ├── section/               # Section append modal
+│   ├── diagram/               # Diagram type/preview modals
+│   ├── sync/                  # Baidu cloud sync
+│   ├── smart-complete/        # Document analysis modal
+│   └── command-panel/         # Unified command panel
+├── vault/                     # Vault file operations
+│   └── VaultWriter.ts
+├── settings/                  # Settings tab
+│   └── SettingsTab.ts
+└── util/
+    └── md5.ts
 ```
 
-### Extending the plugin
+### Adding a new feature
 
-- To add a new AI feature, follow the pattern in `ContextQAClient.ts`: implement an `ask()` method that returns structured JSON.
-- To add a command, call `this.addCommand()` in `main.ts` `onload()`.
-- To add a context menu item, add `menu.addItem()` inside the `editor-menu` or `file-menu` event listener in `main.ts`.
-- To change a note template, edit `buildNoteContent()` or `buildContextNoteContent()` in `VaultWriter.ts`.
-- To change a prompt, edit the prompt constant in the corresponding client file.
+1. Add AI client in `src/ai/` (if needed)
+2. Add UI in `src/features/your-feature/`
+3. Add action in `src/actions/definitions.ts`
+4. Done — automatically appears in command panel, right-click menu, and command palette
 
 ---
 
 ## Changelog
 
-### 1.5.0
+### 2.0.0
 
-- Added Baidu Netdisk sync: incremental backup and restore.
-- OAuth authorization flow with token auto-refresh.
-- Auto backup after note generation (optional).
-- Ignore pattern and file size limit support.
+- **Unified AI Assistant** — one input replaces all previous commands
+- **Action Registry** — consistent behavior across panel, right-click, and commands
+- **DeepSeek v4 models** — switched to `deepseek-v4-flash` and `deepseek-v4-pro`
+- **Reading Projects** — book study with pre-reading questions, chapter summaries, Feynman tests
+- **Domain organization** — concepts auto-organized into domain subdirectories
+- **Mermaid diagrams** — auto-generated relationship graphs in concept pages
+- **Obsidian config backup** — toolbar, hotkeys, appearance synced to cloud
+- **Force overwrite** — reset local state from cloud backup
+- **Code restructure** — modular architecture for easy extension
 
-### 1.4.0
+### 1.5.x
 
-- Added section append: add more items to any existing section without overwriting content.
-- Context menu automatically detects the section at the cursor position.
-- Generated items avoid duplicating existing content.
-
-### 1.3.0
-
-- Added context Q&A: ask questions based on selected text.
-- Context Q&A includes source quote, backlink to the original note.
-- Renamed plugin to IStart-Note-AI.
-
-### 1.2.0
-
-- Added question graph: automatic classification (new, refinement, expansion).
-- Added question index page.
-- Added suggested follow-up questions.
-
-### 1.1.0
-
-- Added concept completion (light and standard depth).
-- Added batch scan for empty concept pages.
-- Added preview dialog before writing.
-- Added context menu support.
+- Baidu Netdisk sync with incremental backup/restore
+- Section append, concept completion, context Q&A
+- Question classification and graph
 
 ### 1.0.0
 
-- Basic Q&A note generation.
-- Automatic concept page creation and bidirectional links.
-- DeepSeek API configuration.
+- Basic Q&A note generation with DeepSeek
+- Automatic concept pages and bidirectional links
 
 ---
 

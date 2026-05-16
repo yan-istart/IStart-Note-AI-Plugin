@@ -1,5 +1,6 @@
 import { App, PluginSettingTab, Setting } from "obsidian";
 import type DeepSeekPlugin from "../main";
+import type { DeepSeekSettings } from "../types";
 import { BaiduAuthModal } from "../features/sync/BaiduAuthModal";
 
 export class DeepSeekSettingsTab extends PluginSettingTab {
@@ -48,6 +49,25 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
           .setValue(this.plugin.settings.model)
           .onChange(async (value: "deepseek-v4-flash" | "deepseek-v4-pro") => {
             this.plugin.settings.model = value;
+            await this.plugin.saveSettings();
+          })
+      );
+
+    new Setting(containerEl)
+      .setName("输出风格")
+      .setDesc("AI 生成内容的默认风格")
+      .addDropdown((drop) =>
+        drop
+          .addOption("knowledge-base", "知识库（推荐）")
+          .addOption("technical", "技术文档")
+          .addOption("minimal", "极简")
+          .addOption("product", "产品设计")
+          .addOption("academic", "学术")
+          .addOption("story", "世界观/叙事")
+          .addOption("dashboard", "卡片化")
+          .setValue(this.plugin.settings.outputStyle)
+          .onChange(async (value: string) => {
+            this.plugin.settings.outputStyle = value as DeepSeekSettings["outputStyle"];
             await this.plugin.saveSettings();
           })
       );

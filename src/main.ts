@@ -11,6 +11,7 @@ import { ReadingPlanner } from "./ai/ReadingPlanner";
 import { NewReadingModal } from "./features/reading/ReadingModal";
 import { ReadingProjectManager } from "./features/reading/ReadingProjectManager";
 import { SectionAppender } from "./ai/SectionAppender";
+import { MarkdownBeautifier } from "./ai/formatter/MarkdownBeautifier";
 import { registerAllActions } from "./actions/registry";
 import { ALL_ACTIONS } from "./actions/definitions";
 
@@ -91,7 +92,9 @@ export default class DeepSeekPlugin extends Plugin {
 
     const notice = new Notice("⏳ AI 思考中...", 0);
     try {
-      const assistant = new AIAssistant(this.settings);
+      const knownConcepts = this.getKnownConcepts();
+      const style = this.settings.outputStyle ?? "knowledge-base";
+      const assistant = new AIAssistant(this.settings, style, knownConcepts);
       const result = await assistant.run(instruction, ctx);
       notice.hide();
 
@@ -177,6 +180,35 @@ export default class DeepSeekPlugin extends Plugin {
     let leaf = workspace.getLeavesOfType(SYNC_VIEW_TYPE)[0];
     if (!leaf) { leaf = workspace.getRightLeaf(false) ?? workspace.getLeaf(true); await leaf.setViewState({ type: SYNC_VIEW_TYPE, active: true }); }
     await workspace.revealLeaf(leaf);
+  }
+
+  /** 美化当前文档 */
+  async beautifyCurrentNote() {
+    const editor = this.app.workspace.activeEditor?.editor;
+    if (!editor) { new Notice("请先打开一个文件"); return; }
+
+    const content = editor.getValue();
+    if (!content.trim()) { new Notice("文档为空"); return; }
+
+    const knownConcepts = this.getKnownConcepts();
+    const beautifier = new MarkdownBeautifier(knownConcepts);
+    const beautified = beautifier.beautify(content);
+
+    if (beautified === content) {
+      new Notice("✅ 文档已经很整洁，无需美化");
+      return;
+    }
+
+    editor.setValue(beautified);
+    new Notice("✅ 文档已美化");
+  }
+
+  /** 获取已知概念列表（用于自动双链） */
+  private getKnownConcepts(): string[] {
+    const conceptsPath = normalizePath(this.settings.conceptsPath || "Knowledge/Concepts");
+    return this.app.vault.getMarkdownFiles()
+      .filter((f) => f.path.startsWith(conceptsPath))
+      .map((f) => f.basename);
   }
 
   // ── 设置 ───────────────────────────────────────────────────

@@ -40,4 +40,16 @@ export const ALL_ACTIONS: ActionDef[] = [
     showIn: ["panel"],
     run: (ctx) => { ctx.plugin.openBaiduSyncModal(); },
   },
+
+  // ── 美化当前文档 ──────────────────────────────────────────
+  {
+    id: "beautify-note",
+    label: "美化当前文档",
+    icon: "wand",
+    description: "整理结构、插入 Callout、生成双链",
+    group: "general",
+    when: { always: true },
+    showIn: ["panel", "editor-menu", "file-menu"],
+    run: (ctx) => { void ctx.plugin.beautifyCurrentNote(); },
+  },
 ];
