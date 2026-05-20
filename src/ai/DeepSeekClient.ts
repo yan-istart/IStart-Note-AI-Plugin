@@ -1,5 +1,5 @@
-import { requestUrl } from "obsidian";
 import { DeepSeekSettings, DeepSeekResponse } from "../types";
+import { LLMClient, parseJsonSafe } from "../core/llm";
 
 const SYSTEM_PROMPT = `你是一个知识图谱构建助手。用户会向你提问，你需要：
 1. 给出清晰的回答
@@ -18,37 +18,18 @@ const SYSTEM_PROMPT = `你是一个知识图谱构建助手。用户会向你提
 }`;
 
 export class DeepSeekClient {
-  constructor(private settings: DeepSeekSettings) {}
+  private llm: LLMClient;
+
+  constructor(settings: DeepSeekSettings) {
+    this.llm = new LLMClient(settings);
+  }
 
   async ask(question: string): Promise<DeepSeekResponse> {
-    if (!this.settings.apiKey) {
-      throw new Error("请先在插件设置中配置 DeepSeek API Key");
-    }
-
-    const res = await requestUrl({
-      url: `${this.settings.baseUrl}/v1/chat/completions`,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.settings.model,
-        messages: [
-          { role: "system", content: SYSTEM_PROMPT },
-          { role: "user", content: question },
-        ],
-        temperature: 0.7,
-      }),
-      throw: false,
+    const content = await this.llm.chat({
+      systemPrompt: SYSTEM_PROMPT,
+      userPrompt: question,
+      temperature: 0.7,
     });
-
-    if (res.status !== 200) {
-      throw new Error(`DeepSeek API 错误: ${res.status} - ${res.text}`);
-    }
-
-    const data = res.json;
-    const content = data.choices?.[0]?.message?.content;
 
     if (!content) {
       throw new Error("DeepSeek 返回内容为空");
@@ -58,26 +39,15 @@ export class DeepSeekClient {
   }
 
   private parseResponse(content: string): DeepSeekResponse {
-    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) ||
-      content.match(/(\{[\s\S]*\})/);
-
-    const jsonStr = jsonMatch ? jsonMatch[1] : content;
-
-    try {
-      const parsed = JSON.parse(jsonStr.trim()) as Record<string, unknown>;
-      return {
-        answer: (parsed.answer as string) || "",
-        concepts: Array.isArray(parsed.concepts) ? parsed.concepts as string[] : [],
-        relations: Array.isArray(parsed.relations) ? parsed.relations as DeepSeekResponse["relations"] : [],
-        tags: Array.isArray(parsed.tags) ? parsed.tags as string[] : [],
-      };
-    } catch {
-      return {
-        answer: content,
-        concepts: [],
-        relations: [],
-        tags: [],
-      };
+    const parsed = parseJsonSafe<Partial<DeepSeekResponse> | null>(content, null);
+    if (!parsed) {
+      return { answer: content, concepts: [], relations: [], tags: [] };
     }
+    return {
+      answer: parsed.answer ?? "",
+      concepts: Array.isArray(parsed.concepts) ? parsed.concepts : [],
+      relations: Array.isArray(parsed.relations) ? parsed.relations : [],
+      tags: Array.isArray(parsed.tags) ? parsed.tags : [],
+    };
   }
 }
