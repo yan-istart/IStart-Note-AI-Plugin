@@ -57,7 +57,7 @@ export class NextRunCalculator {
       case "weekly": {
         const [h, m] = trigger.time.split(":").map(Number);
         const next = new Date(now);
-        const diff = (trigger.weekday - now.getDay() + 7) % 7 || 7;
+        const diff = (trigger.weekday - now.getDay() + 7) % 7;
         next.setDate(now.getDate() + diff);
         next.setHours(h, m, 0, 0);
         if (next <= now) next.setDate(next.getDate() + 7);

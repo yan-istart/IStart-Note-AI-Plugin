@@ -1,5 +1,6 @@
 export { PlanBuilder } from "./PlanBuilder";
 export { PlanExecutor } from "./PlanExecutor";
+export { PlanDraftStore } from "./PlanDraftStore";
 export type {
   ExecutionPlan,
   ExecutionRecord,

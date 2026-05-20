@@ -4,6 +4,7 @@ import { ScheduledTaskConfig, ScheduledTaskResult } from "./types";
 import { NextRunCalculator } from "./NextRunCalculator";
 import { PlanExecutor } from "../execution";
 import { PlanBuilder } from "../execution";
+import { PlanDraftStore } from "../execution";
 import { KnowledgeIndexService } from "../knowledge";
 import { todayIso } from "../schema";
 
@@ -103,20 +104,26 @@ export class ScheduledTaskRunner {
       return { ...base, success: true, message: `发现 ${total} 个空概念页` };
     }
 
-    // create-plan-only / auto-execute-low-risk → write report
+    // Build an execution plan for creating the report
     const reportContent = this.buildDebtReport(index);
-    const plan = new PlanBuilder("每日知识债务扫描", "assistant")
+    const plan = new PlanBuilder("每日知识债务扫描", "scheduler")
       .createFile(`Knowledge/_Reports/${todayIso()}-知识债务.md`, reportContent)
       .build();
 
     if (task.safety === "auto-execute-low-risk" && plan.riskLevel === "low") {
-      await new PlanExecutor(this.plugin.app).execute(plan);
-      return { ...base, success: true, message: `报告已生成（${total} 个空概念）` };
+      const record = await new PlanExecutor(this.plugin.app).execute(plan);
+      return {
+        ...base,
+        success: record.success,
+        message: record.success
+          ? `报告已生成（${total} 个空概念）`
+          : `执行失败：${record.error ?? "未知错误"}`,
+      };
     }
 
-    // Just persist the plan draft (user confirms later)
-    await new PlanExecutor(this.plugin.app).execute(plan);
-    return { ...base, success: true, message: `报告已生成（${total} 个空概念）` };
+    // create-plan-only: persist as draft, do NOT execute
+    await new PlanDraftStore(this.plugin.app).persistDraft(plan);
+    return { ...base, success: true, message: `已生成待确认计划（${total} 个空概念）` };
   }
 
   private async runBaiduBackup(
@@ -124,16 +131,16 @@ export class ScheduledTaskRunner {
     base: Omit<ScheduledTaskResult, "success" | "message">
   ): Promise<ScheduledTaskResult> {
     const cfg = this.plugin.settings.baiduSync;
-    if (!cfg.enabled || !cfg.accessToken) {
-      return { ...base, success: false, message: "百度同步未启用或未授权" };
+    if (!cfg.enabled || !cfg.autoBackup || !cfg.accessToken) {
+      return { ...base, success: false, message: "百度自动备份未启用或未授权" };
     }
 
-    // Delegate to existing sync service
+    // Delegate to existing sync service (config sync only in v2.0)
     const { BaiduSyncService } = await import("../../features/sync/BaiduSyncService");
     const service = new BaiduSyncService(this.plugin.app, cfg);
     const adapter = this.plugin.app.vault.adapter as unknown as { basePath?: string };
     const ok = await service.pushConfig(this.plugin.settings, adapter.basePath ?? "device");
-    return { ...base, success: ok, message: ok ? "配置已备份" : "备份失败" };
+    return { ...base, success: ok, message: ok ? "配置已同步" : "配置同步失败" };
   }
 
   private buildDebtReport(index: KnowledgeIndexService): string {

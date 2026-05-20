@@ -95,9 +95,28 @@ function openPanel(plugin: DeepSeekPlugin, actions: ActionDef[]) {
     ctx.selection = editor.getSelection().trim();
   }
 
+  // Separate pinned action (AI 助手) from grouped actions
+  const pinnedAction = actions.find((a) => a.id === "ai-assistant");
+  const groupedActions = actions.filter((a) => a.id !== "ai-assistant");
+
   const groups: PanelGroup[] = [];
+
+  // Add pinned as first "group" with a special title
+  if (pinnedAction && evaluateWhen(pinnedAction.when, ctx)) {
+    groups.push({
+      title: "⭐ 入口",
+      actions: [{
+        id: pinnedAction.id,
+        icon: pinnedAction.icon,
+        label: pinnedAction.label,
+        description: pinnedAction.description,
+        callback: () => pinnedAction.run(ctx),
+      }],
+    });
+  }
+
   for (const domainId of DOMAIN_ORDER) {
-    const domainActions = actions.filter(
+    const domainActions = groupedActions.filter(
       (a) => a.domain === domainId && a.showIn.includes("panel") && evaluateWhen(a.when, ctx)
     );
     if (domainActions.length === 0) continue;

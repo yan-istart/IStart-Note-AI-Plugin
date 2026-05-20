@@ -3,8 +3,8 @@ import { ActionDef } from "./types";
 /**
  * All actions, organized by domain: Knowledge / Execution / Auxiliary.
  *
- * The "AI 助手" is placed in Auxiliary as a cross-cutting entry point,
- * but the command panel renders it as a pinned top-level button.
+ * The "AI 助手" is placed in Auxiliary as a cross-cutting entry point.
+ * The command panel renders it as a pinned top-level button above the grouped actions.
  */
 export const ALL_ACTIONS: ActionDef[] = [
   // ══════════════════════════════════════════════════════════════

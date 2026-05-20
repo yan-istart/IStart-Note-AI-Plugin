@@ -133,7 +133,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
     new Setting(el).setName("执行计划").setHeading();
 
     el.createEl("p", {
-      text: "执行模块当前为实验阶段。所有 AI 生成的写入操作都会先生成计划，需要你确认后再执行。回滚功能尚未实现。",
+      text: "执行模块当前为实验阶段。所有 AI 生成的写入操作都会先生成计划草稿，需要你确认后再执行。回滚功能尚未实现。定时任务运行时默认关闭，将在 v2.1 启用。",
       attr: { style: "color: var(--text-muted); font-size: 13px; margin-bottom: 12px;" },
     });
 
@@ -146,7 +146,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
 
     new Setting(el).setName("定时任务").setHeading();
     el.createEl("p", {
-      text: "定时任务即将推出（v2.1）。支持每日知识债务扫描、自动百度备份、每周问题图谱重建。",
+      text: "定时任务运行时在 v2.0 默认关闭。基础设施已就绪（知识债务扫描、配置同步），将在 v2.1 通过设置启用。",
       attr: { style: "color: var(--text-muted); font-size: 13px;" },
     });
   }

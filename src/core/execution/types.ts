@@ -82,6 +82,7 @@ export type PlanSource =
   | "concept"
   | "sync"
   | "beautify"
+  | "scheduler"
   | "manual";
 
 /**

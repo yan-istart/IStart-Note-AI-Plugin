@@ -46,11 +46,13 @@ Build and maintain a structured knowledge base.
 
 Turn knowledge into reviewable actions.
 
-- **Generate execution plans** from notes — preview all vault modifications before applying.
-- **Record execution logs** under `Knowledge/_Executions/` with full operation details.
-- **Scheduled tasks** (MVP) — periodic knowledge-debt scans and backup jobs.
-- **Safety by default** — AI-generated writes require confirmation; batch ops capped; high-risk plans force double-confirm.
-- Future: diff preview, rollback, task-plugin integrations.
+- **Execution plan data model** — PlanBuilder + PlanExecutor + PlanDraftStore for multi-op vault changes.
+- **Execution logs** recorded under `Knowledge/_Executions/` after each plan is applied.
+- **Plan drafts** stored under `Knowledge/_ExecutionPlans/` for `create-plan-only` tasks (user reviews before applying).
+- **Scheduler foundation** — ScheduledTask types and runner exist; runtime is disabled by default in v2.0 (enabled in v2.1).
+- **Safety by default** — `create-plan-only` never auto-executes; `auto-execute-low-risk` only applies plans with `riskLevel: "low"`.
+- Most AI write flows (assistant, beautify, concept completion) still use direct editor writes; migration to plan-first is in progress.
+- Future: diff preview, rollback, batch-op caps, task-plugin integrations.
 
 ### 3. Auxiliary
 

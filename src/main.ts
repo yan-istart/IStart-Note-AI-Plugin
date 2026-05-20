@@ -44,7 +44,9 @@ export default class DeepSeekPlugin extends Plugin {
     this.knowledgeIndex = new KnowledgeIndexService(this.app);
     this.app.workspace.onLayoutReady(() => {
       this.knowledgeIndex.rebuild();
-      this.startScheduler();
+      // Scheduler runtime is disabled by default in v2.0.
+      // Enable via settings once scheduler UI is shipped in v2.1.
+      // this.startScheduler();
     });
     // Incremental updates
     this.registerEvent(
@@ -530,7 +532,7 @@ export default class DeepSeekPlugin extends Plugin {
         const content = await this.app.vault.cachedRead(file);
         // Take first 600 chars per file to keep context manageable
         const snippet = content.slice(0, 600).trim();
-        contextParts.push(`--- 来源：[[${entry.basename}]] (${entry.type ?? "note"}) ---\n${snippet}`);
+        contextParts.push(`--- 来源：[[${entry.path}|${entry.title}]] (${entry.type ?? "note"}) ---\n${snippet}`);
         sourceFiles.push({ path: entry.path, title: entry.title });
       }
 
@@ -561,7 +563,7 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
 
       // 6. Append source section
       const sourcesSection = sourceFiles.length > 0
-        ? `\n\n---\n\n## 依据来源\n\n${sourceFiles.map((s) => `- [[${s.title}]]`).join("\n")}\n`
+        ? `\n\n---\n\n## 依据来源\n\n${sourceFiles.map((s) => `- [[${s.path}|${s.title}]]`).join("\n")}\n`
         : "";
       const finalContent = beautified + sourcesSection;
 
@@ -693,8 +695,8 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
         safety: "notify-only",
       },
       {
-        id: "daily-baidu-backup",
-        name: "每日百度备份",
+        id: "daily-baidu-config-sync",
+        name: "每日百度配置同步",
         enabled: this.settings.baiduSync.enabled && this.settings.baiduSync.autoBackup,
         kind: "baidu-backup",
         trigger: { type: "daily", time: "23:00" },
