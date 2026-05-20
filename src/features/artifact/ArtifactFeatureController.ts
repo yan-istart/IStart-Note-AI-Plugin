@@ -23,6 +23,11 @@ export class ArtifactFeatureController {
 
   /** Entry point: detect context and open builder. */
   openBuilder(): void {
+    this.openBuilderWithPreset({});
+  }
+
+  /** Open builder with a preset (e.g. artifactType pre-selected). */
+  openBuilderWithPreset(preset: { artifactType?: string }): void {
     const editor = this.app.workspace.activeEditor?.editor ?? null;
     const activeFile = this.app.workspace.getActiveFile();
     const selection = editor?.getSelection().trim() ?? "";
@@ -45,7 +50,7 @@ export class ArtifactFeatureController {
 
     new ArtifactBuilderModal(this.app, contextHint, defaultScope, (params) => {
       void this.generate(params, selection, activeFile);
-    }).open();
+    }, preset.artifactType as ArtifactSourceScope | undefined).open();
   }
 
   // ── Generation ─────────────────────────────────────────────
