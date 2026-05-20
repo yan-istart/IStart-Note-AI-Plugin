@@ -17,7 +17,7 @@
     "strictFunctionTypes": true,
     "strictNullChecks": true,
     "noFallthroughCasesInSwitch": true,
-    "lib": ["ES6", "DOM"]
+    "lib": ["ES2018", "DOM"]
   },
   "include": ["src/**/*.ts"]
 }

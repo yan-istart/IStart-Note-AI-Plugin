@@ -20,8 +20,11 @@ const SYSTEM_PROMPT = `你是一个知识到执行资产的结构化转换助手
 3. 如果没有明确来源，标记 inferred: true。
 4. 高风险或不确定内容设置 riskLevel: "watch" 或 "high"。
 5. 不要生成医学诊断、法律结论或投资决策。
-6. 每个条目的 id 使用 "item-1", "item-2" 等顺序编号。
-7. 严格输出 JSON，不要输出解释文本。
+6. 不要编造 sourceLinks。sourceLinks 只能来自"来源内容"中出现过的路径或文档标题。只返回路径或 path|alias，不要包含 [[ ]]。
+   正确："Reading/Book/Chapter1.md|第1章"
+   错误："[[Reading/Book/Chapter1.md|第1章]]"
+7. 每个条目的 id 使用 "item-1", "item-2" 等顺序编号。
+8. 严格输出 JSON，不要输出解释文本。
 
 返回格式：
 {

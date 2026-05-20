@@ -122,9 +122,9 @@ Settings are organized into three tabs:
 
 | Tab | Key settings |
 | --- | --- |
-| **Knowledge** | Q&A path, Concepts path, Questions index path, Reading path, auto-classify, concept depth, vault QA source limit |
-| **Execution** | Require preview, log path, scheduled tasks, safety policy |
-| **Auxiliary** | API key, Base URL, model, output style, Baidu sync, UI preferences |
+| **Knowledge** | Q&A path, Concepts path, Questions index path, knowledge index status + rebuild |
+| **Execution** | Execution log path (read-only), scheduled tasks status (v2.1) |
+| **Auxiliary** | API key, Base URL, model, output style, Baidu sync (App ID/Secret, remote path, auto-backup) |
 
 ---
 
@@ -150,12 +150,14 @@ src/
   core/
     llm/              Unified LLM client + JSON extractor
     knowledge/        KnowledgeIndexService (metadata index)
-    execution/        ExecutionPlan, PlanBuilder, PlanExecutor
-    scheduler/        ScheduledTask types + runner (WIP)
+    execution/        ExecutionPlan, PlanBuilder, PlanExecutor, PlanDraftStore
+    artifact/         ExecutionArtifact types, prompt, validation, rendering
+    scheduler/        ScheduledTask types + runner (disabled in v2.0)
     schema.ts         SCHEMA_VERSION + helpers
   ai/                 AI feature modules (assistant, classifier, planner, ...)
   features/
     assistant/        AI assistant modals
+    artifact/         Artifact builder, preview, feature controller
     concept/          Concept completion + page manager
     question/         Question classify + graph manager
     reading/          Reading project manager

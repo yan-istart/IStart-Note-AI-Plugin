@@ -35,10 +35,10 @@ export class ArtifactPreviewModal extends Modal {
     if (stats.highRisk > 0) statsEl.createSpan({ text: `高关注：${stats.highRisk}`, attr: { style: "color: var(--text-error);" } });
 
     // File impact notice
-    contentEl.createEl("p", {
-      text: `保存后将创建 1-2 个文件（模板 + 可选的今日记录）`,
-      attr: { style: "font-size: 12px; color: var(--text-muted); margin-bottom: 8px;" },
-    });
+    const safeName = this.artifact.title.replace(/[\\/:*?"<>|#[\]]/g, "-").slice(0, 50);
+    contentEl.createEl("div", {
+      attr: { style: "font-size: 12px; color: var(--text-muted); margin-bottom: 8px; padding: 6px 8px; background: var(--background-secondary); border-radius: 4px;" },
+    }).innerHTML = `将创建：<br>• <code>Knowledge/Artifacts/${safeName}.md</code><br>• <code>Knowledge/Artifact Runs/${new Date().toISOString().slice(0, 10)} ${safeName}.md</code>（仅"保存并生成今日记录"时）`;
 
     // Warnings
     if (this.validation.warnings.length > 0) {
