@@ -72,6 +72,17 @@ export const ALL_ACTIONS: ActionDef[] = [
     run: (ctx) => { ctx.plugin.openNewReadingProject(); },
   },
   {
+    id: "create-artifact",
+    label: "从当前知识生成执行资产",
+    icon: "file-check",
+    description: "检查表、SOP、例行流程、执行计划、复盘表",
+    domain: "knowledge",
+    section: "retrieval",
+    when: { always: true },
+    showIn: ["panel", "editor-menu"],
+    run: (ctx) => { ctx.plugin.openArtifactBuilder(); },
+  },
+  {
     id: "knowledge-debt",
     label: "知识债务看板",
     icon: "activity",
