@@ -47,8 +47,8 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
           .addOption("deepseek-v4-flash", "deepseek-v4-flash（快速，推荐）")
           .addOption("deepseek-v4-pro", "deepseek-v4-pro（深度推理）")
           .setValue(this.plugin.settings.model)
-          .onChange(async (value: "deepseek-v4-flash" | "deepseek-v4-pro") => {
-            this.plugin.settings.model = value;
+          .onChange(async (value: string) => {
+            this.plugin.settings.model = value as "deepseek-v4-flash" | "deepseek-v4-pro";
             await this.plugin.saveSettings();
           })
       );
