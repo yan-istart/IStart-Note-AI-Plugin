@@ -789,13 +789,123 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
     new Notice("定时任务运行时在 v2.0 默认关闭，将在 v2.1 通过设置页启用。");
   }
 
-  /** 从当前笔记生成执行计划（委托给 Artifact Builder，预设 type=plan） */
+  /** 从当前笔记生成执行计划 */
   openGeneratePlan() {
-    // Import here to avoid circular at top-level
-    const { ArtifactFeatureController } = require("./features/artifact/ArtifactFeatureController") as
-      { ArtifactFeatureController: new (...args: unknown[]) => { openBuilderWithPreset: (preset: { artifactType: string }) => void } };
-    const controller = new ArtifactFeatureController(this.app, this.settings, this.knowledgeIndex);
-    (controller as unknown as { openBuilderWithPreset: (p: { artifactType: string }) => void }).openBuilderWithPreset({ artifactType: "plan" });
+    const editor = this.app.workspace.activeEditor?.editor ?? null;
+    const activeFile = this.app.workspace.getActiveFile();
+    if (!editor || !activeFile) {
+      new Notice("请先打开一个文件");
+      return;
+    }
+    const content = editor.getValue();
+    if (!content.trim()) {
+      new Notice("文档为空");
+      return;
+    }
+
+    new AssistantInputModal(this.app, `📋 从当前笔记生成执行计划`, (instruction) => {
+      void this.runGeneratePlan(instruction, content, activeFile);
+    }).open();
+  }
+
+  private async runGeneratePlan(instruction: string, noteContent: string, sourceFile: TFile) {
+    const notice = new Notice("⏳ AI 正在生成执行计划...", 0);
+    try {
+      const { LLMClient } = await import("./core/llm");
+      const llm = new LLMClient(this.settings);
+
+      const systemPrompt = `你是一个执行计划生成助手。用户会给你一篇笔记和一条指令，你需要从中提取行动项，生成一份丰满、结构化、可直接执行的计划文档。
+
+输出要求：
+1. 用 Markdown 格式输出，直接就是计划的正文内容。
+2. 开头用 > 引用块简要说明计划目标和来源。
+3. 生成完整的计划结构，不要只列 checkbox：
+   - ## 目标：简述本计划要达成的核心成果
+   - ## 背景：从来源笔记中总结关键上下文（2-3 句话）
+   - ## 行动项：按优先级或分类分组，每项用 - [ ] 格式
+     - 每个行动项需要包含：具体动作、预期产出、时间节点（如果能判断）
+     - 复杂行动项可以有子项
+   - ## 关键依赖：完成这些行动需要的前提条件或资源
+   - ## 风险与注意：可能的阻碍或需要注意的事项
+   - ## 验收标准：怎样算完成这个计划
+4. 行动项要具体、可执行，避免空泛（"推进项目"不如"完成 API 接口文档并发送给前端 review"）。
+5. 如果来源笔记信息不足以判断具体时间或细节，标注"待确认"而不是编造。
+6. 不要输出 JSON，不要输出代码块包裹，直接输出 Markdown 正文。`;
+
+      const userPrompt = `来源笔记：${sourceFile.basename}\n\n笔记内容：\n${noteContent.slice(0, 3000)}\n\n用户指令：${instruction || "从这篇笔记提取行动项，生成一份完整的执行计划"}`;
+
+      const raw = await llm.chat({ systemPrompt, userPrompt, temperature: 0.4 });
+      notice.hide();
+
+      if (!raw.trim()) {
+        new Notice("AI 未能生成执行计划");
+        return;
+      }
+
+      // Beautify with known concepts
+      const knownConcepts = this.getKnownConcepts();
+      const style = this.settings.outputStyle ?? "knowledge-base";
+      const assistant = new AIAssistant(this.settings, style, knownConcepts);
+      const beautified = assistant.beautifyContent(raw);
+
+      // Build the plan note
+      const today = todayIso();
+      const title = instruction
+        ? instruction.slice(0, 40)
+        : `${sourceFile.basename} 执行计划`;
+
+      const planContent = `---
+type: plan
+schema_version: 1
+source: "[[${sourceFile.path}|${sourceFile.basename}]]"
+status: active
+created_at: ${today}
+---
+
+# ${title}
+
+${beautified}
+
+---
+
+## 来源
+
+- [[${sourceFile.path}|${sourceFile.basename}]]
+- 创建时间：${today}
+`;
+
+      // Show preview then save
+      new AssistantResultModal(
+        this.app,
+        { mode: "show", content: planContent, explanation: "执行计划预览" },
+        () => { void this.savePlanNote(title, planContent); },
+        () => { void this.runGeneratePlan(instruction, noteContent, sourceFile); }
+      ).open();
+    } catch (err) {
+      notice.hide();
+      new Notice(`❌ ${(err as Error).message}`);
+    }
+  }
+
+  private async savePlanNote(title: string, content: string) {
+    const folder = normalizePath("Knowledge/Plans");
+    if (!this.app.vault.getAbstractFileByPath(folder)) {
+      await this.app.vault.createFolder(folder);
+    }
+
+    const safeName = title.replace(/[\\/:*?"<>|#[\]]/g, "-").slice(0, 50);
+    const today = todayIso();
+    let path = normalizePath(`${folder}/${today}-${safeName}.md`);
+    let suffix = 2;
+    while (this.app.vault.getAbstractFileByPath(path)) {
+      path = normalizePath(`${folder}/${today}-${safeName}-${suffix}.md`);
+      suffix++;
+    }
+
+    const file = await this.app.vault.create(path, content);
+    new Notice(`✅ 执行计划已保存`);
+    const leaf = this.app.workspace.getLeaf(false);
+    await leaf.openFile(file);
   }
 
   // ── 定时任务 ─────────────────────────────────────────────────

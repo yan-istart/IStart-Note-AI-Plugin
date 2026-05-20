@@ -22,14 +22,10 @@ export class ArtifactBuilderModal extends Modal {
     app: App,
     private contextHint: string,
     private defaultScope: ArtifactSourceScope,
-    private onSubmit: (params: ArtifactBuildParams) => void,
-    private presetType?: string
+    private onSubmit: (params: ArtifactBuildParams) => void
   ) {
     super(app);
     this.params.sourceScope = defaultScope;
-    if (presetType && presetType in ARTIFACT_TYPE_LABELS) {
-      this.params.artifactType = presetType as ArtifactType;
-    }
   }
 
   onOpen() {

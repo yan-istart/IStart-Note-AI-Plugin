@@ -1,4 +1,4 @@
-import { App, Modal, Setting, MarkdownRenderer, Component, Notice, normalizePath } from "obsidian";
+import { App, Modal, Setting, MarkdownRenderer, Component, Notice, normalizePath, TFile } from "obsidian";
 import { AssistantResult } from "../../ai/AIAssistant";
 import { todayIso } from "../../core/schema";
 
@@ -71,12 +71,144 @@ export class AssistantInputModal extends Modal {
   onClose() { this.contentEl.empty(); }
 }
 
-// ── Result Modal ─────────────────────────────────────────────
+// ── Result Modal helpers ─────────────────────────────────────
 
 interface ResultAction {
   label: string;
   cta?: boolean;
-  callback: () => void | Promise<void>;
+  callback: () => void;
+}
+
+/**
+ * Determine the best actions based on mode + content characteristics.
+ * Returns [primary, ...secondary] — max 3 actions total (excluding retry/close).
+ */
+function buildSmartActions(
+  app: App,
+  result: AssistantResult,
+  onWriteToDoc: () => void,
+  onRetry: () => void,
+  onCreateConcept?: () => void
+): { primary: ResultAction; secondary: ResultAction[] } {
+  const content = result.content;
+
+  // Heuristics
+  const hasCheckboxes = (content.match(/- \[ \]/g) || []).length >= 2;
+  const looksLikeConcept = /^#\s+.{2,20}\n\n/.test(content) &&
+    (content.includes("## 定义") || content.includes("## 解释") || content.includes("## 核心"));
+  const isLong = content.length > 500;
+
+  switch (result.mode) {
+    case "replace":
+      return {
+        primary: { label: "替换选中内容", cta: true, callback: onWriteToDoc },
+        secondary: [
+          { label: "复制", callback: () => copyToClipboard(content) },
+        ],
+      };
+
+    case "insert":
+      return {
+        primary: { label: "插入到光标位置", cta: true, callback: onWriteToDoc },
+        secondary: [
+          ...(isLong ? [{ label: "保存为新笔记", callback: () => saveAsNote(app, result) }] : []),
+          { label: "复制", callback: () => copyToClipboard(content) },
+        ],
+      };
+
+    case "append":
+      return {
+        primary: { label: "追加到文档末尾", cta: true, callback: onWriteToDoc },
+        secondary: [
+          { label: "保存为新笔记", callback: () => saveAsNote(app, result) },
+        ],
+      };
+
+    case "show":
+    default: {
+      // For show mode, pick the best primary based on content
+      if (hasCheckboxes) {
+        return {
+          primary: { label: "保存为执行计划", cta: true, callback: () => saveAsPlan(app, result) },
+          secondary: [
+            { label: "插入到光标位置", callback: onWriteToDoc },
+            { label: "复制", callback: () => copyToClipboard(content) },
+          ],
+        };
+      }
+      if (looksLikeConcept && onCreateConcept) {
+        return {
+          primary: { label: "创建为概念页", cta: true, callback: onCreateConcept },
+          secondary: [
+            { label: "保存为新笔记", callback: () => saveAsNote(app, result) },
+            { label: "插入到光标位置", callback: onWriteToDoc },
+          ],
+        };
+      }
+      // Default show: save as note
+      return {
+        primary: { label: "保存为新笔记", cta: true, callback: () => saveAsNote(app, result) },
+        secondary: [
+          { label: "插入到光标位置", callback: onWriteToDoc },
+          ...(onCreateConcept ? [{ label: "创建为概念页", callback: onCreateConcept }] : []),
+        ],
+      };
+    }
+  }
+}
+
+async function saveAsNote(app: App, result: AssistantResult): Promise<void> {
+  const folder = normalizePath("Knowledge/Notes");
+  if (!app.vault.getAbstractFileByPath(folder)) {
+    await app.vault.createFolder(folder);
+  }
+  const today = todayIso();
+  const title = extractTitle(result.content) || "AI 笔记";
+  const safeName = title.replace(/[\\/:*?"<>|#[\]]/g, "-").slice(0, 40);
+  let path = normalizePath(`${folder}/${today}-${safeName}.md`);
+  let suffix = 2;
+  while (app.vault.getAbstractFileByPath(path)) {
+    path = normalizePath(`${folder}/${today}-${safeName}-${suffix}.md`);
+    suffix++;
+  }
+  const file = await app.vault.create(path, result.content);
+  new Notice(`✅ 已保存到 ${file.path}`);
+  const leaf = app.workspace.getLeaf(false);
+  await leaf.openFile(file);
+}
+
+async function saveAsPlan(app: App, result: AssistantResult): Promise<void> {
+  const folder = normalizePath("Knowledge/Plans");
+  if (!app.vault.getAbstractFileByPath(folder)) {
+    await app.vault.createFolder(folder);
+  }
+  const today = todayIso();
+  const title = extractTitle(result.content) || "执行计划";
+  const safeName = title.replace(/[\\/:*?"<>|#[\]]/g, "-").slice(0, 40);
+  let path = normalizePath(`${folder}/${today}-${safeName}.md`);
+  let suffix = 2;
+  while (app.vault.getAbstractFileByPath(path)) {
+    path = normalizePath(`${folder}/${today}-${safeName}-${suffix}.md`);
+    suffix++;
+  }
+
+  const frontmatter = `---\ntype: plan\nstatus: active\ncreated_at: ${today}\n---\n\n`;
+  const file = await app.vault.create(path, frontmatter + result.content);
+  new Notice(`✅ 执行计划已保存`);
+  const leaf = app.workspace.getLeaf(false);
+  await leaf.openFile(file);
+}
+
+function copyToClipboard(content: string): void {
+  navigator.clipboard.writeText(content).then(
+    () => new Notice("✅ 已复制到剪贴板"),
+    () => new Notice("❌ 复制失败")
+  );
+}
+
+function extractTitle(content: string): string {
+  const match = content.match(/^#\s+(.+)/m);
+  return match ? match[1].trim() : "";
 }
 
 /**
@@ -87,7 +219,6 @@ interface ResultAction {
  */
 export class AssistantResultModal extends Modal {
   private component: Component;
-  private closed = false;
 
   constructor(
     app: App,
@@ -123,194 +254,32 @@ export class AssistantResultModal extends Modal {
 
     // Action bar (fixed at bottom)
     const actionBar = contentEl.createDiv({ cls: "istart-result-actions" });
-    const { primary, secondary } = this.buildActions();
 
-    const primaryRow = new Setting(actionBar);
-    primaryRow.addButton((btn) =>
-      btn.setButtonText(primary.label).setCta().onClick(() => this.doAction(primary.callback))
+    const { primary, secondary } = buildSmartActions(
+      this.app,
+      this.result,
+      this.onConfirm,
+      this.onRetry,
+      this.onCreateConcept
     );
+
+    // Primary button
+    const primarySetting = new Setting(actionBar);
+    primarySetting.addButton((btn) =>
+      btn.setButtonText(primary.label).setCta().onClick(() => { this.close(); primary.callback(); })
+    );
+
+    // Secondary buttons
     for (const action of secondary.slice(0, 2)) {
-      primaryRow.addButton((btn) =>
-        btn.setButtonText(action.label).onClick(() => this.doAction(action.callback))
+      primarySetting.addButton((btn) =>
+        btn.setButtonText(action.label).onClick(() => { this.close(); action.callback(); })
       );
     }
 
-    const utilRow = new Setting(actionBar);
-    utilRow.addButton((btn) => btn.setButtonText("重新生成").onClick(() => { this.close(); this.onRetry(); }));
-    utilRow.addButton((btn) => btn.setButtonText("关闭").onClick(() => this.close()));
-  }
-
-  /** Close modal then execute action (prevents double-save). */
-  private doAction(callback: () => void | Promise<void>): void {
-    if (this.closed) return;
-    this.closed = true;
-    this.close();
-    void callback();
-  }
-
-  private buildActions(): { primary: ResultAction; secondary: ResultAction[] } {
-    const content = this.result.content;
-    const hasCheckboxes = (content.match(/- \[ \]/g) || []).length >= 2;
-    const looksLikeConcept = /^#\s+.{2,20}\n\n/.test(content) &&
-      (content.includes("## 定义") || content.includes("## 解释") || content.includes("## 核心"));
-    const isLong = content.length > 500;
-
-    switch (this.result.mode) {
-      case "replace":
-        return {
-          primary: { label: "替换选中内容", callback: () => this.onConfirm() },
-          secondary: [{ label: "复制", callback: () => this.copyContent() }],
-        };
-
-      case "insert":
-        return {
-          primary: { label: "插入到光标位置", callback: () => this.onConfirm() },
-          secondary: [
-            ...(isLong ? [{ label: "保存为新笔记", callback: () => this.saveAsNote() }] : []),
-            { label: "复制", callback: () => this.copyContent() },
-          ],
-        };
-
-      case "append":
-        return {
-          primary: { label: "追加到文档末尾", callback: () => this.onConfirm() },
-          secondary: [{ label: "保存为新笔记", callback: () => this.saveAsNote() }],
-        };
-
-      case "show":
-      default:
-        if (hasCheckboxes) {
-          return {
-            primary: { label: "保存为执行计划", callback: () => this.saveAsPlan() },
-            secondary: [
-              { label: "插入到光标位置", callback: () => this.onConfirm() },
-              { label: "复制", callback: () => this.copyContent() },
-            ],
-          };
-        }
-        if (looksLikeConcept && this.onCreateConcept) {
-          return {
-            primary: { label: "创建为概念页", callback: () => this.onCreateConcept!() },
-            secondary: [
-              { label: "保存为新笔记", callback: () => this.saveAsNote() },
-              { label: "插入到光标位置", callback: () => this.onConfirm() },
-            ],
-          };
-        }
-        return {
-          primary: { label: "保存为新笔记", callback: () => this.saveAsNote() },
-          secondary: [
-            { label: "插入到光标位置", callback: () => this.onConfirm() },
-            ...(this.onCreateConcept ? [{ label: "创建为概念页", callback: () => this.onCreateConcept!() }] : []),
-          ],
-        };
-    }
-  }
-
-  // ── Save actions ───────────────────────────────────────────
-
-  private async saveAsNote(): Promise<void> {
-    const folder = normalizePath("Knowledge/Notes");
-    await this.ensureFolder(folder);
-    const path = await this.uniquePath(folder, this.extractTitle() || "AI 笔记");
-    const file = await this.app.vault.create(path, this.result.content);
-    new Notice(`✅ 已保存到 ${file.basename}`);
-    const leaf = this.app.workspace.getLeaf(false);
-    await leaf.openFile(file);
-  }
-
-  private async saveAsPlan(): Promise<void> {
-    const folder = normalizePath("Knowledge/Plans");
-    await this.ensureFolder(folder);
-    const title = this.extractTitle() || "执行计划";
-    const path = await this.uniquePath(folder, title);
-    const today = todayIso();
-    const activeFile = this.app.workspace.getActiveFile();
-    const sourceLink = activeFile ? `[[${activeFile.path}|${activeFile.basename}]]` : "手动创建";
-
-    const planContent = `---
-type: plan
-schema_version: 1
-title: "${title}"
-status: active
-source: "${sourceLink}"
-created_at: ${today}
----
-
-# ${title}
-
-> [!info] 执行计划
-> 来源：${sourceLink}
-> 创建时间：${today}
-> 状态：进行中
-
-## 目标
-
-<!-- 这个计划要达成什么？ -->
-
-## 行动项
-
-${this.result.content}
-
-## 时间线
-
-| 行动项 | 截止时间 | 状态 |
-| --- | --- | --- |
-| | | |
-
-## 风险与依赖
-
-- 
-
-## 完成标准
-
-- [ ] 
-
-## 复盘
-
-<!-- 执行结束后填写 -->
-
----
-
-*来源：${sourceLink}*
-`;
-
-    const file = await this.app.vault.create(path, planContent);
-    new Notice(`✅ 执行计划已保存`);
-    const leaf = this.app.workspace.getLeaf(false);
-    await leaf.openFile(file);
-  }
-
-  private copyContent(): void {
-    navigator.clipboard.writeText(this.result.content).then(
-      () => new Notice("✅ 已复制到剪贴板"),
-      () => new Notice("❌ 复制失败")
-    );
-  }
-
-  // ── Helpers ────────────────────────────────────────────────
-
-  private extractTitle(): string {
-    const match = this.result.content.match(/^#\s+(.+)/m);
-    return match ? match[1].trim() : "";
-  }
-
-  private async ensureFolder(path: string): Promise<void> {
-    if (!this.app.vault.getAbstractFileByPath(path)) {
-      await this.app.vault.createFolder(path);
-    }
-  }
-
-  private async uniquePath(folder: string, title: string): Promise<string> {
-    const today = todayIso();
-    const safeName = title.replace(/[\\/:*?"<>|#[\]]/g, "-").slice(0, 40);
-    let path = normalizePath(`${folder}/${today}-${safeName}.md`);
-    let suffix = 2;
-    while (this.app.vault.getAbstractFileByPath(path)) {
-      path = normalizePath(`${folder}/${today}-${safeName}-${suffix}.md`);
-      suffix++;
-    }
-    return path;
+    // Retry + close row
+    const utilBar = new Setting(actionBar);
+    utilBar.addButton((btn) => btn.setButtonText("重新生成").onClick(() => { this.close(); this.onRetry(); }));
+    utilBar.addButton((btn) => btn.setButtonText("关闭").onClick(() => this.close()));
   }
 
   onClose() { this.component.unload(); this.contentEl.empty(); }
