@@ -194,7 +194,9 @@ export class ReadingProjectManager {
 
     const progressLines = plan.chapters.map((ch) => {
       const icon = ch.importance === "core" ? "⭐" : ch.importance === "recommended" ? "📖" : "📄";
-      return `- [ ] ${icon} 第${ch.number}章：[[${this.sanitize(ch.title)}|${ch.title}]]`;
+      const numPrefix = String(ch.number).padStart(2, "0");
+      const fileName = `${numPrefix}-${this.sanitize(ch.title)}`;
+      return `- [ ] ${icon} 第${ch.number}章：[[${fileName}|${ch.title}]]`;
     });
 
     const mermaidLines = plan.chapterRelations.length > 0
@@ -250,7 +252,9 @@ ${conceptLinks}
   }
 
   private async createChapterNote(folder: string, bookTitle: string, chapter: ChapterSkeleton): Promise<void> {
-    const fileName = this.sanitize(chapter.title);
+    // Zero-padded chapter number prefix ensures correct sort order in file tree
+    const numPrefix = String(chapter.number).padStart(2, "0");
+    const fileName = `${numPrefix}-${this.sanitize(chapter.title)}`;
     const filePath = normalizePath(`${folder}/${fileName}.md`);
 
     if (this.app.vault.getAbstractFileByPath(filePath)) return;
@@ -303,7 +307,8 @@ ${conceptLinks}
   }
 
   private async writeChapterQuestions(folder: string, chapter: ChapterSkeleton, detail: ChapterDetail): Promise<void> {
-    const fileName = this.sanitize(chapter.title);
+    const numPrefix = String(chapter.number).padStart(2, "0");
+    const fileName = `${numPrefix}-${this.sanitize(chapter.title)}`;
     const filePath = normalizePath(`${folder}/${fileName}.md`);
 
     const file = this.app.vault.getAbstractFileByPath(filePath);

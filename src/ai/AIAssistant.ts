@@ -1,5 +1,5 @@
-import { requestUrl } from "obsidian";
 import { DeepSeekSettings } from "../types";
+import { LLMClient } from "../core/llm";
 import { ContentClassifier } from "./classifier/ContentClassifier";
 import { StructuredPromptBuilder } from "./prompt/StructuredPromptBuilder";
 import { MarkdownBeautifier } from "./formatter/MarkdownBeautifier";
@@ -31,6 +31,7 @@ export interface AssistantResult {
 export class AIAssistant {
   private classifier: ContentClassifier;
   private promptBuilder: StructuredPromptBuilder;
+  private llm: LLMClient;
 
   constructor(
     private settings: DeepSeekSettings,
@@ -39,10 +40,11 @@ export class AIAssistant {
   ) {
     this.classifier = new ContentClassifier();
     this.promptBuilder = new StructuredPromptBuilder(outputStyle);
+    this.llm = new LLMClient(settings);
   }
 
   async run(instruction: string, ctx: AssistantContext): Promise<AssistantResult> {
-    if (!this.settings.apiKey) throw new Error("请先配置 API Key");
+    this.llm.ensureApiKey();
 
     // 1. 分类内容类型
     const contentType = this.classifier.classify({
@@ -111,26 +113,7 @@ export class AIAssistant {
   }
 
   private async callAPI(systemPrompt: string, userPrompt: string): Promise<string> {
-    const res = await requestUrl({
-      url: `${this.settings.baseUrl}/v1/chat/completions`,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.settings.model,
-        messages: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content: userPrompt },
-        ],
-        temperature: 0.5,
-      }),
-      throw: false,
-    });
-
-    if (res.status !== 200) throw new Error(`API 错误: ${res.status}`);
-    return res.json.choices?.[0]?.message?.content ?? "";
+    return this.llm.chat({ systemPrompt, userPrompt, temperature: 0.5 });
   }
 
   private parseResponse(raw: string, ctx: AssistantContext): { mode: AssistantResult["mode"]; content: string } {

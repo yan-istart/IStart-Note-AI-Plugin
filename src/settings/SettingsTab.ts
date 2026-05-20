@@ -1,9 +1,13 @@
-import { App, PluginSettingTab, Setting } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type DeepSeekPlugin from "../main";
 import type { DeepSeekSettings } from "../types";
 import { BaiduAuthModal } from "../features/sync/BaiduAuthModal";
 
+type SettingsSection = "knowledge" | "execution" | "auxiliary";
+
 export class DeepSeekSettingsTab extends PluginSettingTab {
+  private activeSection: SettingsSection = "auxiliary"; // start with AI setup
+
   constructor(app: App, private plugin: DeepSeekPlugin) {
     super(app, plugin);
   }
@@ -11,54 +15,190 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
   display(): void {
     const { containerEl } = this;
     containerEl.empty();
-    new Setting(containerEl).setName("DeepSeek Knowledge Graph 设置").setHeading();
+    containerEl.addClass("istart-settings-root");
 
-    new Setting(containerEl)
-      .setName("API key")
-      .setDesc("DeepSeek API Key（在 platform.deepseek.com 获取）")
-      .addText((text) =>
-        text
-          .setPlaceholder("sk-...")
+    // ── Header ───────────────────────────────────────────────
+    containerEl.createEl("h2", { text: "IStart-Note-AI" });
+    containerEl.createEl("p", {
+      text: "知识沉淀 · 执行计划 · 同步辅助",
+      attr: { style: "color: var(--text-muted); margin-top: -8px; margin-bottom: 16px;" },
+    });
+
+    // ── Layout ───────────────────────────────────────────────
+    const layout = containerEl.createDiv({ cls: "istart-settings-layout" });
+    const sidebar = layout.createDiv({ cls: "istart-settings-sidebar" });
+    const content = layout.createDiv({ cls: "istart-settings-content" });
+
+    this.renderNav(sidebar);
+    this.renderSection(content);
+  }
+
+  private renderNav(container: HTMLElement): void {
+    const sections: { id: SettingsSection; label: string }[] = [
+      { id: "knowledge", label: "知识" },
+      { id: "execution", label: "执行" },
+      { id: "auxiliary", label: "辅助" },
+    ];
+
+    for (const sec of sections) {
+      const item = container.createDiv({
+        cls: `istart-settings-nav-item${this.activeSection === sec.id ? " is-active" : ""}`,
+      });
+      item.setText(sec.label);
+      item.addEventListener("click", () => {
+        this.activeSection = sec.id;
+        this.display();
+      });
+    }
+  }
+
+  private renderSection(container: HTMLElement): void {
+    switch (this.activeSection) {
+      case "knowledge":
+        this.renderKnowledge(container);
+        break;
+      case "execution":
+        this.renderExecution(container);
+        break;
+      case "auxiliary":
+        this.renderAuxiliary(container);
+        break;
+    }
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  知识
+  // ══════════════════════════════════════════════════════════════
+
+  private renderKnowledge(el: HTMLElement): void {
+    new Setting(el).setName("知识路径").setHeading();
+
+    new Setting(el)
+      .setName("Q&A 笔记目录")
+      .addText((t) =>
+        t.setPlaceholder("Knowledge/Q&A").setValue(this.plugin.settings.savePath).onChange(async (v) => {
+          this.plugin.settings.savePath = v.trim() || "Knowledge/Q&A";
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(el)
+      .setName("问题索引目录")
+      .addText((t) =>
+        t.setPlaceholder("Knowledge/Questions").setValue(this.plugin.settings.questionsIndexPath).onChange(async (v) => {
+          this.plugin.settings.questionsIndexPath = v.trim() || "Knowledge/Questions";
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(el)
+      .setName("概念页目录")
+      .addText((t) =>
+        t.setPlaceholder("Knowledge/Concepts").setValue(this.plugin.settings.conceptsPath).onChange(async (v) => {
+          this.plugin.settings.conceptsPath = v.trim() || "Knowledge/Concepts";
+          await this.plugin.saveSettings();
+        })
+      );
+
+    // ── 知识索引 ──────────────────────────────────────────────
+    new Setting(el).setName("知识索引").setHeading();
+
+    const indexSize = this.plugin.knowledgeIndex?.size ?? 0;
+    new Setting(el)
+      .setName("索引状态")
+      .setDesc(`已索引 ${indexSize} 篇笔记`)
+      .addButton((btn) =>
+        btn.setButtonText("重建索引").onClick(() => {
+          this.plugin.knowledgeIndex.rebuild();
+          new Notice(`✅ 索引已重建：${this.plugin.knowledgeIndex.size} 篇`);
+          this.display();
+        })
+      );
+
+    new Setting(el)
+      .setName("生成笔记后自动打开图谱")
+      .addToggle((t) =>
+        t.setValue(this.plugin.settings.autoOpenGraph).onChange(async (v) => {
+          this.plugin.settings.autoOpenGraph = v;
+          await this.plugin.saveSettings();
+        })
+      );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  执行
+  // ══════════════════════════════════════════════════════════════
+
+  private renderExecution(el: HTMLElement): void {
+    new Setting(el).setName("执行计划").setHeading();
+
+    el.createEl("p", {
+      text: "执行模块当前为实验阶段。所有 AI 生成的写入操作都会先生成计划草稿，需要你确认后再执行。回滚功能尚未实现。定时任务运行时默认关闭，将在 v2.1 启用。",
+      attr: { style: "color: var(--text-muted); font-size: 13px; margin-bottom: 12px;" },
+    });
+
+    new Setting(el)
+      .setName("执行日志目录")
+      .setDesc("每次执行计划后自动生成日志")
+      .addText((t) =>
+        t.setPlaceholder("Knowledge/_Executions").setValue("Knowledge/_Executions").setDisabled(true)
+      );
+
+    new Setting(el).setName("定时任务").setHeading();
+    el.createEl("p", {
+      text: "定时任务运行时在 v2.0 默认关闭。基础设施已就绪（知识债务扫描、配置同步），将在 v2.1 通过设置启用。",
+      attr: { style: "color: var(--text-muted); font-size: 13px;" },
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  辅助
+  // ══════════════════════════════════════════════════════════════
+
+  private renderAuxiliary(el: HTMLElement): void {
+    // ── AI 服务 ───────────────────────────────────────────────
+    new Setting(el).setName("AI 服务").setHeading();
+
+    new Setting(el)
+      .setName("API Key")
+      .setDesc("DeepSeek 或其他 OpenAI 兼容服务的密钥")
+      .addText((t) => {
+        t.setPlaceholder("sk-...")
           .setValue(this.plugin.settings.apiKey)
-          .onChange(async (value) => {
-            this.plugin.settings.apiKey = value.trim();
+          .onChange(async (v) => {
+            this.plugin.settings.apiKey = v.trim();
             await this.plugin.saveSettings();
-          })
-      );
+          });
+        t.inputEl.type = "password";
+        return t;
+      });
 
-    new Setting(containerEl)
+    new Setting(el)
       .setName("Base URL")
-      .setDesc("API 地址，默认 https://api.deepseek.com")
-      .addText((text) =>
-        text
-          .setPlaceholder("https://api.deepseek.com")
-          .setValue(this.plugin.settings.baseUrl)
-          .onChange(async (value) => {
-            this.plugin.settings.baseUrl = value.trim() || "https://api.deepseek.com";
-            await this.plugin.saveSettings();
-          })
+      .setDesc("Chat completions 端点根地址")
+      .addText((t) =>
+        t.setPlaceholder("https://api.deepseek.com").setValue(this.plugin.settings.baseUrl).onChange(async (v) => {
+          this.plugin.settings.baseUrl = v.trim() || "https://api.deepseek.com";
+          await this.plugin.saveSettings();
+        })
       );
 
-    new Setting(containerEl)
+    new Setting(el)
       .setName("模型")
-      .setDesc("选择使用的 DeepSeek 模型")
-      .addDropdown((drop) =>
-        drop
-          .addOption("deepseek-v4-flash", "deepseek-v4-flash（快速，推荐）")
+      .addDropdown((d) =>
+        d.addOption("deepseek-v4-flash", "deepseek-v4-flash（快速）")
           .addOption("deepseek-v4-pro", "deepseek-v4-pro（深度推理）")
           .setValue(this.plugin.settings.model)
-          .onChange(async (value: "deepseek-v4-flash" | "deepseek-v4-pro") => {
-            this.plugin.settings.model = value;
+          .onChange(async (v: string) => {
+            this.plugin.settings.model = v as "deepseek-v4-flash" | "deepseek-v4-pro";
             await this.plugin.saveSettings();
           })
       );
 
-    new Setting(containerEl)
+    new Setting(el)
       .setName("输出风格")
-      .setDesc("AI 生成内容的默认风格")
-      .addDropdown((drop) =>
-        drop
-          .addOption("knowledge-base", "知识库（推荐）")
+      .addDropdown((d) =>
+        d.addOption("knowledge-base", "知识库（推荐）")
           .addOption("technical", "技术文档")
           .addOption("minimal", "极简")
           .addOption("product", "产品设计")
@@ -66,67 +206,16 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
           .addOption("story", "世界观/叙事")
           .addOption("dashboard", "卡片化")
           .setValue(this.plugin.settings.outputStyle)
-          .onChange(async (value: string) => {
-            this.plugin.settings.outputStyle = value as DeepSeekSettings["outputStyle"];
+          .onChange(async (v: string) => {
+            this.plugin.settings.outputStyle = v as DeepSeekSettings["outputStyle"];
             await this.plugin.saveSettings();
           })
       );
 
-    new Setting(containerEl)
-      .setName("笔记保存路径")
-      .setDesc("Q&A 笔记存储目录（相对于 Vault 根目录）")
-      .addText((text) =>
-        text
-          .setPlaceholder("Knowledge/Q&A")
-          .setValue(this.plugin.settings.savePath)
-          .onChange(async (value) => {
-            this.plugin.settings.savePath = value.trim() || "Knowledge/Q&A";
-            await this.plugin.saveSettings();
-          })
-      );
+    // ── 百度网盘同步 ──────────────────────────────────────────
+    new Setting(el).setName("百度网盘同步").setHeading();
 
-    new Setting(containerEl)
-      .setName("问题索引路径")
-      .setDesc("问题图谱索引页存储目录")
-      .addText((text) =>
-        text
-          .setPlaceholder("Knowledge/Questions")
-          .setValue(this.plugin.settings.questionsIndexPath)
-          .onChange(async (value) => {
-            this.plugin.settings.questionsIndexPath = value.trim() || "Knowledge/Questions";
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("概念页保存路径")
-      .setDesc("概念页存储目录（相对于 Vault 根目录）")
-      .addText((text) =>
-        text
-          .setPlaceholder("Knowledge/Concepts")
-          .setValue(this.plugin.settings.conceptsPath)
-          .onChange(async (value) => {
-            this.plugin.settings.conceptsPath = value.trim() || "Knowledge/Concepts";
-            await this.plugin.saveSettings();
-          })
-      );
-
-    new Setting(containerEl)
-      .setName("自动打开 Graph view")
-      .setDesc("生成笔记后自动打开图谱视图")
-      .addToggle((toggle) =>
-        toggle
-          .setValue(this.plugin.settings.autoOpenGraph)
-          .onChange(async (value) => {
-            this.plugin.settings.autoOpenGraph = value;
-            await this.plugin.saveSettings();
-          })
-      );
-
-    // ── 百度云同步 ──────────────────────────────────────────
-    new Setting(containerEl).setName("百度网盘同步").setHeading();
-
-    new Setting(containerEl)
+    new Setting(el)
       .setName("启用百度云同步")
       .addToggle((t) =>
         t.setValue(this.plugin.settings.baiduSync.enabled).onChange(async (v) => {
@@ -137,142 +226,100 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
       );
 
     if (this.plugin.settings.baiduSync.enabled) {
-      new Setting(containerEl)
-        .setName("App ID")
-        .setDesc("百度开放平台应用的 App Key")
-        .addText((text) =>
-          text
-            .setPlaceholder("your-app-id")
-            .setValue(this.plugin.settings.baiduSync.appId)
-            .onChange(async (v) => {
-              this.plugin.settings.baiduSync.appId = v.trim();
-              await this.plugin.saveSettings();
-            })
-        );
+      this.renderBaiduSyncSettings(el);
+    }
 
-      new Setting(containerEl)
-        .setName("App secret")
-        .setDesc("百度开放平台应用的 Secret Key")
-        .addText((text) => {
-          text
-            .setPlaceholder("your-app-secret")
-            .setValue(this.plugin.settings.baiduSync.appSecret)
-            .onChange((v) => {
-              this.plugin.settings.baiduSync.appSecret = v.trim();
-              void this.plugin.saveSettings();
-            });
-          text.inputEl.type = "password";
-          return text;
+    // ── 隐私与诊断 ───────────────────────────────────────────
+    new Setting(el).setName("隐私与诊断").setHeading();
+    el.createEl("p", {
+      text: "AI 功能会把选中内容和部分上下文发送到所配置的 API 端点。同步功能会把笔记上传到你自己的百度网盘。完整说明见 PRIVACY.md。",
+      attr: { style: "color: var(--text-muted); font-size: 13px;" },
+    });
+  }
+
+  private renderBaiduSyncSettings(el: HTMLElement): void {
+    const cfg = this.plugin.settings.baiduSync;
+
+    new Setting(el)
+      .setName("App ID")
+      .addText((t) =>
+        t.setPlaceholder("your-app-id").setValue(cfg.appId).onChange(async (v) => {
+          cfg.appId = v.trim();
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(el)
+      .setName("App Secret")
+      .addText((t) => {
+        t.setPlaceholder("your-app-secret").setValue(cfg.appSecret).onChange((v) => {
+          cfg.appSecret = v.trim();
+          void this.plugin.saveSettings();
         });
-
-      const tokenStatus = this.plugin.settings.baiduSync.accessToken
-        ? `已授权（过期时间：${this.plugin.settings.baiduSync.tokenExpiresAt?.slice(0, 10) ?? "未知"}）`
-        : "未授权";
-
-      new Setting(containerEl)
-        .setName("授权状态")
-        .setDesc(tokenStatus)
-        .addButton((btn) =>
-          btn.setButtonText("重新授权").onClick(() => {
-            new BaiduAuthModal(
-              this.app,
-              this.plugin.settings.baiduSync,
-              (accessToken, refreshToken, expiresAt) => {
-                this.plugin.settings.baiduSync.accessToken = accessToken;
-                this.plugin.settings.baiduSync.refreshToken = refreshToken;
-                this.plugin.settings.baiduSync.tokenExpiresAt = expiresAt;
-                void this.plugin.saveSettings().then(() => this.display());
-              }
-            ).open();
-          })
-        );
-
-      new Setting(containerEl)
-        .setName("远端备份路径")
-        .setDesc("百度网盘中的备份根目录")
-        .addText((text) =>
-          text
-            .setPlaceholder("/apps/istart-note-ai")
-            .setValue(this.plugin.settings.baiduSync.remotePath)
-            .onChange(async (v) => {
-              this.plugin.settings.baiduSync.remotePath = v.trim() || "/apps/istart-note-ai";
-              await this.plugin.saveSettings();
-            })
-        );
-
-      new Setting(containerEl)
-        .setName("自动备份")
-        .setDesc("每次生成笔记后自动备份到百度云")
-        .addToggle((t) =>
-          t.setValue(this.plugin.settings.baiduSync.autoBackup).onChange(async (v) => {
-            this.plugin.settings.baiduSync.autoBackup = v;
-            await this.plugin.saveSettings();
-          })
-        );
-
-      new Setting(containerEl)
-        .setName("备份插件本身")
-        .setDesc("备份时包含插件文件（main.js、配置等），方便换设备恢复")
-        .addToggle((t) =>
-          t.setValue(this.plugin.settings.baiduSync.backupPlugin).onChange(async (v) => {
-            this.plugin.settings.baiduSync.backupPlugin = v;
-            await this.plugin.saveSettings();
-          })
-        );
-
-      new Setting(containerEl)
-        .setName("忽略规则")
-        .setDesc("正则表达式，匹配的文件路径将被跳过")
-        .addText((text) =>
-          text
-            .setPlaceholder("node_modules|.git")
-            .setValue(this.plugin.settings.baiduSync.ignorePattern)
-            .onChange(async (v) => {
-              this.plugin.settings.baiduSync.ignorePattern = v.trim();
-              await this.plugin.saveSettings();
-            })
-        );
-
-      new Setting(containerEl)
-        .setName("单文件大小限制（MB）")
-        .addText((text) =>
-          text
-            .setPlaceholder("100")
-            .setValue(String(this.plugin.settings.baiduSync.fileSizeLimitMB))
-            .onChange(async (v) => {
-              const n = parseInt(v);
-              if (!isNaN(n) && n > 0) {
-                this.plugin.settings.baiduSync.fileSizeLimitMB = n;
-                await this.plugin.saveSettings();
-              }
-            })
-        );
-
-      // 配置同步
-      new Setting(containerEl).setName("配置同步").setHeading();
-      containerEl.createEl("p", {
-        text: "将路径、模型等偏好设置同步到百度云，在多台设备间共享（不含 API Key 和 Token 等凭证）。",
-        cls: "istart-settings-config-hint",
+        t.inputEl.type = "password";
+        return t;
       });
 
-      new Setting(containerEl)
-        .setName("推送配置到百度云")
-        .setDesc("将当前设置上传，其他设备可拉取同步")
-        .addButton((btn) =>
-          btn.setButtonText("推送").onClick(async () => {
-            await this.plugin.pushConfig();
-          })
-        );
+    const tokenStatus = cfg.accessToken
+      ? `已授权（过期：${cfg.tokenExpiresAt?.slice(0, 10) ?? "未知"}）`
+      : "未授权";
 
-      new Setting(containerEl)
-        .setName("从百度云拉取配置")
-        .setDesc("拉取最新配置并应用（不覆盖凭证）")
-        .addButton((btn) =>
-          btn.setButtonText("拉取").onClick(async () => {
-            await this.plugin.pullConfig();
-            this.display();
-          })
-        );
-    }
+    new Setting(el)
+      .setName("授权状态")
+      .setDesc(tokenStatus)
+      .addButton((btn) =>
+        btn.setButtonText("授权").onClick(() => {
+          new BaiduAuthModal(this.app, cfg, (accessToken, refreshToken, expiresAt) => {
+            cfg.accessToken = accessToken;
+            cfg.refreshToken = refreshToken;
+            cfg.tokenExpiresAt = expiresAt;
+            void this.plugin.saveSettings().then(() => this.display());
+          }).open();
+        })
+      );
+
+    new Setting(el)
+      .setName("远端路径")
+      .addText((t) =>
+        t.setPlaceholder("/apps/istart-note-ai").setValue(cfg.remotePath).onChange(async (v) => {
+          cfg.remotePath = v.trim() || "/apps/istart-note-ai";
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(el)
+      .setName("自动备份")
+      .setDesc("生成笔记后自动备份")
+      .addToggle((t) => t.setValue(cfg.autoBackup).onChange(async (v) => { cfg.autoBackup = v; await this.plugin.saveSettings(); }));
+
+    new Setting(el)
+      .setName("备份插件本身")
+      .addToggle((t) => t.setValue(cfg.backupPlugin).onChange(async (v) => { cfg.backupPlugin = v; await this.plugin.saveSettings(); }));
+
+    new Setting(el)
+      .setName("忽略规则")
+      .setDesc("正则表达式")
+      .addText((t) =>
+        t.setPlaceholder("node_modules|.git").setValue(cfg.ignorePattern).onChange(async (v) => {
+          cfg.ignorePattern = v.trim();
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(el)
+      .setName("单文件大小限制（MB）")
+      .addText((t) =>
+        t.setPlaceholder("100").setValue(String(cfg.fileSizeLimitMB)).onChange(async (v) => {
+          const n = parseInt(v);
+          if (!isNaN(n) && n > 0) { cfg.fileSizeLimitMB = n; await this.plugin.saveSettings(); }
+        })
+      );
+
+    // 配置同步
+    new Setting(el).setName("跨设备配置同步").setDesc("不含凭证").setHeading();
+
+    new Setting(el)
+      .addButton((btn) => btn.setButtonText("推送配置").onClick(() => void this.plugin.pushConfig()))
+      .addButton((btn) => btn.setButtonText("拉取配置").onClick(async () => { await this.plugin.pullConfig(); this.display(); }));
   }
 }

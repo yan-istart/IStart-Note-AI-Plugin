@@ -1,5 +1,6 @@
-import { App, TFile, requestUrl } from "obsidian";
+import { App, TFile } from "obsidian";
 import { DeepSeekSettings } from "../types";
+import { LLMClient, parseJsonSafe } from "../core/llm";
 
 export interface SectionAppendResult {
   items: string[];   // 新增条目列表
@@ -23,7 +24,11 @@ const APPEND_PROMPT = `你是一个个人知识图谱助手。用户希望为概
 }`;
 
 export class SectionAppender {
-  constructor(private app: App, private settings: DeepSeekSettings) {}
+  private llm: LLMClient;
+
+  constructor(private app: App, private settings: DeepSeekSettings) {
+    this.llm = new LLMClient(settings);
+  }
 
   /** 从文件内容中提取指定 section 的现有内容 */
   extractSection(content: string, sectionName: string): { existing: string; startIndex: number; endIndex: number } | null {
@@ -61,37 +66,13 @@ export class SectionAppender {
     existingContent: string,
     count = 3
   ): Promise<SectionAppendResult> {
-    if (!this.settings.apiKey) {
-      throw new Error("请先配置 API Key");
-    }
-
     const prompt = APPEND_PROMPT
       .replace("{{concept}}", conceptName)
       .replace("{{section}}", sectionName)
       .replace("{{existing}}", existingContent || "（暂无内容）")
       .replace("{{count}}", String(count));
 
-    const res = await requestUrl({
-      url: `${this.settings.baseUrl}/v1/chat/completions`,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.settings.model,
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.7,
-      }),
-      throw: false,
-    });
-
-    if (res.status !== 200) {
-      throw new Error(`API 错误: ${res.status} - ${res.text}`);
-    }
-
-    const data = res.json;
-    const raw = data.choices?.[0]?.message?.content ?? "";
+    const raw = await this.llm.chat({ userPrompt: prompt, temperature: 0.7 });
     return this.parse(raw, sectionName);
   }
 
@@ -128,19 +109,14 @@ export class SectionAppender {
   }
 
   private parse(content: string, sectionName: string): SectionAppendResult {
-    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) ||
-      content.match(/(\{[\s\S]*\})/);
-    const jsonStr = jsonMatch ? jsonMatch[1] : content;
-
-    try {
-      const p = JSON.parse(jsonStr.trim()) as Record<string, unknown>;
-      const items: string[] = Array.isArray(p.items) ? p.items as string[] : [];
-      return { items, raw: this.formatItems(items, sectionName) };
-    } catch {
-      // 降级：把每行当作一个条目
-      const items = content.split("\n").map((l) => l.replace(/^[-*]\s*/, "").trim()).filter(Boolean);
+    const p = parseJsonSafe<Record<string, unknown> | null>(content, null);
+    if (p) {
+      const items: string[] = Array.isArray(p.items) ? (p.items as string[]) : [];
       return { items, raw: this.formatItems(items, sectionName) };
     }
+    // 降级：把每行当作一个条目
+    const items = content.split("\n").map((l) => l.replace(/^[-*]\s*/, "").trim()).filter(Boolean);
+    return { items, raw: this.formatItems(items, sectionName) };
   }
 
   private escapeRegex(str: string): string {

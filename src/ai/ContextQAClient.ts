@@ -1,5 +1,5 @@
-import { requestUrl } from "obsidian";
 import { DeepSeekSettings, ContextQAInput, ContextQAResponse, Relation } from "../types";
+import { LLMClient, parseJsonSafe } from "../core/llm";
 
 const buildPrompt = (input: ContextQAInput): string => `请基于以下上下文回答问题。
 
@@ -29,53 +29,33 @@ ${input.question}
 }`;
 
 export class ContextQAClient {
-  constructor(private settings: DeepSeekSettings) {}
+  private llm: LLMClient;
+
+  constructor(settings: DeepSeekSettings) {
+    this.llm = new LLMClient(settings);
+  }
 
   async ask(input: ContextQAInput): Promise<ContextQAResponse> {
-    if (!this.settings.apiKey) {
-      throw new Error("请先在插件设置中配置 API Key");
-    }
-
-    const res = await requestUrl({
-      url: `${this.settings.baseUrl}/v1/chat/completions`,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.settings.model,
-        messages: [{ role: "user", content: buildPrompt(input) }],
-        temperature: 0.6,
-      }),
-      throw: false,
+    const content = await this.llm.chat({
+      userPrompt: buildPrompt(input),
+      temperature: 0.6,
     });
-
-    if (res.status !== 200) {
-      throw new Error(`API 错误: ${res.status} - ${res.text}`);
-    }
-
-    const data = res.json;
-    const content = data.choices?.[0]?.message?.content ?? "";
     return this.parse(content);
   }
 
   private parse(content: string): ContextQAResponse {
-    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) ||
-      content.match(/(\{[\s\S]*\})/);
-    const jsonStr = jsonMatch ? jsonMatch[1] : content;
-
-    try {
-      const p = JSON.parse(jsonStr.trim()) as Record<string, unknown>;
-      return {
-        answer: (p.answer as string) || "",
-        concepts: Array.isArray(p.concepts) ? p.concepts as string[] : [],
-        relations: Array.isArray(p.relations) ? p.relations as Relation[] : [],
-        suggested_questions: Array.isArray(p.suggested_questions) ? p.suggested_questions as string[] : [],
-        tags: Array.isArray(p.tags) ? p.tags as string[] : [],
-      };
-    } catch {
+    const p = parseJsonSafe<Record<string, unknown> | null>(content, null);
+    if (!p) {
       return { answer: content, concepts: [], relations: [], suggested_questions: [], tags: [] };
     }
+    return {
+      answer: (p.answer as string) || "",
+      concepts: Array.isArray(p.concepts) ? (p.concepts as string[]) : [],
+      relations: Array.isArray(p.relations) ? (p.relations as Relation[]) : [],
+      suggested_questions: Array.isArray(p.suggested_questions)
+        ? (p.suggested_questions as string[])
+        : [],
+      tags: Array.isArray(p.tags) ? (p.tags as string[]) : [],
+    };
   }
 }

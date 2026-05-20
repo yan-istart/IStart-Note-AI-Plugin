@@ -7,30 +7,44 @@ export interface ActionContext {
   app: App;
   editor: Editor | null;
   activeFile: TFile | null;
-  selection: string;             // 选中文字（trim 后）
-  fileContent: string;           // 当前文件全文
-  fileType: string | undefined;  // frontmatter.type
-  filePath: string;              // 当前文件路径
-  sectionName: string | null;    // 光标所在 section 名
-  // file-menu 专用：右键的目标文件（可能不是当前打开的文件）
+  selection: string;
+  fileContent: string;
+  fileType: string | undefined;
+  filePath: string;
+  sectionName: string | null;
   targetFile: TFile | null;
 }
 
 /** 可见性条件 */
 export interface ActionWhen {
-  always?: boolean;              // 始终可见
-  hasSelection?: boolean;        // 需要有选中文字
-  noSelection?: boolean;         // 需要没有选中文字
-  fileType?: string[];           // frontmatter type 匹配其一
-  filePath?: string;             // 文件路径包含此字符串
-  inSection?: boolean;           // 光标在某个 ## section 内
+  always?: boolean;
+  hasSelection?: boolean;
+  noSelection?: boolean;
+  fileType?: string[];
+  filePath?: string;
+  inSection?: boolean;
 }
 
 /** 动作出现的入口 */
 export type ActionEntry = "panel" | "editor-menu" | "file-menu";
 
-/** 面板分组 */
-export type ActionGroup = "general" | "selection" | "edit" | "concept" | "reading" | "sync" | "document";
+/** 三大产品域 */
+export type ActionDomain = "knowledge" | "execution" | "auxiliary";
+
+/** 细分领域（用于面板二级分组、设置定位等） */
+export type ActionSection =
+  | "question"
+  | "concept"
+  | "reading"
+  | "retrieval"
+  | "debt"
+  | "plan"
+  | "scheduler"
+  | "logs"
+  | "sync"
+  | "assistant"
+  | "document"
+  | "settings";
 
 /** 动作定义 */
 export interface ActionDef {
@@ -38,24 +52,33 @@ export interface ActionDef {
   label: string;
   icon: string;
   description?: string;
-  group: ActionGroup;
+  domain: ActionDomain;
+  section: ActionSection;
   when: ActionWhen;
   showIn: ActionEntry[];
+  /** 操作风险 */
+  risk?: "none" | "low" | "medium" | "high";
+  /** 是否实验性功能 */
+  experimental?: boolean;
   run: (ctx: ActionContext) => void;
 }
 
-/** 分组标题映射 */
-export const GROUP_TITLES: Record<ActionGroup, string> = {
-  general: "通用",
-  selection: "选中文字",
-  edit: "编辑",
-  concept: "概念页",
-  reading: "阅读",
-  sync: "同步",
-  document: "文档工具",
+// ── 兼容层：旧 group 映射到新 domain ──────────────────────────
+// 保留旧类型名以便 registry 和 panel 平滑迁移
+
+/** @deprecated Use ActionDomain + ActionSection */
+export type ActionGroup = ActionDomain;
+
+/** 域标题（面板一级分组） */
+export const DOMAIN_TITLES: Record<ActionDomain, string> = {
+  knowledge: "知识",
+  execution: "执行",
+  auxiliary: "辅助",
 };
 
-/** 分组排序 */
-export const GROUP_ORDER: ActionGroup[] = [
-  "general", "selection", "edit", "concept", "reading", "sync", "document",
-];
+/** 域排序 */
+export const DOMAIN_ORDER: ActionDomain[] = ["knowledge", "execution", "auxiliary"];
+
+// ── 向后兼容的 GROUP 导出（registry.ts 还在用） ───────────────
+export const GROUP_TITLES = DOMAIN_TITLES;
+export const GROUP_ORDER = DOMAIN_ORDER;

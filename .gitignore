@@ -1,3 +1,16 @@
+# Build output (release assets are built fresh from CI/release scripts)
 node_modules/
 dist/
 *.js.map
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Editor
+.vscode/
+.idea/
+
+# Local env / secrets
+.env
+.env.*

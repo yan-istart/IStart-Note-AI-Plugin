@@ -1,6 +1,6 @@
 import { Notice, TFile } from "obsidian";
 import type DeepSeekPlugin from "../main";
-import { ActionDef, ActionContext, GROUP_TITLES, GROUP_ORDER } from "./types";
+import { ActionDef, ActionContext, DOMAIN_TITLES, DOMAIN_ORDER } from "./types";
 import { CommandPanelModal } from "../features/command-panel/CommandPanelModal";
 import type { PanelGroup, PanelAction } from "../features/command-panel/CommandPanelModal";
 
@@ -95,18 +95,37 @@ function openPanel(plugin: DeepSeekPlugin, actions: ActionDef[]) {
     ctx.selection = editor.getSelection().trim();
   }
 
+  // Separate pinned action (AI 助手) from grouped actions
+  const pinnedAction = actions.find((a) => a.id === "ai-assistant");
+  const groupedActions = actions.filter((a) => a.id !== "ai-assistant");
+
   const groups: PanelGroup[] = [];
-  for (const groupId of GROUP_ORDER) {
-    const groupActions = actions.filter(
-      (a) => a.group === groupId && a.showIn.includes("panel") && evaluateWhen(a.when, ctx)
-    );
-    if (groupActions.length === 0) continue;
+
+  // Add pinned as first "group" with a special title
+  if (pinnedAction && evaluateWhen(pinnedAction.when, ctx)) {
     groups.push({
-      title: GROUP_TITLES[groupId],
-      actions: groupActions.map((a) => ({
+      title: "入口",
+      actions: [{
+        id: pinnedAction.id,
+        icon: pinnedAction.icon,
+        label: pinnedAction.label,
+        description: pinnedAction.description,
+        callback: () => pinnedAction.run(ctx),
+      }],
+    });
+  }
+
+  for (const domainId of DOMAIN_ORDER) {
+    const domainActions = groupedActions.filter(
+      (a) => a.domain === domainId && a.showIn.includes("panel") && evaluateWhen(a.when, ctx)
+    );
+    if (domainActions.length === 0) continue;
+    groups.push({
+      title: DOMAIN_TITLES[domainId],
+      actions: domainActions.map((a) => ({
         id: a.id,
         icon: a.icon,
-        label: a.label,
+        label: a.label + (a.experimental ? " ⚗️" : ""),
         description: a.description,
         callback: () => a.run(ctx),
       })),

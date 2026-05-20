@@ -9,8 +9,15 @@
     "moduleResolution": "node",
     "importHelpers": true,
     "isolatedModules": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "noImplicitThis": true,
+    "alwaysStrict": true,
+    "strictBindCallApply": true,
+    "strictFunctionTypes": true,
     "strictNullChecks": true,
-    "lib": ["ES6", "DOM"]
+    "noFallthroughCasesInSwitch": true,
+    "lib": ["ES2018", "DOM"]
   },
-  "include": ["**/*.ts"]
+  "include": ["src/**/*.ts"]
 }

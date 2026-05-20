@@ -1,5 +1,62 @@
 /* IStart-Note-AI Plugin Styles */
 
+/* ── Settings Page Layout ────────────────────────── */
+
+.istart-settings-layout {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 20px;
+}
+
+.istart-settings-sidebar {
+  border-right: 1px solid var(--background-modifier-border);
+  padding-right: 12px;
+}
+
+.istart-settings-content {
+  min-width: 0;
+}
+
+.istart-settings-nav-item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--text-normal);
+  cursor: pointer;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.istart-settings-nav-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+.istart-settings-nav-item.is-active {
+  background: var(--background-modifier-hover);
+  color: var(--text-accent);
+  font-weight: 600;
+}
+
+@media (max-width: 700px) {
+  .istart-settings-layout {
+    display: block;
+  }
+  .istart-settings-sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--background-modifier-border);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .istart-settings-nav-item {
+    display: inline-block;
+    width: auto;
+  }
+}
+
 /* ── Baidu Sync View ─────────────────────────────── */
 
 .istart-sync-root {
@@ -393,6 +450,70 @@
   background: var(--interactive-accent);
   color: var(--text-on-accent);
   border-color: var(--interactive-accent);
+}
+
+/* ── Result Modal (mobile-safe flex layout) ──────── */
+
+.istart-result-modal {
+  display: flex;
+  flex-direction: column;
+  max-height: 80vh;
+}
+
+.istart-result-preview {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  min-height: 80px;
+  max-height: 55vh;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 8px;
+  background: var(--background-secondary);
+}
+
+.istart-result-mode-hint {
+  flex-shrink: 0;
+  font-size: 12px;
+  color: var(--text-muted);
+  margin: 0 0 8px 0;
+}
+
+.istart-result-actions {
+  flex-shrink: 0;
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 8px;
+}
+
+.istart-result-actions .setting-item {
+  border: none;
+  padding: 4px 0;
+}
+
+@media (max-width: 600px) {
+  .istart-result-modal {
+    max-height: 85vh;
+  }
+
+  .istart-result-preview {
+    max-height: 40vh;
+  }
+
+  .istart-result-actions .setting-item {
+    flex-wrap: wrap;
+    gap: 6px;
+  }
+
+  .istart-result-actions .setting-item-control {
+    width: 100%;
+    display: flex;
+    gap: 6px;
+  }
+
+  .istart-result-actions .setting-item-control button {
+    flex: 1;
+    min-width: 0;
+  }
 }
 
 .istart-assistant-preview {
