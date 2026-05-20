@@ -695,16 +695,15 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
 
   /** 打开待确认计划列表 */
   openPendingPlans() {
-    const folder = "Knowledge/_ExecutionPlans";
-    const files = this.app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(folder));
+    const { PlanDraftStore } = require("./core/execution") as { PlanDraftStore: new (app: import("obsidian").App) => import("./core/execution").PlanDraftStore };
+    const store = new PlanDraftStore(this.app);
+    const files = store.getPendingPlans();
     if (files.length === 0) {
       new Notice("暂无待确认计划");
       return;
     }
-    // Open the folder in file explorer, or open the most recent plan
-    const sorted = files.sort((a, b) => b.stat.mtime - a.stat.mtime);
     const leaf = this.app.workspace.getLeaf(false);
-    void leaf.openFile(sorted[0]);
+    void leaf.openFile(files[0]);
     if (files.length > 1) {
       new Notice(`共 ${files.length} 个待确认计划，已打开最新`);
     }
@@ -713,7 +712,7 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
   /** 打开执行日志列表 */
   openExecutionLogs() {
     const folder = "Knowledge/_Executions";
-    const files = this.app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(folder));
+    const files = this.app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(folder + "/"));
     if (files.length === 0) {
       new Notice("暂无执行日志");
       return;
@@ -724,6 +723,65 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
     if (files.length > 1) {
       new Notice(`共 ${files.length} 条执行记录，已打开最新`);
     }
+  }
+
+  /** 确认并执行当前打开的待确认计划 */
+  async confirmAndExecutePlan() {
+    const activeFile = this.app.workspace.getActiveFile();
+    if (!activeFile) { new Notice("请先打开一个待确认计划文件"); return; }
+
+    const meta = this.app.metadataCache.getFileCache(activeFile);
+    const fm = meta?.frontmatter;
+    if (fm?.type !== "execution-plan" || fm?.status !== "pending") {
+      new Notice("当前文件不是待确认计划（需要 type: execution-plan, status: pending）");
+      return;
+    }
+
+    const planId = fm.plan_id as string;
+    if (!planId) { new Notice("计划文件缺少 plan_id"); return; }
+
+    // Try to get plan from cache
+    const { PlanDraftStore, PlanExecutor } = await import("./core/execution");
+    const store = new PlanDraftStore(this.app);
+    const plan = store.getPlan(planId);
+
+    if (!plan) {
+      new Notice("该计划的执行数据已过期（Obsidian 重启后缓存会丢失）。请重新生成计划。");
+      return;
+    }
+
+    // Confirm
+    const riskLabel = plan.riskLevel === "high" ? "高风险" : plan.riskLevel === "medium" ? "中风险" : "低风险";
+    const confirmed = await this.confirmAction(
+      `确认执行「${plan.title}」？\n\n${plan.operations.length} 项操作，${riskLabel}，将影响 ${new Set(plan.operations.map(op => "path" in op ? (op as {path:string}).path : (op as {from:string}).from)).size} 个文件。`
+    );
+    if (!confirmed) return;
+
+    const notice = new Notice("⏳ 正在执行计划...", 0);
+    const executor = new PlanExecutor(this.app);
+    const record = await executor.execute(plan);
+    notice.hide();
+
+    if (record.success) {
+      await store.markExecuted(activeFile);
+      new Notice(`✅ 计划执行成功：${record.affectedPaths.length} 个文件已更新`);
+    } else {
+      new Notice(`❌ 执行失败：${record.error ?? "未知错误"}`);
+    }
+  }
+
+  /** Simple confirmation dialog using Obsidian Modal. */
+  private confirmAction(message: string): Promise<boolean> {
+    return new Promise((resolve) => {
+      const { Modal, Setting } = require("obsidian") as typeof import("obsidian");
+      const modal = new Modal(this.app);
+      modal.titleEl.setText("确认执行");
+      modal.contentEl.createEl("p", { text: message, attr: { style: "white-space: pre-wrap;" } });
+      new Setting(modal.contentEl)
+        .addButton((btn) => btn.setButtonText("确认执行").setCta().onClick(() => { modal.close(); resolve(true); }))
+        .addButton((btn) => btn.setButtonText("取消").onClick(() => { modal.close(); resolve(false); }));
+      modal.open();
+    });
   }
 
   /** 查看定时任务状态 */
