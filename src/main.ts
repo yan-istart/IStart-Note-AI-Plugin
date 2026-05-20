@@ -789,7 +789,7 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
     new Notice("定时任务运行时在 v2.0 默认关闭，将在 v2.1 通过设置页启用。");
   }
 
-  /** 从当前笔记生成执行计划（MVP：简单 prompt） */
+  /** 从当前笔记生成执行计划 */
   openGeneratePlan() {
     const editor = this.app.workspace.activeEditor?.editor ?? null;
     const activeFile = this.app.workspace.getActiveFile();
@@ -814,64 +814,90 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
       const { LLMClient } = await import("./core/llm");
       const llm = new LLMClient(this.settings);
 
-      const systemPrompt = `你是一个任务规划助手。用户会给你一篇笔记内容和一条指令，请从中提取可执行的行动项，按以下 JSON 格式返回：
-{
-  "title": "计划标题",
-  "tasks": [
-    { "action": "create-file | append-section | create-link", "target": "目标文件路径或章节", "content": "内容" }
-  ]
-}
-规则：
-1. 只生成具体、可在 Obsidian 中执行的操作。
-2. target 使用 Obsidian 相对路径。
-3. 如果不确定，宁可少生成也不要编造。`;
+      const systemPrompt = `你是一个执行计划生成助手。用户会给你一篇笔记和一条指令，你需要从中提取行动项，生成一份结构化的执行计划。
 
-      const userPrompt = `笔记：${sourceFile.basename}\n\n内容：\n${noteContent.slice(0, 2000)}\n\n指令：${instruction}`;
+输出要求：
+1. 用 Markdown 格式输出，直接就是计划的正文内容。
+2. 包含清晰的行动项（用 - [ ] 格式）。
+3. 行动项要具体、可执行，如果能判断时间节点就标注。
+4. 如果有优先级或分类，用二级标题分组。
+5. 在开头用 > 引用块简要说明计划来源和目标。
+6. 不要输出 JSON，不要输出代码块，直接输出 Markdown 正文。`;
+
+      const userPrompt = `来源笔记：${sourceFile.basename}\n\n笔记内容：\n${noteContent.slice(0, 3000)}\n\n用户指令：${instruction || "从这篇笔记提取行动项，生成执行计划"}`;
 
       const raw = await llm.chat({ systemPrompt, userPrompt, temperature: 0.4 });
       notice.hide();
 
-      // Parse and create a draft plan
-      const { parseJsonSafe } = await import("./core/llm");
-      const parsed = parseJsonSafe<{ title?: string; tasks?: { action?: string; target?: string; content?: string }[] } | null>(raw, null);
-
-      if (!parsed || !parsed.tasks || parsed.tasks.length === 0) {
-        new Notice("AI 未能从当前笔记提取出可执行计划");
+      if (!raw.trim()) {
+        new Notice("AI 未能生成执行计划");
         return;
       }
 
-      const { PlanBuilder } = await import("./core/execution");
-      const { PlanDraftStore } = await import("./core/execution");
-      const builder = new PlanBuilder(parsed.title || instruction.slice(0, 40), "assistant");
+      // Beautify with known concepts
+      const knownConcepts = this.getKnownConcepts();
+      const style = this.settings.outputStyle ?? "knowledge-base";
+      const assistant = new AIAssistant(this.settings, style, knownConcepts);
+      const beautified = assistant.beautifyContent(raw);
 
-      for (const task of parsed.tasks) {
-        if (!task.target || !task.content) continue;
-        switch (task.action) {
-          case "create-file":
-            builder.createFile(task.target, task.content);
-            break;
-          case "append-section":
-            builder.appendSection(task.target, "行动项", task.content);
-            break;
-          case "create-link":
-            builder.createLink(sourceFile.path, task.target);
-            break;
-          default:
-            builder.appendSection(task.target || sourceFile.path, "行动项", task.content);
-        }
-      }
+      // Build the plan note
+      const today = todayIso();
+      const title = instruction
+        ? instruction.slice(0, 40)
+        : `${sourceFile.basename} 执行计划`;
 
-      const plan = builder.build();
-      const store = new PlanDraftStore(this.app);
-      const draftFile = await store.persistDraft(plan);
+      const planContent = `---
+type: plan
+schema_version: 1
+source: "[[${sourceFile.path}|${sourceFile.basename}]]"
+status: active
+created_at: ${today}
+---
 
-      new Notice(`✅ 执行计划已生成（${plan.operations.length} 项操作），请审阅后确认`);
-      const leaf = this.app.workspace.getLeaf(false);
-      await leaf.openFile(draftFile);
+# ${title}
+
+${beautified}
+
+---
+
+## 来源
+
+- [[${sourceFile.path}|${sourceFile.basename}]]
+- 创建时间：${today}
+`;
+
+      // Show preview then save
+      new AssistantResultModal(
+        this.app,
+        { mode: "show", content: planContent, explanation: "执行计划预览" },
+        () => { void this.savePlanNote(title, planContent); },
+        () => { void this.runGeneratePlan(instruction, noteContent, sourceFile); }
+      ).open();
     } catch (err) {
       notice.hide();
       new Notice(`❌ ${(err as Error).message}`);
     }
+  }
+
+  private async savePlanNote(title: string, content: string) {
+    const folder = normalizePath("Knowledge/Plans");
+    if (!this.app.vault.getAbstractFileByPath(folder)) {
+      await this.app.vault.createFolder(folder);
+    }
+
+    const safeName = title.replace(/[\\/:*?"<>|#[\]]/g, "-").slice(0, 50);
+    const today = todayIso();
+    let path = normalizePath(`${folder}/${today}-${safeName}.md`);
+    let suffix = 2;
+    while (this.app.vault.getAbstractFileByPath(path)) {
+      path = normalizePath(`${folder}/${today}-${safeName}-${suffix}.md`);
+      suffix++;
+    }
+
+    const file = await this.app.vault.create(path, content);
+    new Notice(`✅ 执行计划已保存`);
+    const leaf = this.app.workspace.getLeaf(false);
+    await leaf.openFile(file);
   }
 
   // ── 定时任务 ─────────────────────────────────────────────────
