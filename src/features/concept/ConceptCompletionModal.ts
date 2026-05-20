@@ -27,7 +27,7 @@ export class DepthSelectModal extends Modal {
           .addOption("light", "轻量")
           .addOption("standard", "标准（推荐）")
           .setValue(this.depth)
-          .onChange((v: CompletionDepth) => (this.depth = v))
+          .onChange((v: string) => (this.depth = v as CompletionDepth))
       );
 
     new Setting(contentEl)
@@ -143,7 +143,7 @@ export class BatchScanModal extends Modal {
           .addOption("light", "轻量")
           .addOption("standard", "标准（推荐）")
           .setValue(depth)
-          .onChange((v: CompletionDepth) => (depth = v))
+          .onChange((v: string) => (depth = v as CompletionDepth))
       );
 
     new Setting(contentEl)

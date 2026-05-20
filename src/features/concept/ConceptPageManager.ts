@@ -1,5 +1,6 @@
 import { App, TFile, parseYaml, stringifyYaml, normalizePath } from "obsidian";
 import { ConceptCompletionResult, CompletionDepth, DeepSeekSettings } from "../../types";
+import { SCHEMA_VERSION, todayIso } from "../../core/schema";
 
 export interface ConceptPageInfo {
   file: TFile;
@@ -323,12 +324,12 @@ export class ConceptPageManager {
     result: ConceptCompletionResult
   ): Record<string, unknown> | null {
     if (!fm) return null;
-    const today = new Date().toISOString().slice(0, 10);
     return {
       ...fm,
+      schema_version: SCHEMA_VERSION,
       status: "completed",
       completion_status: "completed",
-      updated_at: today,
+      updated_at: todayIso(),
       ...(result.tags.length > 0 ? { tags: result.tags } : {}),
       ...(result.domain ? { domain: result.domain } : {}),
     };
@@ -348,7 +349,7 @@ export class ConceptPageManager {
       await this.app.vault.createFolder(uncategorizedPath);
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = todayIso();
 
     for (const concept of concepts) {
       // 检查是否已存在于任何子目录
@@ -362,7 +363,7 @@ export class ConceptPageManager {
       if (!this.app.vault.getAbstractFileByPath(filePath)) {
         await this.app.vault.create(
           filePath,
-          `---\ntype: concept\nname: ${concept}\nstatus: empty\ncompletion_status: pending\ncreated_from: concept-completion\ncreated_at: ${today}\n---\n\n# ${concept}\n\n## 定义\n\n## 核心解释\n\n## 示例\n\n## 关联概念\n\n## 相关问题\n\n## 来源\n`
+          `---\ntype: concept\nschema_version: ${SCHEMA_VERSION}\nname: ${concept}\nstatus: empty\ncompletion_status: pending\ncreated_from: concept-completion\ncreated_at: ${today}\n---\n\n# ${concept}\n\n## 定义\n\n## 核心解释\n\n## 示例\n\n## 关联概念\n\n## 相关问题\n\n## 来源\n`
         );
       }
     }

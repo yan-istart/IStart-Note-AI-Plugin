@@ -45,8 +45,8 @@ export class QuestionClassifyModal extends Modal {
           .addOption("refinement", CATEGORY_LABELS.refinement)
           .addOption("expansion", CATEGORY_LABELS.expansion)
           .setValue(this.classification.category)
-          .onChange((v: QuestionCategory) => {
-            this.classification.category = v;
+          .onChange((v: string) => {
+            this.classification.category = v as QuestionCategory;
           })
       );
 

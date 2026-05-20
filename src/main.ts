@@ -14,12 +14,52 @@ import { SectionAppender } from "./ai/SectionAppender";
 import { MarkdownBeautifier } from "./ai/formatter/MarkdownBeautifier";
 import { registerAllActions } from "./actions/registry";
 import { ALL_ACTIONS } from "./actions/definitions";
+import { ConceptCompleter } from "./ai/ConceptCompleter";
+import { ConceptPageManager } from "./features/concept/ConceptPageManager";
+import { DepthSelectModal, PreviewModal, BatchScanModal } from "./features/concept/ConceptCompletionModal";
+import { QuestionClassifier } from "./ai/QuestionClassifier";
+import { QuestionGraphManager } from "./features/question/QuestionGraphManager";
+import { DeepSeekClient } from "./ai/DeepSeekClient";
+import { VaultWriter } from "./vault/VaultWriter";
+import { QuestionModal } from "./features/question/QuestionModal";
+import { QuestionClassifyModal } from "./features/question/QuestionClassifyModal";
+import { KnowledgeDebtModal } from "./features/dashboard/KnowledgeDebtModal";
+import { SCHEMA_VERSION, todayIso } from "./core/schema";
+import { KnowledgeIndexService } from "./core/knowledge";
+import { PlanBuilder } from "./core/execution";
+import { PlanExecutor } from "./core/execution";
 
 export default class DeepSeekPlugin extends Plugin {
-  settings: DeepSeekSettings;
+  settings!: DeepSeekSettings;
+  /** In-memory vault knowledge index, rebuilt on load, updated incrementally. */
+  knowledgeIndex!: KnowledgeIndexService;
 
   async onload() {
     await this.loadSettings();
+
+    // Build knowledge index
+    this.knowledgeIndex = new KnowledgeIndexService(this.app);
+    this.app.workspace.onLayoutReady(() => {
+      this.knowledgeIndex.rebuild();
+    });
+    // Incremental updates
+    this.registerEvent(
+      this.app.metadataCache.on("changed", (file) => {
+        this.knowledgeIndex.updateFile(file);
+      })
+    );
+    this.registerEvent(
+      this.app.vault.on("delete", (file) => {
+        this.knowledgeIndex.removeFile(file.path);
+      })
+    );
+    this.registerEvent(
+      this.app.vault.on("rename", (file, oldPath) => {
+        this.knowledgeIndex.removeFile(oldPath);
+        if (file instanceof TFile) this.knowledgeIndex.updateFile(file);
+      })
+    );
+
     this.registerView(SYNC_VIEW_TYPE, (leaf) => new BaiduSyncView(leaf, this));
     this.addRibbonIcon("cloud", "Baidu cloud sync", () => { void this.activateSyncView(); });
     this.addSettingTab(new DeepSeekSettingsTab(this.app, this));
@@ -185,9 +225,18 @@ export default class DeepSeekPlugin extends Plugin {
       new Notice(`✅ 已追加到概念页：${name}`);
       const leaf = this.app.workspace.getLeaf(false);
       await leaf.openFile(existing);
+    } else if (existing) {
+      // 路径被非 markdown 文件占用，安全降级：换名
+      const altPath = await this.findFreePath(uncategorizedPath, name);
+      const today = todayIso();
+      const fullContent = `---\ntype: concept\nschema_version: ${SCHEMA_VERSION}\nname: ${name}\nstatus: completed\ncreated_from: ai-assistant\nsource: "[[${sourcePath}]]"\ncreated_at: ${today}\n---\n\n# ${name}\n\n${content}${sourceLink}`;
+      const file = await this.app.vault.create(altPath, fullContent);
+      new Notice(`✅ 已创建概念页：${file.basename}（原路径被占用，已自动换名）`);
+      const leaf = this.app.workspace.getLeaf(false);
+      await leaf.openFile(file);
     } else {
-      const today = new Date().toISOString().slice(0, 10);
-      const fullContent = `---\ntype: concept\nname: ${name}\nstatus: completed\ncreated_from: ai-assistant\nsource: "[[${sourcePath}]]"\ncreated_at: ${today}\n---\n\n# ${name}\n\n${content}${sourceLink}`;
+      const today = todayIso();
+      const fullContent = `---\ntype: concept\nschema_version: ${SCHEMA_VERSION}\nname: ${name}\nstatus: completed\ncreated_from: ai-assistant\nsource: "[[${sourcePath}]]"\ncreated_at: ${today}\n---\n\n# ${name}\n\n${content}${sourceLink}`;
       const file = await this.app.vault.create(filePath, fullContent);
       new Notice(`✅ 已创建概念页：${name}（原文已建立链接）`);
       const leaf = this.app.workspace.getLeaf(false);
@@ -200,6 +249,17 @@ export default class DeepSeekPlugin extends Plugin {
 
   private escapeRegex(str: string): string {
     return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  /** 找一个未被占用的概念页路径（追加 -2、-3 ...） */
+  private async findFreePath(folder: string, baseName: string): Promise<string> {
+    let candidate = normalizePath(`${folder}/${baseName}.md`);
+    let suffix = 2;
+    while (this.app.vault.getAbstractFileByPath(candidate)) {
+      candidate = normalizePath(`${folder}/${baseName}-${suffix}.md`);
+      suffix++;
+    }
+    return candidate;
   }
 
   /** 扫描内容中の [[双链]]，为不存在的概念自动创建页面 */
@@ -233,15 +293,290 @@ export default class DeepSeekPlugin extends Plugin {
       const filePath = normalizePath(`${uncategorizedPath}/${concept}.md`);
       if (this.app.vault.getAbstractFileByPath(filePath)) continue;
 
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayIso();
       await this.app.vault.create(filePath,
-        `---\ntype: concept\nname: ${concept}\nstatus: empty\ncompletion_status: pending\ncreated_from: ai-assistant\ncreated_at: ${today}\n---\n\n# ${concept}\n\n## 定义\n\n## 核心解释\n\n## 示例\n\n## 关联概念\n\n## 相关问题\n`
+        `---\ntype: concept\nschema_version: ${SCHEMA_VERSION}\nname: ${concept}\nstatus: empty\ncompletion_status: pending\ncreated_from: ai-assistant\ncreated_at: ${today}\n---\n\n# ${concept}\n\n## 定义\n\n## 核心解释\n\n## 示例\n\n## 关联概念\n\n## 相关问题\n`
       );
       created++;
     }
 
     if (created > 0) {
       new Notice(`📝 已创建 ${created} 个新概念页`);
+    }
+  }
+
+  // ── 概念页补全 ─────────────────────────────────────────────
+
+  /** 补全当前打开的概念页 */
+  openCompleteCurrentConcept() {
+    const manager = new ConceptPageManager(this.app, this.settings);
+    void (async () => {
+      const info = await manager.analyzeCurrentFile();
+      if (!info) { new Notice("当前文件不是概念页"); return; }
+      if (!info.isEmpty) { new Notice(`概念页"${info.conceptName}"已有内容，无需补全`); return; }
+
+      new DepthSelectModal(this.app, info.conceptName, (depth) => {
+        void this.runConceptCompletion(info.file, info.conceptName, depth, {
+          sourceQuestion: info.sourceQuestion,
+          sourceAnswer: info.sourceAnswer,
+        });
+      }).open();
+    })();
+  }
+
+  /** 扫描所有空概念页并批量补全 */
+  openScanEmptyConcepts() {
+    const manager = new ConceptPageManager(this.app, this.settings);
+    void (async () => {
+      const notice = new Notice("⏳ 扫描空概念页...", 0);
+      const emptyConcepts = await manager.scanEmptyConcepts();
+      notice.hide();
+
+      const items = emptyConcepts.map((c) => ({ name: c.conceptName, path: c.file.path }));
+      new BatchScanModal(this.app, items, (selectedPaths, depth) => {
+        void this.batchCompleteConcepts(selectedPaths, depth);
+      }).open();
+    })();
+  }
+
+  private async runConceptCompletion(
+    file: TFile,
+    conceptName: string,
+    depth: CompletionDepth,
+    context: { sourceQuestion?: string; sourceAnswer?: string }
+  ) {
+    const notice = new Notice(`⏳ 正在补全"${conceptName}"...`, 0);
+    try {
+      const completer = new ConceptCompleter(this.settings);
+      const relatedConcepts = this.getKnownConcepts().filter((c) => c !== conceptName).slice(0, 10);
+      const result = await completer.complete(conceptName, depth, {
+        ...context,
+        relatedConcepts,
+      });
+      notice.hide();
+
+      const manager = new ConceptPageManager(this.app, this.settings);
+      const previewMd = manager.buildPreviewMarkdown(result, depth);
+
+      new PreviewModal(
+        this.app,
+        conceptName,
+        previewMd,
+        () => {
+          void (async () => {
+            await manager.writeCompletion(file, result, depth);
+            new Notice(`✅ 概念页"${conceptName}"补全完成`);
+          })();
+        },
+        () => { void this.runConceptCompletion(file, conceptName, depth, context); }
+      ).open();
+    } catch (err) {
+      notice.hide();
+      new Notice(`❌ 补全失败：${(err as Error).message}`);
+    }
+  }
+
+  private async batchCompleteConcepts(paths: string[], depth: CompletionDepth) {
+    const manager = new ConceptPageManager(this.app, this.settings);
+    let done = 0;
+    const total = paths.length;
+
+    for (const path of paths) {
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (!file || !(file instanceof TFile)) continue;
+
+      const info = await manager.analyzeFile(file);
+      if (!info || !info.isEmpty) continue;
+
+      const notice = new Notice(`⏳ (${done + 1}/${total}) 补全"${info.conceptName}"...`, 0);
+      try {
+        const completer = new ConceptCompleter(this.settings);
+        const relatedConcepts = this.getKnownConcepts().filter((c) => c !== info.conceptName).slice(0, 10);
+        const result = await completer.complete(info.conceptName, depth, {
+          sourceQuestion: info.sourceQuestion,
+          sourceAnswer: info.sourceAnswer,
+          relatedConcepts,
+        });
+        await manager.writeCompletion(file, result, depth);
+        done++;
+        notice.hide();
+      } catch (err) {
+        notice.hide();
+        new Notice(`❌ "${info.conceptName}"补全失败：${(err as Error).message}`);
+      }
+    }
+
+    new Notice(`✅ 批量补全完成：${done}/${total}`);
+  }
+
+  // ── 知识提问（带问题图谱） ─────────────────────────────────
+
+  /** 提问入口：问题分类 → Q&A 生成 → 图谱更新 */
+  openQuestionWithGraph() {
+    new QuestionModal(this.app, (question) => {
+      void this.askWithGraph(question);
+    }).open();
+  }
+
+  private async askWithGraph(question: string) {
+    const notice = new Notice("⏳ AI 思考中...", 0);
+    try {
+      // 1. 问题分类
+      const graphManager = new QuestionGraphManager(this.app, this.settings);
+      const history = graphManager.getQuestionHistory();
+      const classifier = new QuestionClassifier(this.settings);
+      const classification = await classifier.classify(question, history);
+
+      notice.hide();
+
+      // 2. 让用户确认/修改分类
+      new QuestionClassifyModal(this.app, question, classification, (finalClassification) => {
+        void this.generateQAWithGraph(question, finalClassification);
+      }).open();
+    } catch (err) {
+      notice.hide();
+      new Notice(`❌ ${(err as Error).message}`);
+    }
+  }
+
+  private async generateQAWithGraph(question: string, classification: import("./types").QuestionClassification) {
+    const notice = new Notice("⏳ 生成 Q&A 笔记...", 0);
+    try {
+      // 1. 调用 DeepSeek 获取答案
+      const client = new DeepSeekClient(this.settings);
+      const response = await client.ask(question);
+
+      // 2. 写入 Q&A 笔记
+      const writer = new VaultWriter(this.app, this.settings);
+      const file = await writer.writeQANote(question, response);
+
+      // 3. 附加分类 frontmatter
+      const graphManager = new QuestionGraphManager(this.app, this.settings);
+      await graphManager.attachClassification(file, question, classification, response.concepts);
+
+      // 4. 更新问题索引
+      await graphManager.updateQuestionIndex(question, classification, file.path);
+
+      // 5. 追加推荐问题
+      await graphManager.appendRecommendations(file, classification);
+
+      notice.hide();
+      new Notice(`✅ 已生成 Q&A：${question.slice(0, 30)}...`);
+
+      // 打开生成的笔记
+      const leaf = this.app.workspace.getLeaf(false);
+      await leaf.openFile(file);
+    } catch (err) {
+      notice.hide();
+      new Notice(`❌ ${(err as Error).message}`);
+    }
+  }
+
+  // ── 知识债务看板 ─────────────────────────────────────────────
+
+  openKnowledgeDebt() {
+    new KnowledgeDebtModal(this.app, this.knowledgeIndex, (actionId, entries) => {
+      if (actionId === "complete-concepts") {
+        const paths = entries.map((e) => e.path).slice(0, 5);
+        void this.batchCompleteConcepts(paths, "standard");
+      }
+      // future: classify-questions
+    }).open();
+  }
+
+  // ── 知识库问答（带来源引用） ─────────────────────────────────
+
+  /**
+   * "Ask your vault" — uses KnowledgeIndex to find relevant notes,
+   * then sends them as context so the AI can answer with source references.
+   */
+  openVaultQA() {
+    const editor = this.app.workspace.activeEditor?.editor ?? null;
+    const selection = editor?.getSelection().trim() ?? "";
+    const activeFile = this.app.workspace.getActiveFile();
+    const contextHint = selection
+      ? `📎 已选中 ${selection.length} 字`
+      : activeFile
+      ? `📄 ${activeFile.basename}`
+      : "";
+
+    new AssistantInputModal(this.app, `[知识库问答] ${contextHint}`, (instruction) => {
+      void this.runVaultQA(instruction, selection, activeFile);
+    }).open();
+  }
+
+  private async runVaultQA(question: string, selection: string, activeFile: TFile | null) {
+    const notice = new Notice("⏳ 检索知识库并生成回答...", 0);
+    const currentEditor = this.app.workspace.activeEditor?.editor ?? null;
+    try {
+      // 1. Search index for relevant entries
+      const results = this.knowledgeIndex.search(question, {
+        limit: 8,
+        contextFile: activeFile?.path,
+      });
+
+      // 2. Build context from retrieved entries
+      const contextParts: string[] = [];
+      const sourceFiles: { path: string; title: string }[] = [];
+
+      for (const { entry } of results) {
+        const file = this.app.vault.getAbstractFileByPath(entry.path);
+        if (!file || !(file instanceof TFile)) continue;
+
+        const content = await this.app.vault.cachedRead(file);
+        // Take first 600 chars per file to keep context manageable
+        const snippet = content.slice(0, 600).trim();
+        contextParts.push(`--- 来源：[[${entry.basename}]] (${entry.type ?? "note"}) ---\n${snippet}`);
+        sourceFiles.push({ path: entry.path, title: entry.title });
+      }
+
+      const knowledgeContext = contextParts.join("\n\n");
+
+      // 3. Build prompt that instructs citing sources
+      const systemPrompt = `你是一个基于用户个人知识库的问答助手。以下是从用户知识库中检索到的相关笔记片段。请基于这些内容回答问题，并在回答中引用来源（使用 [[笔记名]] 双链格式）。
+
+如果知识库内容不足以回答，你可以补充通用知识，但必须标注哪些是来自知识库、哪些是模型推断。
+
+检索到的知识库内容：
+${knowledgeContext}
+
+${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
+
+      const userPrompt = question;
+
+      // 4. Call AI
+      const { LLMClient } = await import("./core/llm");
+      const llm = new LLMClient(this.settings);
+      const raw = await llm.chat({ systemPrompt, userPrompt, temperature: 0.5 });
+
+      // 5. Post-process: beautify + auto-link
+      const knownConcepts = this.getKnownConcepts();
+      const style = this.settings.outputStyle ?? "knowledge-base";
+      const assistant = new AIAssistant(this.settings, style, knownConcepts);
+      const beautified = assistant.beautifyContent(raw);
+
+      // 6. Append source section
+      const sourcesSection = sourceFiles.length > 0
+        ? `\n\n---\n\n## 依据来源\n\n${sourceFiles.map((s) => `- [[${s.title}]]`).join("\n")}\n`
+        : "";
+      const finalContent = beautified + sourcesSection;
+
+      notice.hide();
+
+      new AssistantResultModal(
+        this.app,
+        { mode: "show", content: finalContent, explanation: `知识库问答（引用 ${sourceFiles.length} 篇笔记）` },
+        () => {
+          if (!currentEditor) { new Notice("无法写入：编辑器不可用"); return; }
+          const cursor = currentEditor.getCursor();
+          currentEditor.replaceRange("\n" + finalContent + "\n", cursor);
+          new Notice("✅ 已插入");
+        },
+        () => { void this.runVaultQA(question, selection, activeFile); }
+      ).open();
+    } catch (err) {
+      notice.hide();
+      new Notice(`❌ ${(err as Error).message}`);
     }
   }
 

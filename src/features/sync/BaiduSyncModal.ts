@@ -33,7 +33,7 @@ export class BaiduSyncModal extends Modal {
           .addOption("restore", "仅从百度云恢复")
           .addOption("force-restore", "⚠️ 强制覆盖本地（以云端为准）")
           .setValue(this.mode)
-          .onChange((v: SyncMode) => { this.mode = v; this.refresh(); })
+          .onChange((v: string) => { this.mode = v as SyncMode; this.refresh(); })
       );
 
     new Setting(contentEl)
@@ -56,7 +56,7 @@ export class BaiduSyncModal extends Modal {
             .addOption("local", "以本地为准")
             .addOption("remote", "以远端为准")
             .setValue(this.conflictStrategy)
-            .onChange((v: ConflictStrategy) => (this.conflictStrategy = v))
+            .onChange((v: string) => (this.conflictStrategy = v as ConflictStrategy))
         );
 
       new Setting(contentEl)

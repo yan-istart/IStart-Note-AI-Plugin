@@ -18,7 +18,7 @@ const QUICK_TAGS = [
  */
 export class AssistantInputModal extends Modal {
   private instruction = "";
-  private inputEl: HTMLTextAreaElement;
+  private inputEl!: HTMLTextAreaElement;
 
   constructor(
     app: App,
