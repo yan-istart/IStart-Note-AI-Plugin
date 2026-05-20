@@ -1,24 +1,46 @@
 {
   "name": "istart-note-ai",
-  "version": "1.8.3",
-  "description": "IStart-Note-AI: DeepSeek-powered knowledge graph plugin for Obsidian",
+  "version": "1.9.0",
+  "description": "IStart-Note-AI: an Obsidian plugin that turns notes into a structured personal knowledge system, powered by DeepSeek and other OpenAI-compatible LLMs.",
   "main": "main.js",
+  "private": true,
   "scripts": {
     "dev": "node esbuild.config.mjs",
-    "build": "tsc -noEmit -skipLibCheck && node esbuild.config.mjs production",
+    "typecheck": "tsc -noEmit -skipLibCheck",
+    "build": "npm run typecheck && node esbuild.config.mjs production",
+    "test": "echo \"no tests yet — see CONTRIBUTING.md for the planned vitest setup\" && exit 0",
+    "ci": "npm run typecheck && npm run build",
     "version": "node scripts/version-bump.mjs && git add manifest.json versions.json",
     "release": "bash scripts/release.sh",
     "submit": "bash scripts/submit-plugin.sh"
   },
-  "keywords": [],
-  "author": "",
+  "keywords": [
+    "obsidian",
+    "obsidian-plugin",
+    "ai",
+    "deepseek",
+    "knowledge-management",
+    "knowledge-graph",
+    "personal-knowledge-management",
+    "pkm",
+    "notes"
+  ],
+  "author": "Yan",
   "license": "MIT",
+  "homepage": "https://github.com/yan-istart/IStart-Note-AI-Plugin#readme",
+  "bugs": {
+    "url": "https://github.com/yan-istart/IStart-Note-AI-Plugin/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yan-istart/IStart-Note-AI-Plugin.git"
+  },
   "devDependencies": {
     "@types/node": "^16.11.6",
     "@typescript-eslint/eslint-plugin": "5.29.0",
     "@typescript-eslint/parser": "5.29.0",
     "esbuild": "0.17.3",
-    "obsidian": "latest",
+    "obsidian": "^1.7.2",
     "tslib": "2.4.0",
     "typescript": "4.7.4"
   }
