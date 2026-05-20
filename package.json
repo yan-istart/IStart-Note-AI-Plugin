@@ -1,6 +1,6 @@
 {
   "name": "istart-note-ai",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "description": "IStart-Note-AI: an Obsidian plugin that turns notes into a structured personal knowledge system, powered by DeepSeek and other OpenAI-compatible LLMs.",
   "main": "main.js",
   "private": true,
