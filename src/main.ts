@@ -682,6 +682,131 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
       .map((f) => f.basename);
   }
 
+  // ── 执行模块入口 ───────────────────────────────────────────────
+
+  /** 打开待确认计划列表 */
+  openPendingPlans() {
+    const folder = "Knowledge/_ExecutionPlans";
+    const files = this.app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(folder));
+    if (files.length === 0) {
+      new Notice("暂无待确认计划");
+      return;
+    }
+    // Open the folder in file explorer, or open the most recent plan
+    const sorted = files.sort((a, b) => b.stat.mtime - a.stat.mtime);
+    const leaf = this.app.workspace.getLeaf(false);
+    void leaf.openFile(sorted[0]);
+    if (files.length > 1) {
+      new Notice(`共 ${files.length} 个待确认计划，已打开最新`);
+    }
+  }
+
+  /** 打开执行日志列表 */
+  openExecutionLogs() {
+    const folder = "Knowledge/_Executions";
+    const files = this.app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(folder));
+    if (files.length === 0) {
+      new Notice("暂无执行日志");
+      return;
+    }
+    const sorted = files.sort((a, b) => b.stat.mtime - a.stat.mtime);
+    const leaf = this.app.workspace.getLeaf(false);
+    void leaf.openFile(sorted[0]);
+    if (files.length > 1) {
+      new Notice(`共 ${files.length} 条执行记录，已打开最新`);
+    }
+  }
+
+  /** 查看定时任务状态 */
+  openScheduledTasks() {
+    new Notice("定时任务运行时在 v2.0 默认关闭，将在 v2.1 通过设置页启用。");
+  }
+
+  /** 从当前笔记生成执行计划（MVP：简单 prompt） */
+  openGeneratePlan() {
+    const editor = this.app.workspace.activeEditor?.editor ?? null;
+    const activeFile = this.app.workspace.getActiveFile();
+    if (!editor || !activeFile) {
+      new Notice("请先打开一个文件");
+      return;
+    }
+    const content = editor.getValue();
+    if (!content.trim()) {
+      new Notice("文档为空");
+      return;
+    }
+
+    new AssistantInputModal(this.app, `📋 从当前笔记生成执行计划`, (instruction) => {
+      void this.runGeneratePlan(instruction, content, activeFile);
+    }).open();
+  }
+
+  private async runGeneratePlan(instruction: string, noteContent: string, sourceFile: TFile) {
+    const notice = new Notice("⏳ AI 正在生成执行计划...", 0);
+    try {
+      const { LLMClient } = await import("./core/llm");
+      const llm = new LLMClient(this.settings);
+
+      const systemPrompt = `你是一个任务规划助手。用户会给你一篇笔记内容和一条指令，请从中提取可执行的行动项，按以下 JSON 格式返回：
+{
+  "title": "计划标题",
+  "tasks": [
+    { "action": "create-file | append-section | create-link", "target": "目标文件路径或章节", "content": "内容" }
+  ]
+}
+规则：
+1. 只生成具体、可在 Obsidian 中执行的操作。
+2. target 使用 Obsidian 相对路径。
+3. 如果不确定，宁可少生成也不要编造。`;
+
+      const userPrompt = `笔记：${sourceFile.basename}\n\n内容：\n${noteContent.slice(0, 2000)}\n\n指令：${instruction}`;
+
+      const raw = await llm.chat({ systemPrompt, userPrompt, temperature: 0.4 });
+      notice.hide();
+
+      // Parse and create a draft plan
+      const { parseJsonSafe } = await import("./core/llm");
+      const parsed = parseJsonSafe<{ title?: string; tasks?: { action?: string; target?: string; content?: string }[] } | null>(raw, null);
+
+      if (!parsed || !parsed.tasks || parsed.tasks.length === 0) {
+        new Notice("AI 未能从当前笔记提取出可执行计划");
+        return;
+      }
+
+      const { PlanBuilder } = await import("./core/execution");
+      const { PlanDraftStore } = await import("./core/execution");
+      const builder = new PlanBuilder(parsed.title || instruction.slice(0, 40), "assistant");
+
+      for (const task of parsed.tasks) {
+        if (!task.target || !task.content) continue;
+        switch (task.action) {
+          case "create-file":
+            builder.createFile(task.target, task.content);
+            break;
+          case "append-section":
+            builder.appendSection(task.target, "行动项", task.content);
+            break;
+          case "create-link":
+            builder.createLink(sourceFile.path, task.target);
+            break;
+          default:
+            builder.appendSection(task.target || sourceFile.path, "行动项", task.content);
+        }
+      }
+
+      const plan = builder.build();
+      const store = new PlanDraftStore(this.app);
+      const draftFile = await store.persistDraft(plan);
+
+      new Notice(`✅ 执行计划已生成（${plan.operations.length} 项操作），请审阅后确认`);
+      const leaf = this.app.workspace.getLeaf(false);
+      await leaf.openFile(draftFile);
+    } catch (err) {
+      notice.hide();
+      new Notice(`❌ ${(err as Error).message}`);
+    }
+  }
+
   // ── 定时任务 ─────────────────────────────────────────────────
 
   private startScheduler(): void {

@@ -104,7 +104,7 @@ function openPanel(plugin: DeepSeekPlugin, actions: ActionDef[]) {
   // Add pinned as first "group" with a special title
   if (pinnedAction && evaluateWhen(pinnedAction.when, ctx)) {
     groups.push({
-      title: "⭐ 入口",
+      title: "入口",
       actions: [{
         id: pinnedAction.id,
         icon: pinnedAction.icon,

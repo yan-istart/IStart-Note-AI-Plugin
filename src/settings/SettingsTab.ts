@@ -34,17 +34,17 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
   }
 
   private renderNav(container: HTMLElement): void {
-    const sections: { id: SettingsSection; label: string; icon: string }[] = [
-      { id: "knowledge", label: "知识", icon: "📚" },
-      { id: "execution", label: "执行", icon: "⚡" },
-      { id: "auxiliary", label: "辅助", icon: "🔧" },
+    const sections: { id: SettingsSection; label: string }[] = [
+      { id: "knowledge", label: "知识" },
+      { id: "execution", label: "执行" },
+      { id: "auxiliary", label: "辅助" },
     ];
 
     for (const sec of sections) {
       const item = container.createDiv({
         cls: `istart-settings-nav-item${this.activeSection === sec.id ? " is-active" : ""}`,
       });
-      item.setText(`${sec.icon} ${sec.label}`);
+      item.setText(sec.label);
       item.addEventListener("click", () => {
         this.activeSection = sec.id;
         this.display();

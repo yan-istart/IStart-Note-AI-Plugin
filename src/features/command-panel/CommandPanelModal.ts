@@ -1,4 +1,4 @@
-import { App, Modal, TFile } from "obsidian";
+import { App, Modal, setIcon, TFile } from "obsidian";
 
 export interface PanelAction {
   id: string;
@@ -39,9 +39,9 @@ export class CommandPanelModal extends Modal {
 
       for (const action of group.actions) {
         const row = groupEl.createDiv({ cls: "istart-panel-action" });
-        const currentIndex = shortcutIndex;
 
-        row.createSpan({ text: `${action.icon}`, cls: "istart-panel-action-icon" });
+        const iconEl = row.createSpan({ cls: "istart-panel-action-icon" });
+        setIcon(iconEl, action.icon);
 
         const textEl = row.createDiv({ cls: "istart-panel-action-text" });
         textEl.createEl("span", { text: action.label, cls: "istart-panel-action-label" });
