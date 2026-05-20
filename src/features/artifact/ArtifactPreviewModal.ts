@@ -34,6 +34,12 @@ export class ArtifactPreviewModal extends Modal {
     if (stats.inferred > 0) statsEl.createSpan({ text: `AI 推断：${stats.inferred}`, attr: { style: "color: var(--text-warning);" } });
     if (stats.highRisk > 0) statsEl.createSpan({ text: `高关注：${stats.highRisk}`, attr: { style: "color: var(--text-error);" } });
 
+    // File impact notice
+    contentEl.createEl("p", {
+      text: `保存后将创建 1-2 个文件（模板 + 可选的今日记录）`,
+      attr: { style: "font-size: 12px; color: var(--text-muted); margin-bottom: 8px;" },
+    });
+
     // Warnings
     if (this.validation.warnings.length > 0) {
       const warnEl = contentEl.createDiv({ attr: { style: "margin-bottom: 12px;" } });

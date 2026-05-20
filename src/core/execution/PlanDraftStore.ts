@@ -63,6 +63,12 @@ ${ops}
 ## 预览
 
 ${plan.previewMarkdown}
+
+## Raw Plan
+
+\`\`\`json
+${JSON.stringify(plan, null, 2)}
+\`\`\`
 `;
   }
 

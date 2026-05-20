@@ -75,8 +75,9 @@ Keep the system usable across devices and providers.
 | Knowledge | Question Graph | Experimental | Classification + index + Mermaid evolution graph |
 | Knowledge | Vault QA | Experimental | Metadata-index retrieval, cited answers, no embeddings |
 | Knowledge | Knowledge Debt | Experimental | Dashboard with empty/orphan/unfinished/stale stats |
-| Execution | Execution Plan | Experimental | PlanBuilder + PlanExecutor, no rollback yet |
-| Execution | Scheduled Tasks | Planned | Scheduler types defined, runner in progress |
+| Execution | Execution Plan | Experimental | PlanBuilder + PlanExecutor + PlanDraftStore, no rollback yet |
+| Execution | Execution Artifact Builder | Experimental | Generic checklist/routine/SOP/plan/review generator from any knowledge context |
+| Execution | Scheduled Tasks | Foundation | Types + runner exist; runtime disabled by default in v2.0 |
 | Auxiliary | Baidu Sync | Stable | Manual/auto backup and config sync |
 | Auxiliary | Multi-provider LLM | Partial | OpenAI-compatible base URL supported |
 
