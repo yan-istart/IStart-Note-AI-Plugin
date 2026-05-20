@@ -1,5 +1,62 @@
 /* IStart-Note-AI Plugin Styles */
 
+/* ── Settings Page Layout ────────────────────────── */
+
+.istart-settings-layout {
+  display: grid;
+  grid-template-columns: 160px minmax(0, 1fr);
+  gap: 20px;
+}
+
+.istart-settings-sidebar {
+  border-right: 1px solid var(--background-modifier-border);
+  padding-right: 12px;
+}
+
+.istart-settings-content {
+  min-width: 0;
+}
+
+.istart-settings-nav-item {
+  display: block;
+  width: 100%;
+  padding: 8px 10px;
+  border-radius: 6px;
+  color: var(--text-normal);
+  cursor: pointer;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.istart-settings-nav-item:hover {
+  background: var(--background-modifier-hover);
+}
+
+.istart-settings-nav-item.is-active {
+  background: var(--background-modifier-hover);
+  color: var(--text-accent);
+  font-weight: 600;
+}
+
+@media (max-width: 700px) {
+  .istart-settings-layout {
+    display: block;
+  }
+  .istart-settings-sidebar {
+    border-right: none;
+    border-bottom: 1px solid var(--background-modifier-border);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    display: flex;
+    gap: 4px;
+    flex-wrap: wrap;
+  }
+  .istart-settings-nav-item {
+    display: inline-block;
+    width: auto;
+  }
+}
+
 /* ── Baidu Sync View ─────────────────────────────── */
 
 .istart-sync-root {

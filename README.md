@@ -1,125 +1,127 @@
 # IStart-Note-AI
 
-> [!warning] Beta software
-> IStart-Note-AI is under active development. Features marked **experimental** below may change or be removed without notice. The data model and frontmatter schema are not yet stable; back up your vault before trying new features.
+<p align="center">
+  <strong>Turn your Obsidian vault into a knowledge-to-action system.</strong>
+</p>
 
-[简体中文 README →](./README.zh-CN.md)
+<p align="center">
+  <a href="./README.zh-CN.md">简体中文</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#privacy">Privacy</a> ·
+  <a href="#roadmap">Roadmap</a>
+</p>
 
-An Obsidian plugin that turns your notes into a structured personal knowledge system. One unified AI assistant helps you draft, expand, and organize notes, with automatic concept pages, bidirectional links, reading projects, and optional Baidu Cloud sync.
-
-The plugin is built around an OpenAI-compatible chat completions API. The default provider is [DeepSeek](https://platform.deepseek.com); other compatible endpoints work by changing the Base URL.
-
----
-
-## Status overview
-
-| Feature | Status | Notes |
-| --- | --- | --- |
-| AI Assistant (insert / replace / append / show) | stable | Single command panel entry, content classifier + structured prompt + markdown beautifier |
-| Reading projects | stable | Generate skeleton, chapter pre-reading questions, summaries, Feynman tests |
-| Baidu Cloud sync (notes + plugin config) | stable | Manual and auto modes, conflict strategy, plugin/Obsidian config backup |
-| Document beautification | stable | Restructures headings, adds callouts and Mermaid diagrams |
-| Concept pages auto-creation | stable | Empty pages created via `[[concept]]` link scan |
-| Concept page completion (`ConceptCompleter`) | experimental | Internals exist; not exposed in the unified panel yet |
-| Question graph (`QuestionGraphManager`) | experimental | Frontmatter classification + Mermaid evolution graph; not yet wired into the panel |
-| Vault-wide knowledge retrieval | not yet | Planned for v2 |
-| Execution plan / preview / rollback | not yet | Planned for v3 |
+<p align="center">
+  <img alt="Version" src="https://img.shields.io/github/v/release/yan-istart/IStart-Note-AI-Plugin?include_prereleases">
+  <img alt="License" src="https://img.shields.io/github/license/yan-istart/IStart-Note-AI-Plugin">
+  <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/yan-istart/IStart-Note-AI-Plugin/ci.yml?branch=main">
+  <img alt="Obsidian" src="https://img.shields.io/badge/Obsidian-1.7.2%2B-7C3AED">
+</p>
 
 ---
 
-## Features
+IStart-Note-AI is an Obsidian plugin built around three modules — **Knowledge**, **Execution**, and **Auxiliary** — that help you turn scattered notes into a searchable, interlinked, and actionable personal knowledge system.
 
-### AI Assistant (unified entry)
+One unified AI entry point connects all three: ask questions, generate structured notes, build execution plans, and keep everything synced — all through natural language.
 
-Select text or place your cursor, then describe what you want in natural language:
-
-- **Expand / rewrite** selected text
-- **Explain** a term
-- **Generate diagrams** (flowchart, sequence, state, class, ER, Gantt) and LaTeX formulas
-- **Fill empty sections** based on document context
-- **Continue writing** from the cursor
-- **Summarize** the current document
-- **Beautify** existing content with callouts, links, and visual breaks
-
-Quick tags work too: `[扩写]` `[解释]` `[画图]` `[补全]` `[续写]` `[总结]` `[公式]` `[时序图]`.
-
-### Structured output
-
-Model output is post-processed for knowledge-base style: short paragraphs, Obsidian callouts (`> [!summary]`, `> [!warning]`, `> [!tip]`), Mermaid diagrams where appropriate, and automatic `[[concept]]` linking against existing pages. The output style is configurable: technical, minimal, academic, product, story, dashboard.
-
-### Reading projects
-
-Turn any book into a structured study plan:
-
-1. Enter book title (and optionally a table of contents).
-2. The plugin generates a reading roadmap, chapter relationships, and pre-reading questions.
-3. Take notes per chapter, then generate chapter summaries and Feynman tests.
-
-### Knowledge organization
-
-- New concepts captured under `Knowledge/Concepts/_未分类/`.
-- After completion, concepts are reorganized into domain subfolders.
-- Domain MOC index pages are generated with Mermaid overview graphs.
-- Question evolution graphs live in the question index.
-
-### Baidu Cloud sync (optional)
-
-- Incremental backup, bidirectional sync, or force overwrite.
-- Optional backup of the plugin itself and Obsidian config (toolbar, hotkeys, appearance).
-- Optional auto-backup after note generation.
-
-> [!info] Privacy
-> AI features send your selection and parts of the active note to the configured chat-completions endpoint. Sync features upload selected notes (and optionally Obsidian config) to your own Baidu Pan storage. See [PRIVACY.md](./PRIVACY.md) for the full data flow.
+> [!warning] Beta
+> v2.0.0 introduces significant architectural changes. The frontmatter schema and scheduled-task model are not yet stable. Back up your vault before upgrading.
 
 ---
 
-## Requirements
+## Core Modules
 
-- Obsidian 1.7.2 or later.
-- A DeepSeek API key (or any OpenAI-compatible endpoint).
-- Baidu Cloud sync (optional): a Baidu Pan App ID and App Secret.
+### 1. Knowledge
+
+Build and maintain a structured knowledge base.
+
+- **Ask questions** and generate Q&A notes with automatic concept extraction.
+- **Classify questions** into new / refinement / expansion and maintain a question evolution graph.
+- **Create and complete concept pages** with definitions, examples, relations, and domain MOC indexes.
+- **Build reading projects** — generate a book skeleton, chapter pre-reading questions, summaries, and Feynman tests.
+- **Search your vault** and get answers with `[[source]]` references (metadata-based index, no embeddings).
+- **Detect knowledge debt** — empty concepts, orphan questions, unfinished readings, stale drafts.
+
+### 2. Execution
+
+Turn knowledge into reviewable actions.
+
+- **Generate execution plans** from notes — preview all vault modifications before applying.
+- **Record execution logs** under `Knowledge/_Executions/` with full operation details.
+- **Scheduled tasks** (MVP) — periodic knowledge-debt scans and backup jobs.
+- **Safety by default** — AI-generated writes require confirmation; batch ops capped; high-risk plans force double-confirm.
+- Future: diff preview, rollback, task-plugin integrations.
+
+### 3. Auxiliary
+
+Keep the system usable across devices and providers.
+
+- **OpenAI-compatible LLM provider** — DeepSeek default; change Base URL for others.
+- **Configurable output styles** — knowledge-base, technical, minimal, product, academic, story, dashboard.
+- **Optional Baidu Cloud sync** — incremental backup, bidirectional sync, plugin and Obsidian config backup.
+- **Diagnostics** — privacy overview, config export, index rebuild, log cleanup.
+
+---
+
+## Status
+
+| Module | Feature | Status | Notes |
+| --- | --- | --- | --- |
+| Knowledge | AI Assistant | Stable | Insert / replace / append / show via unified entry |
+| Knowledge | Reading Projects | Stable | Skeleton, chapter questions, summaries, Feynman |
+| Knowledge | Concept Completion | Experimental | Exposed in command panel, preview before write |
+| Knowledge | Question Graph | Experimental | Classification + index + Mermaid evolution graph |
+| Knowledge | Vault QA | Experimental | Metadata-index retrieval, cited answers, no embeddings |
+| Knowledge | Knowledge Debt | Experimental | Dashboard with empty/orphan/unfinished/stale stats |
+| Execution | Execution Plan | Experimental | PlanBuilder + PlanExecutor, no rollback yet |
+| Execution | Scheduled Tasks | Planned | Scheduler types defined, runner in progress |
+| Auxiliary | Baidu Sync | Stable | Manual/auto backup and config sync |
+| Auxiliary | Multi-provider LLM | Partial | OpenAI-compatible base URL supported |
+
+---
+
+## Quick Start
+
+1. Install the plugin (see [Installation](#installation)).
+2. Go to **Settings → IStart-Note-AI → Auxiliary → AI Service** and enter your API key.
+3. Click the 🧠 ribbon icon or press the command palette → **IStart-Note-AI: AI 助手**.
+4. Type a request in natural language.
 
 ---
 
 ## Installation
 
-### From community plugins (preferred)
-
-Submission to the community plugin store is in progress. Once available:
+### From community plugins (once available)
 
 1. Settings → Community plugins → Browse.
 2. Search **IStart-Note-AI**.
 3. Install → Enable.
 
-### Manual install (recommended path during beta)
+### Manual (recommended during beta)
 
-Download the assets from a published [GitHub Release](https://github.com/yan-istart/IStart-Note-AI-Plugin/releases) — `main.js`, `manifest.json`, `styles.css` — and place them under `<your-vault>/.obsidian/plugins/istart-note-ai/`.
+Download `main.js`, `manifest.json`, `styles.css` from a [GitHub Release](https://github.com/yan-istart/IStart-Note-AI-Plugin/releases) and place them in `<vault>/.obsidian/plugins/istart-note-ai/`.
 
-> Don't copy the source repository directly: the runtime bundle is built into `dist/` and is not committed to git. Always use the release assets.
+> Don't clone the source repo — the bundle lives in `dist/` and is not committed. Use release assets.
 
 ### Build from source
 
 ```bash
 npm ci
 npm run build
-# dist/main.js, dist/manifest.json, dist/styles.css are the install artifacts
+# → dist/main.js, dist/manifest.json, dist/styles.css
 ```
 
 ---
 
 ## Configuration
 
-Settings → IStart-Note-AI:
+Settings are organized into three tabs:
 
-| Setting | Description | Default |
-| --- | --- | --- |
-| API Key | DeepSeek API key (or compatible) | — |
-| Base URL | Chat completions endpoint root | `https://api.deepseek.com` |
-| Model | `deepseek-v4-flash` or `deepseek-v4-pro` | `deepseek-v4-flash` |
-| Output style | Knowledge-base, technical, minimal, product, academic, story, dashboard | Knowledge-base |
-| Q&A folder | Where Q&A notes are saved | `Knowledge/Q&A` |
-| Concepts folder | Where concept pages are saved | `Knowledge/Concepts` |
-| Baidu Cloud sync | Enable, App ID/Secret, remote path, auto-backup, ignore pattern | disabled |
+| Tab | Key settings |
+| --- | --- |
+| **Knowledge** | Q&A path, Concepts path, Questions index path, Reading path, auto-classify, concept depth, vault QA source limit |
+| **Execution** | Require preview, log path, scheduled tasks, safety policy |
+| **Auxiliary** | API key, Base URL, model, output style, Baidu sync, UI preferences |
 
 ---
 
@@ -127,55 +129,86 @@ Settings → IStart-Note-AI:
 
 ### Desktop
 
-- 🧠 **Ribbon icon** opens the command panel.
-- **Right-click in the editor** → `IStart-Note-AI: AI 助手`.
-- **Right-click a file in the sidebar** → `IStart-Note-AI: AI 助手`.
+- 🧠 **Ribbon icon** → command panel (Knowledge / Execution / Auxiliary).
+- **Right-click in editor** → `IStart-Note-AI: AI 助手` or `知识库问答`.
+- **Right-click file** → `IStart-Note-AI: AI 助手`.
 
 ### Mobile
 
-- 🧠 **Ribbon icon** opens the command panel.
-- Add `AI 助手` to the mobile toolbar for a one-tap entry.
-
-### Workflow
-
-1. Optionally select text.
-2. Click 🧠 or right-click → `AI 助手`.
-3. Type a request (or use a quick tag, or leave blank for auto-detect).
-4. Preview the result, then choose to insert, replace, append, or show only.
+- 🧠 **Ribbon icon** → command panel.
+- Add commands to the mobile toolbar for one-tap access.
 
 ---
 
-## Project layout
+## Architecture
 
 ```
 src/
-  core/           # cross-feature infrastructure
-    llm/          # unified LLM client + JSON extractor
-  ai/             # AI features (assistant, classifier, planner, ...)
-  features/       # UI and per-feature managers
-  vault/          # vault writers
-  settings/
-  actions/        # action registry / command panel
+  core/
+    llm/              Unified LLM client + JSON extractor
+    knowledge/        KnowledgeIndexService (metadata index)
+    execution/        ExecutionPlan, PlanBuilder, PlanExecutor
+    scheduler/        ScheduledTask types + runner (WIP)
+    schema.ts         SCHEMA_VERSION + helpers
+  ai/                 AI feature modules (assistant, classifier, planner, ...)
+  features/
+    assistant/        AI assistant modals
+    concept/          Concept completion + page manager
+    question/         Question classify + graph manager
+    reading/          Reading project manager
+    dashboard/        Knowledge debt modal
+    sync/             Baidu sync
+    command-panel/    Unified command panel
+  vault/              Vault writer (conflict-safe)
+  settings/           Settings tab (tabbed layout)
+  actions/            Action registry + definitions
   main.ts
 ```
 
-The `core/llm` module centralizes every chat-completions call. New AI features should depend on it instead of calling `requestUrl` directly.
+---
+
+## Privacy
+
+AI features send your selection and partial note context to the configured chat-completions endpoint. Sync features upload to your own Baidu Pan. No telemetry. No plugin-operated servers. Full details in [PRIVACY.md](./PRIVACY.md).
 
 ---
 
 ## Roadmap
 
-- v1.9 (in progress): unified LLM client, basic vault retrieval, AI operation preview, full open-source governance.
-- v2.0: vault-wide knowledge retrieval with citations, question graph + concept maturity dashboards.
-- v3.0: execution engine — turn notes into reviewable, rollback-able plans (tasks, decisions, projects).
+### v2.0 — Knowledge System Foundation (current)
 
-See [the analysis writeup](https://github.com/yan-istart/IStart-Note-AI-Plugin/issues) for the longer plan.
+- Three-module product structure: Knowledge / Execution / Auxiliary.
+- Vault-wide lightweight knowledge index.
+- Concept completion and question graph in command panel.
+- Knowledge debt dashboard.
+- Basic execution plan and execution logs.
+- Settings page with tabbed navigation.
+- Open-source governance and privacy docs.
+
+### v2.1 — Execution MVP
+
+- Scheduled tasks runtime (knowledge-debt scan, auto-backup).
+- Execution plan preview modal with diff.
+- Safer policy: AI writes always produce plan-only by default.
+- Execution history view.
+
+### v2.2 — Trust & Control
+
+- Rollback for recent executions.
+- More granular privacy controls.
+- Optional local vector index for richer vault QA.
+
+### v3.0 — Integrations
+
+- Tasks plugin / Periodic Notes integration.
+- GitHub Issues / Linear / Todoist export.
+- Multi-vault support.
 
 ---
 
 ## Contributing
 
-PRs and issues are welcome. Read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a change. For security reports, see [SECURITY.md](./SECURITY.md).
+PRs and issues welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md). Security issues: [SECURITY.md](./SECURITY.md).
 
 ## License
 

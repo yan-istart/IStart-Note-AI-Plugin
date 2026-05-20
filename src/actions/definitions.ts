@@ -1,31 +1,49 @@
 import { ActionDef } from "./types";
 
 /**
- * 精简后的动作定义。
- * 只保留 3 个核心入口，其他全部通过"AI 助手"自由指令覆盖。
+ * All actions, organized by domain: Knowledge / Execution / Auxiliary.
+ *
+ * The "AI 助手" is placed in Auxiliary as a cross-cutting entry point,
+ * but the command panel renders it as a pinned top-level button.
  */
 export const ALL_ACTIONS: ActionDef[] = [
-  // ── 核心入口：AI 助手（覆盖 90% 场景） ────────────────────
-  {
-    id: "ai-assistant",
-    label: "AI 助手",
-    icon: "sparkles",
-    description: "选中文字或输入指令，AI 智能执行",
-    group: "general",
-    when: { always: true },
-    showIn: ["panel", "editor-menu", "file-menu"],
-    run: (ctx) => { ctx.plugin.openAssistant(); },
-  },
+  // ══════════════════════════════════════════════════════════════
+  //  KNOWLEDGE
+  // ══════════════════════════════════════════════════════════════
 
-  // ── 概念页 ────────────────────────────────────────────────
+  {
+    id: "vault-qa",
+    label: "知识库问答",
+    icon: "library",
+    description: "基于 Vault 检索回答，附带来源引用",
+    domain: "knowledge",
+    section: "retrieval",
+    when: { always: true },
+    showIn: ["panel", "editor-menu"],
+    experimental: true,
+    run: (ctx) => { ctx.plugin.openVaultQA(); },
+  },
+  {
+    id: "question-with-graph",
+    label: "知识提问",
+    icon: "help-circle",
+    description: "提问 → 自动分类 → 生成 Q&A → 更新问题图谱",
+    domain: "knowledge",
+    section: "question",
+    when: { always: true },
+    showIn: ["panel"],
+    run: (ctx) => { ctx.plugin.openQuestionWithGraph(); },
+  },
   {
     id: "complete-current-concept",
     label: "补全当前概念页",
     icon: "book-plus",
     description: "为当前打开的空概念页生成定义、解释、示例、关联",
-    group: "concept",
+    domain: "knowledge",
+    section: "concept",
     when: { always: true },
     showIn: ["panel", "editor-menu"],
+    experimental: true,
     run: (ctx) => { ctx.plugin.openCompleteCurrentConcept(); },
   },
   {
@@ -33,81 +51,79 @@ export const ALL_ACTIONS: ActionDef[] = [
     label: "扫描并补全空概念页",
     icon: "search",
     description: "扫描 Vault 中所有空概念页，批量补全",
-    group: "concept",
+    domain: "knowledge",
+    section: "concept",
     when: { always: true },
     showIn: ["panel"],
+    experimental: true,
     run: (ctx) => { ctx.plugin.openScanEmptyConcepts(); },
   },
-
-  // ── 知识提问（带图谱） ────────────────────────────────────
-  {
-    id: "question-with-graph",
-    label: "知识提问",
-    icon: "help-circle",
-    description: "提问 → 自动分类 → 生成 Q&A → 更新问题图谱",
-    group: "general",
-    when: { always: true },
-    showIn: ["panel"],
-    run: (ctx) => { ctx.plugin.openQuestionWithGraph(); },
-  },
-
-  // ── 知识库问答（带引用） ──────────────────────────────────
-  {
-    id: "vault-qa",
-    label: "知识库问答",
-    icon: "library",
-    description: "基于 Vault 检索回答，附带来源引用",
-    group: "general",
-    when: { always: true },
-    showIn: ["panel", "editor-menu"],
-    run: (ctx) => { ctx.plugin.openVaultQA(); },
-  },
-
-  // ── 阅读项目（需要专门表单） ──────────────────────────────
   {
     id: "new-reading-project",
     label: "新建阅读项目",
     icon: "book-open",
     description: "输入书名，生成阅读地图",
-    group: "reading",
+    domain: "knowledge",
+    section: "reading",
     when: { always: true },
     showIn: ["panel"],
     run: (ctx) => { ctx.plugin.openNewReadingProject(); },
   },
-
-  // ── 知识债务看板 ──────────────────────────────────────────
   {
     id: "knowledge-debt",
     label: "知识债务看板",
     icon: "bar-chart-2",
-    description: "查看空概念、孤立问题、未完成阅读、长期未更新草稿",
-    group: "general",
+    description: "空概念、孤立问题、未完成阅读、长期未更新草稿",
+    domain: "knowledge",
+    section: "debt",
     when: { always: true },
     showIn: ["panel"],
+    experimental: true,
     run: (ctx) => { ctx.plugin.openKnowledgeDebt(); },
   },
 
-  // ── 百度云同步（独立功能） ────────────────────────────────
-  {
-    id: "baidu-sync",
-    label: "百度云同步",
-    icon: "cloud",
-    description: "备份 / 恢复 / 同步",
-    group: "sync",
-    when: { always: true },
-    showIn: ["panel"],
-    run: (ctx) => { ctx.plugin.openBaiduSyncModal(); },
-  },
+  // ══════════════════════════════════════════════════════════════
+  //  EXECUTION
+  // ══════════════════════════════════════════════════════════════
 
-  // ── 美化当前文档 ──────────────────────────────────────────
+  // Placeholder: future actions like "生成执行计划", "查看执行日志", "定时任务"
+  // will be added here once runtime is implemented.
+
+  // ══════════════════════════════════════════════════════════════
+  //  AUXILIARY
+  // ══════════════════════════════════════════════════════════════
+
+  {
+    id: "ai-assistant",
+    label: "AI 助手",
+    icon: "sparkles",
+    description: "选中文字或输入指令，AI 智能执行（跨模块入口）",
+    domain: "auxiliary",
+    section: "assistant",
+    when: { always: true },
+    showIn: ["panel", "editor-menu", "file-menu"],
+    run: (ctx) => { ctx.plugin.openAssistant(); },
+  },
   {
     id: "beautify-note",
     label: "美化当前文档",
     icon: "wand",
     description: "整理结构、插入 Callout、生成双链",
-    group: "document",
+    domain: "auxiliary",
+    section: "document",
     when: { always: true },
     showIn: ["panel", "editor-menu", "file-menu"],
     run: (ctx) => { void ctx.plugin.beautifyCurrentNote(); },
+  },
+  {
+    id: "baidu-sync",
+    label: "百度云同步",
+    icon: "cloud",
+    description: "备份 / 恢复 / 同步",
+    domain: "auxiliary",
+    section: "sync",
+    when: { always: true },
+    showIn: ["panel"],
+    run: (ctx) => { ctx.plugin.openBaiduSyncModal(); },
   },
 ];

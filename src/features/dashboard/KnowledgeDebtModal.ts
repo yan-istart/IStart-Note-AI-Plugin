@@ -144,7 +144,7 @@ export class KnowledgeDebtModal extends Modal {
     });
 
     // Reading chapters: files in "Reading" path with status != completed
-    const unfinishedReadings = [...this.index["entries"].values()].filter((e) => {
+    const unfinishedReadings = this.index.getAll().filter((e) => {
       return (
         e.path.includes("Reading/") &&
         e.type !== "domain-index" &&
@@ -153,7 +153,7 @@ export class KnowledgeDebtModal extends Modal {
       );
     });
 
-    const staleNotes = [...this.index["entries"].values()].filter((e) => {
+    const staleNotes = this.index.getAll().filter((e) => {
       return (
         e.status === "draft" &&
         now - e.mtime > NINETY_DAYS

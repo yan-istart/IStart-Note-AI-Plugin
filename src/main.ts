@@ -28,11 +28,14 @@ import { SCHEMA_VERSION, todayIso } from "./core/schema";
 import { KnowledgeIndexService } from "./core/knowledge";
 import { PlanBuilder } from "./core/execution";
 import { PlanExecutor } from "./core/execution";
+import { ScheduledTaskRunner, ScheduledTaskConfig } from "./core/scheduler";
 
 export default class DeepSeekPlugin extends Plugin {
   settings!: DeepSeekSettings;
   /** In-memory vault knowledge index, rebuilt on load, updated incrementally. */
   knowledgeIndex!: KnowledgeIndexService;
+  /** Scheduled task runner — only active while Obsidian is open. */
+  private scheduler: ScheduledTaskRunner | null = null;
 
   async onload() {
     await this.loadSettings();
@@ -41,6 +44,7 @@ export default class DeepSeekPlugin extends Plugin {
     this.knowledgeIndex = new KnowledgeIndexService(this.app);
     this.app.workspace.onLayoutReady(() => {
       this.knowledgeIndex.rebuild();
+      this.startScheduler();
     });
     // Incremental updates
     this.registerEvent(
@@ -674,6 +678,32 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
     return this.app.vault.getMarkdownFiles()
       .filter((f) => f.path.startsWith(conceptsPath))
       .map((f) => f.basename);
+  }
+
+  // ── 定时任务 ─────────────────────────────────────────────────
+
+  private startScheduler(): void {
+    const defaultTasks: ScheduledTaskConfig[] = [
+      {
+        id: "daily-debt-scan",
+        name: "每日知识债务扫描",
+        enabled: false, // user must opt-in via settings
+        kind: "knowledge-debt-scan",
+        trigger: { type: "daily", time: "22:00" },
+        safety: "notify-only",
+      },
+      {
+        id: "daily-baidu-backup",
+        name: "每日百度备份",
+        enabled: this.settings.baiduSync.enabled && this.settings.baiduSync.autoBackup,
+        kind: "baidu-backup",
+        trigger: { type: "daily", time: "23:00" },
+        safety: "auto-execute-low-risk",
+      },
+    ];
+
+    this.scheduler = new ScheduledTaskRunner(this, defaultTasks);
+    this.scheduler.start();
   }
 
   // ── 设置 ───────────────────────────────────────────────────

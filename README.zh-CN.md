@@ -1,181 +1,182 @@
 # IStart-Note-AI
 
-> [!warning] 测试版软件
-> IStart-Note-AI 仍在持续开发中。下文标记为**实验中**的功能可能在没有提前通知的情况下变更或移除。Frontmatter schema 尚未稳定，尝试新功能前请先备份你的 Vault。
+<p align="center">
+  <strong>把 Obsidian 笔记变成"知识 → 执行"的个人系统。</strong>
+</p>
 
-[English README →](./README.md)
+<p align="center">
+  <a href="./README.md">English</a> ·
+  <a href="#快速开始">快速开始</a> ·
+  <a href="#隐私说明">隐私说明</a> ·
+  <a href="#路线图">路线图</a>
+</p>
 
-把笔记升级成可被结构化、可被检索、可被执行的个人知识系统的 Obsidian 插件。统一的 AI 助手帮你起草、扩写、组织笔记，并自动维护概念页、双链、阅读项目，可选搭配百度云同步。
-
-底层使用 OpenAI 兼容的 chat completions 接口，默认接入 [DeepSeek](https://platform.deepseek.com)，更换 Base URL 可使用其他兼容服务。
-
----
-
-## 功能状态总览
-
-| 功能 | 状态 | 说明 |
-| --- | --- | --- |
-| AI 助手（插入 / 替换 / 追加 / 仅展示） | 稳定 | 命令面板单一入口，配套内容分类 + 结构化 Prompt + Markdown 美化 |
-| 阅读项目 | 稳定 | 全书骨架、章节预设问题、章节总结、费曼测试 |
-| 百度云同步（笔记 + 插件配置） | 稳定 | 手动与自动模式、冲突策略、插件本身 / Obsidian 配置备份 |
-| 文档美化 | 稳定 | 重新组织标题，加入 Callout 和 Mermaid |
-| 概念页自动创建 | 稳定 | 从 `[[概念]]` 自动扫描并创建空概念页 |
-| 概念页智能补全（`ConceptCompleter`） | 实验中 | 内部实现已就绪，尚未接入命令面板 |
-| 问题图谱（`QuestionGraphManager`） | 实验中 | 已支持 frontmatter 分类与 Mermaid 演化图，尚未接入命令面板 |
-| Vault 级知识检索 | 未实现 | 列入 v2 |
-| 执行计划 / 预览 / 回滚 | 未实现 | 列入 v3 |
+<p align="center">
+  <img alt="Version" src="https://img.shields.io/github/v/release/yan-istart/IStart-Note-AI-Plugin?include_prereleases">
+  <img alt="License" src="https://img.shields.io/github/license/yan-istart/IStart-Note-AI-Plugin">
+  <img alt="CI" src="https://img.shields.io/github/actions/workflow/status/yan-istart/IStart-Note-AI-Plugin/ci.yml?branch=main">
+  <img alt="Obsidian" src="https://img.shields.io/badge/Obsidian-1.7.2%2B-7C3AED">
+</p>
 
 ---
 
-## 主要功能
+IStart-Note-AI 是一个面向 Obsidian 的 AI 插件，围绕 **知识沉淀、执行计划、同步辅助** 三个模块，帮助你把零散笔记转化为可检索、可关联、可执行的个人知识系统。
 
-### AI 助手（统一入口）
+一个统一 AI 入口，连接三类能力：知识沉淀、执行计划、辅助同步。
 
-选中文字或停在光标处，用自然语言描述你想做的事：
-
-- **扩写 / 改写**选中文字
-- **解释**某个术语
-- **生成图表**（流程图、时序图、状态图、类图、ER、甘特图）和 LaTeX 公式
-- **补全**当前空章节
-- **续写**光标后的内容
-- **总结**当前文档
-- **美化**已有内容（加 Callout、双链、视觉分隔）
-
-也支持快捷标签：`[扩写]` `[解释]` `[画图]` `[补全]` `[续写]` `[总结]` `[公式]` `[时序图]`。
-
-### 结构化输出
-
-模型输出会做一层后处理，按知识库风格统一：短段落、Obsidian Callout（`> [!summary]`、`> [!warning]`、`> [!tip]`）、必要时的 Mermaid 图，以及对已有概念页自动加 `[[双链]]`。输出风格可切换：technical / minimal / academic / product / story / dashboard。
-
-### 阅读项目
-
-把一本书变成一份可执行的阅读计划：
-
-1. 输入书名（可选粘贴目录）。
-2. 插件生成阅读路线图、章节关系、读前问题。
-3. 边读边记，再生成章节总结与费曼测试。
-
-### 知识组织
-
-- 新概念先落到 `Knowledge/Concepts/_未分类/`。
-- 补全完成后，按 domain 自动归类到子目录。
-- 自动维护 domain MOC 索引页（含 Mermaid 概览图）。
-- 问题索引下生成问题演化图。
-
-### 百度云同步（可选）
-
-- 增量备份 / 双向同步 / 强制覆盖。
-- 可选连同插件本身及 Obsidian 配置（工具栏、快捷键、外观）一起备份。
-- 可选生成笔记后自动备份。
-
-> [!info] 隐私说明
-> AI 功能会把你选中的内容以及当前笔记的部分上下文发送到所配置的 chat-completions 接口。同步功能会把笔记（可选 Obsidian 配置）上传到你自己的百度网盘。完整数据流见 [PRIVACY.md](./PRIVACY.md)。
+> [!warning] 测试版
+> v2.0.0 引入了重大架构变更。Frontmatter schema 和定时任务模型尚未稳定。升级前请备份 Vault。
 
 ---
 
-## 环境要求
+## 三大模块
 
-- Obsidian 1.7.2 及以上。
-- DeepSeek 或其它 OpenAI 兼容服务的 API Key。
-- 百度云同步（可选）：百度网盘开放平台 App ID 与 App Secret。
+### 1. 知识 Knowledge
+
+构建和维护结构化知识库。
+
+- **提问**并生成 Q&A 笔记，自动提取概念和关系。
+- **问题分类**：new / refinement / expansion，维护问题演化图。
+- **概念页创建与补全**：定义、解释、示例、关联概念、领域 MOC 索引。
+- **阅读项目**：全书骨架、章节预设问题、章节总结、费曼测试。
+- **知识库问答**：基于 Vault 索引检索回答，附带 `[[来源]]` 引用。
+- **知识债务看板**：空概念、孤立问题、未完成阅读、长期草稿一目了然。
+
+### 2. 执行 Execution
+
+把知识转化为可审查的行动。
+
+- **生成执行计划**：预览所有 Vault 修改后再执行。
+- **执行日志**：自动记录到 `Knowledge/_Executions/`。
+- **定时任务**（MVP）：每日知识债务扫描、自动百度备份。
+- **安全优先**：AI 写入需要确认，批量操作有上限，高风险计划强制二次确认。
+- 未来：diff 预览、回滚、任务集成。
+
+### 3. 辅助 Auxiliary
+
+跨设备和多服务的基础支撑。
+
+- **OpenAI 兼容 LLM**：默认 DeepSeek，切换 Base URL 可用其他服务。
+- **输出风格可选**：知识库、技术、极简、产品、学术、叙事、仪表盘。
+- **百度网盘同步**（可选）：增量备份、双向同步、插件和 Obsidian 配置备份。
+- **诊断与隐私**：查看数据流说明、导出配置、重建索引、清理日志。
+
+---
+
+## 状态
+
+| 模块 | 功能 | 状态 | 说明 |
+| --- | --- | --- | --- |
+| 知识 | AI 助手 | 稳定 | 插入 / 替换 / 追加 / 仅展示 |
+| 知识 | 阅读项目 | 稳定 | 骨架、章节问题、总结、费曼 |
+| 知识 | 概念页补全 | 实验中 | 已接入命令面板，预览后写入 |
+| 知识 | 问题图谱 | 实验中 | 分类 + 索引 + Mermaid 演化图 |
+| 知识 | 知识库问答 | 实验中 | 元数据索引检索，无 embedding |
+| 知识 | 知识债务 | 实验中 | 空概念 / 孤立问题 / 草稿统计 |
+| 执行 | 执行计划 | 实验中 | PlanBuilder + Executor，无回滚 |
+| 执行 | 定时任务 | 规划中 | 类型定义完成，runner 开发中 |
+| 辅助 | 百度同步 | 稳定 | 手动/自动备份与配置同步 |
+| 辅助 | 多 Provider | 部分 | 支持 OpenAI 兼容 Base URL |
+
+---
+
+## 快速开始
+
+1. 安装插件（见下方安装说明）。
+2. 进入**设置 → IStart-Note-AI → 辅助 → AI 服务**，输入 API Key。
+3. 点击侧边栏 🧠 图标或命令面板 → **IStart-Note-AI: AI 助手**。
+4. 用自然语言输入指令。
 
 ---
 
 ## 安装
 
-### 从社区插件商店（首选）
+### 社区插件商店（审核后可用）
 
-正在准备提交。审核通过后：
+1. 设置 → 第三方插件 → 浏览 → 搜索 **IStart-Note-AI**。
+2. 安装 → 启用。
 
-1. 设置 → 第三方插件 → 浏览。
-2. 搜索 **IStart-Note-AI**。
-3. 安装 → 启用。
+### 手动安装（测试期推荐）
 
-### 手动安装（测试版推荐方式）
-
-从 [GitHub Release](https://github.com/yan-istart/IStart-Note-AI-Plugin/releases) 下载 `main.js`、`manifest.json`、`styles.css`，放到 `<你的 Vault>/.obsidian/plugins/istart-note-ai/` 目录下。
-
-> 不要直接克隆源码安装：构建产物在 `dist/`，并不入库。请始终使用 release 资产。
+从 [GitHub Release](https://github.com/yan-istart/IStart-Note-AI-Plugin/releases) 下载 `main.js`、`manifest.json`、`styles.css`，放到 `<Vault>/.obsidian/plugins/istart-note-ai/`。
 
 ### 从源码构建
 
 ```bash
-npm ci
-npm run build
-# dist/main.js、dist/manifest.json、dist/styles.css 即为安装文件
+npm ci && npm run build
+# → dist/main.js, dist/manifest.json, dist/styles.css
 ```
 
 ---
 
-## 设置项
+## 设置
 
-设置 → IStart-Note-AI：
+设置页按三个标签组织：
 
-| 设置 | 说明 | 默认 |
-| --- | --- | --- |
-| API Key | DeepSeek API Key（或兼容服务） | — |
-| Base URL | chat completions 根地址 | `https://api.deepseek.com` |
-| 模型 | `deepseek-v4-flash` 或 `deepseek-v4-pro` | `deepseek-v4-flash` |
-| 输出风格 | 知识库、技术、极简、产品、学术、故事、仪表盘 | 知识库 |
-| 问答目录 | Q&A 笔记保存路径 | `Knowledge/Q&A` |
-| 概念目录 | 概念页保存路径 | `Knowledge/Concepts` |
-| 百度云同步 | 启用、App ID/Secret、远端路径、自动备份、忽略规则 | 关闭 |
+| 标签 | 主要设置 |
+| --- | --- |
+| **知识** | Q&A 路径、概念路径、问题索引路径、知识索引状态与重建 |
+| **执行** | 执行日志目录、安全策略、定时任务（v2.1） |
+| **辅助** | API Key、Base URL、模型、输出风格、百度同步、隐私说明 |
 
 ---
 
-## 使用方式
+## 使用
 
-### 桌面端
+### 桌面
 
-- 🧠 **侧边栏图标**：打开命令面板。
-- **编辑器右键** → `IStart-Note-AI: AI 助手`。
-- **文件列表右键** → `IStart-Note-AI: AI 助手`。
+- 🧠 侧边栏图标 → 命令面板（知识 / 执行 / 辅助）。
+- 编辑器右键 → `IStart-Note-AI: AI 助手` 或 `知识库问答`。
+- 文件列表右键 → `IStart-Note-AI: AI 助手`。
 
 ### 移动端
 
-- 🧠 **侧边栏图标**：打开命令面板。
-- 把 `AI 助手` 添加到移动工具栏，可一键唤起。
-
-### 工作流
-
-1. 可选：选中文字。
-2. 点击 🧠 或右键 → AI 助手。
-3. 输入指令（或用快捷标签，或留空让插件自动判断）。
-4. 预览结果，选择插入 / 替换 / 追加 / 仅展示。
+- 🧠 侧边栏图标 → 命令面板。
+- 把命令添加到移动工具栏。
 
 ---
 
-## 目录结构
+## 隐私说明
 
-```
-src/
-  core/           # 跨功能基础设施
-    llm/          # 统一 LLM 客户端 + JSON 提取
-  ai/             # AI 功能（助手、分类器、Planner ...）
-  features/       # 各功能 UI 与管理器
-  vault/          # Vault 写入层
-  settings/
-  actions/        # action 注册 / 命令面板
-  main.ts
-```
-
-`core/llm` 是所有 chat-completions 调用的唯一入口。新增 AI 功能应该依赖它，而不是直接调用 `requestUrl`。
+AI 功能会把你选中的内容和部分笔记上下文发送到所配置的 API 端点。同步功能只上传到你自己的百度网盘。无遥测、无插件方服务器。详见 [PRIVACY.md](./PRIVACY.md) / [PRIVACY.zh-CN.md](./PRIVACY.zh-CN.md)。
 
 ---
 
 ## 路线图
 
-- v1.9（进行中）：统一 LLM 客户端、基础 Vault 检索、AI 操作预览、补齐开源治理。
-- v2.0：带来源引用的 Vault 级检索、问题图谱与概念成熟度看板。
-- v3.0：执行引擎 —— 把笔记转换为可预览、可回滚的计划（任务、决策、项目）。
+### v2.0 — 知识系统基础版（当前）
 
-更长期规划见仓库 issue。
+- 三模块产品结构：知识 / 执行 / 辅助。
+- Vault 级轻量知识索引。
+- 概念补全和问题图谱接入命令面板。
+- 知识债务看板。
+- 基础执行计划和执行日志。
+- 分组设置页。
+- 开源治理和隐私文档。
+
+### v2.1 — 执行 MVP
+
+- 定时任务运行时。
+- 执行计划预览 Modal + diff。
+- AI 写入默认 plan-only。
+- 执行历史视图。
+
+### v2.2 — 信任与控制
+
+- 回滚最近执行。
+- 更细粒度的隐私控制。
+- 可选本地向量索引。
+
+### v3.0 — 集成
+
+- Tasks / Periodic Notes 集成。
+- GitHub Issues / Linear / Todoist 导出。
 
 ---
 
 ## 贡献
 
-欢迎提 Issue / PR。请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。安全相关问题请按 [SECURITY.md](./SECURITY.md) 流程提交。
+欢迎提 Issue / PR。请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。安全问题见 [SECURITY.md](./SECURITY.md)。
 
 ## 协议
 

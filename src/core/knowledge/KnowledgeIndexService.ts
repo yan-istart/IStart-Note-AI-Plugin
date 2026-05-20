@@ -208,6 +208,11 @@ export class KnowledgeIndexService {
     return this.entries.size;
   }
 
+  /** Get all entries as an array. */
+  getAll(): IndexEntry[] {
+    return [...this.entries.values()];
+  }
+
   // ── Internals ──────────────────────────────────────────────
 
   private indexFile(file: TFile): void {
