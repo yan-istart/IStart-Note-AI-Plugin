@@ -30,7 +30,7 @@ export class ArtifactBuilderModal extends Modal {
 
   onOpen() {
     const { contentEl } = this;
-    this.titleEl.setText("从知识生成执行资产");
+    this.titleEl.setText("从知识生成实用模板");
 
     if (this.contextHint) {
       contentEl.createEl("p", {

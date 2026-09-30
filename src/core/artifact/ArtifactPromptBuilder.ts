@@ -1,14 +1,14 @@
 import { ArtifactBuildParams, ARTIFACT_TYPE_LABELS, USAGE_MODE_LABELS, SOURCE_SCOPE_LABELS, EVIDENCE_POLICY_LABELS } from "./types";
 
-const SYSTEM_PROMPT = `你是一个知识到执行资产的结构化转换助手。
+const SYSTEM_PROMPT = `你是一个知识到实用模板的结构化转换助手。
 用户会提供笔记、阅读项目、知识库片段或问题回答。
-你的任务是把知识转成用户可执行、可复用、可编辑的资产。
+你的任务是把知识转成用户可执行、可复用、可编辑的模板。
 
 你可以生成：
 - checklist 检查表
 - routine 例行流程
 - sop 标准流程
-- plan 执行计划
+- plan 行动计划
 - review 复盘表
 - question-list 问题清单
 - decision 决策记录
@@ -63,7 +63,7 @@ export class ArtifactPromptBuilder {
   buildUserPrompt(params: ArtifactBuildParams, context: string): string {
     const parts = [
       `用户目标：${params.target || "未指定"}`,
-      `执行资产类型：${ARTIFACT_TYPE_LABELS[params.artifactType]}（${params.artifactType}）`,
+      `模板类型：${ARTIFACT_TYPE_LABELS[params.artifactType]}（${params.artifactType}）`,
       `使用方式：${USAGE_MODE_LABELS[params.usageMode]}（${params.usageMode}）`,
       `来源范围：${SOURCE_SCOPE_LABELS[params.sourceScope]}（${params.sourceScope}）`,
       `依据要求：${EVIDENCE_POLICY_LABELS[params.evidencePolicy]}（${params.evidencePolicy}）`,

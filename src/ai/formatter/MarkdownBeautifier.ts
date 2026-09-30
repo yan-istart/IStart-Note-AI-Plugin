@@ -76,13 +76,13 @@ export class MarkdownBeautifier {
 
     // 模式：风险：xxx / 注意：xxx / 警告：xxx
     result = result.replace(
-      /^(风险|注意|警告|⚠️)[:：]\s*(.+)$/gm,
+      /^(风险|注意|警告)[:：]\s*(.+)$/gm,
       "> [!warning] $1\n> $2"
     );
 
     // 模式：建议：xxx / 技巧：xxx / 提示：xxx
     result = result.replace(
-      /^(建议|技巧|提示|💡)[:：]\s*(.+)$/gm,
+      /^(建议|技巧|提示)[:：]\s*(.+)$/gm,
       "> [!tip] $1\n> $2"
     );
 

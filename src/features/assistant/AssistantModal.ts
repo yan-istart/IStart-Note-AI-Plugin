@@ -93,7 +93,6 @@ function buildSmartActions(
   const content = result.content;
 
   // Heuristics
-  const hasCheckboxes = (content.match(/- \[ \]/g) || []).length >= 2;
   const looksLikeConcept = /^#\s+.{2,20}\n\n/.test(content) &&
     (content.includes("## 定义") || content.includes("## 解释") || content.includes("## 核心"));
   const isLong = content.length > 500;
@@ -127,15 +126,6 @@ function buildSmartActions(
     case "show":
     default: {
       // For show mode, pick the best primary based on content
-      if (hasCheckboxes) {
-        return {
-          primary: { label: "保存为执行计划", cta: true, callback: () => saveAsPlan(app, result) },
-          secondary: [
-            { label: "插入到光标位置", callback: onWriteToDoc },
-            { label: "复制", callback: () => copyToClipboard(content) },
-          ],
-        };
-      }
       if (looksLikeConcept && onCreateConcept) {
         return {
           primary: { label: "创建为概念页", cta: true, callback: onCreateConcept },
@@ -172,37 +162,15 @@ async function saveAsNote(app: App, result: AssistantResult): Promise<void> {
     suffix++;
   }
   const file = await app.vault.create(path, result.content);
-  new Notice(`✅ 已保存到 ${file.path}`);
-  const leaf = app.workspace.getLeaf(false);
-  await leaf.openFile(file);
-}
-
-async function saveAsPlan(app: App, result: AssistantResult): Promise<void> {
-  const folder = normalizePath("Knowledge/Plans");
-  if (!app.vault.getAbstractFileByPath(folder)) {
-    await app.vault.createFolder(folder);
-  }
-  const today = todayIso();
-  const title = extractTitle(result.content) || "执行计划";
-  const safeName = title.replace(/[\\/:*?"<>|#[\]]/g, "-").slice(0, 40);
-  let path = normalizePath(`${folder}/${today}-${safeName}.md`);
-  let suffix = 2;
-  while (app.vault.getAbstractFileByPath(path)) {
-    path = normalizePath(`${folder}/${today}-${safeName}-${suffix}.md`);
-    suffix++;
-  }
-
-  const frontmatter = `---\ntype: plan\nstatus: active\ncreated_at: ${today}\n---\n\n`;
-  const file = await app.vault.create(path, frontmatter + result.content);
-  new Notice(`✅ 执行计划已保存`);
+  new Notice(`已保存到 ${file.path}`);
   const leaf = app.workspace.getLeaf(false);
   await leaf.openFile(file);
 }
 
 function copyToClipboard(content: string): void {
   navigator.clipboard.writeText(content).then(
-    () => new Notice("✅ 已复制到剪贴板"),
-    () => new Notice("❌ 复制失败")
+    () => new Notice("已复制到剪贴板"),
+    () => new Notice("复制失败")
   );
 }
 
@@ -225,7 +193,8 @@ export class AssistantResultModal extends Modal {
     private result: AssistantResult,
     private onConfirm: () => void,
     private onRetry: () => void,
-    private onCreateConcept?: () => void
+    private onCreateConcept?: () => void,
+    private extraAction?: { label: string; callback: () => void }
   ) {
     super(app);
     this.component = new Component();
@@ -278,6 +247,11 @@ export class AssistantResultModal extends Modal {
 
     // Retry + close row
     const utilBar = new Setting(actionBar);
+    if (this.extraAction) {
+      utilBar.addButton((btn) =>
+        btn.setButtonText(this.extraAction!.label).onClick(() => { this.close(); this.extraAction!.callback(); })
+      );
+    }
     utilBar.addButton((btn) => btn.setButtonText("重新生成").onClick(() => { this.close(); this.onRetry(); }));
     utilBar.addButton((btn) => btn.setButtonText("关闭").onClick(() => this.close()));
   }

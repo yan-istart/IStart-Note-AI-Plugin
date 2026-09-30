@@ -78,7 +78,7 @@ export const ARTIFACT_TYPE_LABELS: Record<ArtifactType, string> = {
   checklist: "检查表",
   routine: "例行流程",
   sop: "标准操作流程",
-  plan: "执行计划",
+  plan: "行动计划",
   review: "复盘表",
   "question-list": "问题清单",
   decision: "决策记录",

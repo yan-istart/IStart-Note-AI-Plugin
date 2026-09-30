@@ -55,7 +55,7 @@ export class ArtifactFeatureController {
     selection: string,
     activeFile: TFile | null
   ): Promise<void> {
-    const notice = new Notice("⏳ 正在生成执行资产...", 0);
+    const notice = new Notice("正在生成实用模板...", 0);
     try {
       const context = await this.gatherContext(params, selection, activeFile);
 
@@ -69,7 +69,7 @@ export class ArtifactFeatureController {
       const parsed = parseJsonSafe<Partial<ExecutionArtifact> | null>(raw, null);
       if (!parsed) {
         notice.hide();
-        new Notice("AI 未能生成有效的执行资产结构");
+        new Notice("AI 未能生成有效的模板结构");
         return;
       }
 
@@ -85,7 +85,7 @@ export class ArtifactFeatureController {
       this.showPreview(artifact, params, selection, activeFile);
     } catch (err) {
       notice.hide();
-      new Notice(`❌ ${(err as Error).message}`);
+      new Notice(`失败: ${(err as Error).message}`);
     }
   }
 
@@ -123,7 +123,7 @@ export class ArtifactFeatureController {
     const path = await this.uniquePath(folder, artifact.title);
     const file = await this.app.vault.create(path, content);
 
-    new Notice(`✅ 模板已保存：${artifact.title}`);
+    new Notice(` 模板已保存：${artifact.title}`);
     const leaf = this.app.workspace.getLeaf(false);
     await leaf.openFile(file);
     return file;
@@ -141,7 +141,7 @@ export class ArtifactFeatureController {
     const runPath = await this.uniquePath(runFolder, `${today} ${artifact.title}`);
     const runFile = await this.app.vault.create(runPath, runContent);
 
-    new Notice(`✅ 今日执行记录已创建`);
+    new Notice("今日记录已创建");
     const leaf = this.app.workspace.getLeaf(false);
     await leaf.openFile(runFile);
   }

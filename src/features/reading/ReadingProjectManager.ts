@@ -193,7 +193,7 @@ export class ReadingProjectManager {
     const indexPath = normalizePath(`${folder}/_索引.md`);
 
     const progressLines = plan.chapters.map((ch) => {
-      const icon = ch.importance === "core" ? "⭐" : ch.importance === "recommended" ? "📖" : "📄";
+      const icon = ch.importance === "core" ? "[核心]" : ch.importance === "recommended" ? "[推荐]" : "[选读]";
       const numPrefix = String(ch.number).padStart(2, "0");
       const fileName = `${numPrefix}-${this.sanitize(ch.title)}`;
       return `- [ ] ${icon} 第${ch.number}章：[[${fileName}|${ch.title}]]`;

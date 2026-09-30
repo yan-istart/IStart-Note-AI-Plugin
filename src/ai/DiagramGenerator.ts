@@ -135,15 +135,15 @@ ${existingCode}
 
   static getTypeLabels(): { value: DiagramType; label: string }[] {
     return [
-      { value: "auto", label: "🤖 智能推荐" },
-      { value: "flowchart", label: "📊 流程图" },
-      { value: "sequence", label: "🔄 时序图" },
-      { value: "state", label: "🔀 状态图" },
-      { value: "class", label: "🏗 类图" },
-      { value: "architecture", label: "🏛 架构图" },
-      { value: "er", label: "🗃 ER 图" },
-      { value: "gantt", label: "📅 甘特图" },
-      { value: "formula", label: "📐 数学公式" },
+      { value: "auto", label: " 智能推荐" },
+      { value: "flowchart", label: " 流程图" },
+      { value: "sequence", label: " 时序图" },
+      { value: "state", label: " 状态图" },
+      { value: "class", label: " 类图" },
+      { value: "architecture", label: " 架构图" },
+      { value: "er", label: " ER 图" },
+      { value: "gantt", label: " 甘特图" },
+      { value: "formula", label: " 数学公式" },
     ];
   }
 }

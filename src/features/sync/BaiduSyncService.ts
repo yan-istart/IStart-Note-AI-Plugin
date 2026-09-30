@@ -314,7 +314,7 @@ export class BaiduSyncService {
       if (abstract instanceof TFile) await this.app.vault.rename(abstract, conflictPath);
 
       await this.doDownload(plan, remoteRoot, meta, result);
-      new Notice(`⚠️ 冲突：${plan.path}，本地版本已保存为 ${conflictPath}`);
+      new Notice(`冲突：${plan.path}，本地版本已保存为 ${conflictPath}`);
     }
   }
 

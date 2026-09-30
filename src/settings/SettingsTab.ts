@@ -3,7 +3,7 @@ import type DeepSeekPlugin from "../main";
 import type { DeepSeekSettings } from "../types";
 import { BaiduAuthModal } from "../features/sync/BaiduAuthModal";
 
-type SettingsSection = "knowledge" | "execution" | "auxiliary";
+type SettingsSection = "knowledge" | "writing" | "auxiliary";
 
 export class DeepSeekSettingsTab extends PluginSettingTab {
   private activeSection: SettingsSection = "auxiliary"; // start with AI setup
@@ -20,7 +20,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
     // ── Header ───────────────────────────────────────────────
     containerEl.createEl("h2", { text: "IStart-Note-AI" });
     containerEl.createEl("p", {
-      text: "知识沉淀 · 执行计划 · 同步辅助",
+      text: "知识沉淀 · 创作写作 · 同步辅助",
       attr: { style: "color: var(--text-muted); margin-top: -8px; margin-bottom: 16px;" },
     });
 
@@ -36,7 +36,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
   private renderNav(container: HTMLElement): void {
     const sections: { id: SettingsSection; label: string }[] = [
       { id: "knowledge", label: "知识" },
-      { id: "execution", label: "执行" },
+      { id: "writing", label: "写作" },
       { id: "auxiliary", label: "辅助" },
     ];
 
@@ -57,8 +57,8 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
       case "knowledge":
         this.renderKnowledge(container);
         break;
-      case "execution":
-        this.renderExecution(container);
+      case "writing":
+        this.renderWriting(container);
         break;
       case "auxiliary":
         this.renderAuxiliary(container);
@@ -110,7 +110,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
       .addButton((btn) =>
         btn.setButtonText("重建索引").onClick(() => {
           this.plugin.knowledgeIndex.rebuild();
-          new Notice(`✅ 索引已重建：${this.plugin.knowledgeIndex.size} 篇`);
+          new Notice(`索引已重建：${this.plugin.knowledgeIndex.size} 篇`);
           this.display();
         })
       );
@@ -126,29 +126,43 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
   }
 
   // ══════════════════════════════════════════════════════════════
-  //  执行
+  //  写作
   // ══════════════════════════════════════════════════════════════
 
-  private renderExecution(el: HTMLElement): void {
-    new Setting(el).setName("执行计划").setHeading();
-
-    el.createEl("p", {
-      text: "执行模块当前为实验阶段。所有 AI 生成的写入操作都会先生成计划草稿，需要你确认后再执行。回滚功能尚未实现。定时任务运行时默认关闭，将在 v2.1 启用。",
-      attr: { style: "color: var(--text-muted); font-size: 13px; margin-bottom: 12px;" },
-    });
+  private renderWriting(el: HTMLElement): void {
+    new Setting(el).setName("写作路径").setHeading();
 
     new Setting(el)
-      .setName("执行日志目录")
-      .setDesc("每次执行计划后自动生成日志")
+      .setName("作品目录")
+      .setDesc("网文小说存于 Writing/Novels,论文存于 Writing/Papers")
       .addText((t) =>
-        t.setPlaceholder("Knowledge/_Executions").setValue("Knowledge/_Executions").setDisabled(true)
+        t.setPlaceholder("Writing").setValue(this.plugin.settings.writingPath).onChange(async (v) => {
+          this.plugin.settings.writingPath = v.trim() || "Writing";
+          await this.plugin.saveSettings();
+        })
       );
 
-    new Setting(el).setName("定时任务").setHeading();
-    el.createEl("p", {
-      text: "定时任务运行时在 v2.0 默认关闭。基础设施已就绪（知识债务扫描、配置同步），将在 v2.1 通过设置启用。",
-      attr: { style: "color: var(--text-muted); font-size: 13px;" },
-    });
+    new Setting(el).setName("续写").setHeading();
+
+    new Setting(el)
+      .setName("带入上文长度")
+      .setDesc("续写时向 AI 提供的上文字符数")
+      .addText((t) =>
+        t.setPlaceholder("2000").setValue(String(this.plugin.settings.continueContextChars)).onChange(async (v) => {
+          const n = parseInt(v);
+          if (!isNaN(n) && n > 0) { this.plugin.settings.continueContextChars = n; await this.plugin.saveSettings(); }
+        })
+      );
+
+    new Setting(el)
+      .setName("默认续写字数")
+      .setDesc("每次续写目标字数（中文字符）")
+      .addText((t) =>
+        t.setPlaceholder("800").setValue(String(this.plugin.settings.continueTargetWords)).onChange(async (v) => {
+          const n = parseInt(v);
+          if (!isNaN(n) && n > 0) { this.plugin.settings.continueTargetWords = n; await this.plugin.saveSettings(); }
+        })
+      );
   }
 
   // ══════════════════════════════════════════════════════════════

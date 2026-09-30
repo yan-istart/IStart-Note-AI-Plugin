@@ -29,7 +29,7 @@ export interface ActionWhen {
 export type ActionEntry = "panel" | "editor-menu" | "file-menu";
 
 /** 三大产品域 */
-export type ActionDomain = "knowledge" | "execution" | "auxiliary";
+export type ActionDomain = "knowledge" | "writing" | "auxiliary";
 
 /** 细分领域（用于面板二级分组、设置定位等） */
 export type ActionSection =
@@ -38,9 +38,8 @@ export type ActionSection =
   | "reading"
   | "retrieval"
   | "debt"
-  | "plan"
-  | "scheduler"
-  | "logs"
+  | "writing-project"
+  | "writing-chapter"
   | "sync"
   | "assistant"
   | "document"
@@ -60,6 +59,8 @@ export interface ActionDef {
   risk?: "none" | "low" | "medium" | "high";
   /** 是否实验性功能 */
   experimental?: boolean;
+  /** 默认快捷键(Obsidian Hotkey 格式) */
+  hotkeys?: { modifiers: ("Mod" | "Shift" | "Alt" | "Ctrl")[]; key: string }[];
   run: (ctx: ActionContext) => void;
 }
 
@@ -72,12 +73,12 @@ export type ActionGroup = ActionDomain;
 /** 域标题（面板一级分组） */
 export const DOMAIN_TITLES: Record<ActionDomain, string> = {
   knowledge: "知识",
-  execution: "执行",
+  writing: "写作",
   auxiliary: "辅助",
 };
 
 /** 域排序 */
-export const DOMAIN_ORDER: ActionDomain[] = ["knowledge", "execution", "auxiliary"];
+export const DOMAIN_ORDER: ActionDomain[] = ["knowledge", "writing", "auxiliary"];
 
 // ── 向后兼容的 GROUP 导出（registry.ts 还在用） ───────────────
 export const GROUP_TITLES = DOMAIN_TITLES;

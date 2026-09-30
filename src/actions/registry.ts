@@ -10,10 +10,12 @@ import type { PanelGroup, PanelAction } from "../features/command-panel/CommandP
 export function registerAllActions(plugin: DeepSeekPlugin, actions: ActionDef[]) {
   // 1. 为每个 action 注册命令
   for (const action of actions) {
+    const hotkeys = action.hotkeys as import("obsidian").Hotkey[] | undefined;
     if (action.showIn.includes("editor-menu")) {
       plugin.addCommand({
         id: action.id,
         name: action.label,
+        hotkeys,
         editorCallback: () => {
           const ctx = buildContext(plugin, null);
           action.run(ctx);
@@ -23,6 +25,7 @@ export function registerAllActions(plugin: DeepSeekPlugin, actions: ActionDef[])
       plugin.addCommand({
         id: action.id,
         name: action.label,
+        hotkeys,
         callback: () => {
           const ctx = buildContext(plugin, null);
           action.run(ctx);
@@ -115,7 +118,7 @@ function openPanel(plugin: DeepSeekPlugin, actions: ActionDef[]) {
     });
   }
 
-  for (const domainId of DOMAIN_ORDER) {
+  for (const domainId of getDomainOrder(ctx)) {
     const domainActions = groupedActions.filter(
       (a) => a.domain === domainId && a.showIn.includes("panel") && evaluateWhen(a.when, ctx)
     );
@@ -125,7 +128,7 @@ function openPanel(plugin: DeepSeekPlugin, actions: ActionDef[]) {
       actions: domainActions.map((a) => ({
         id: a.id,
         icon: a.icon,
-        label: a.label + (a.experimental ? " ⚗️" : ""),
+        label: a.label,
         description: a.description,
         callback: () => a.run(ctx),
       })),
@@ -162,4 +165,11 @@ function evaluateWhen(when: ActionDef["when"], ctx: ActionContext): boolean {
   if (when.filePath && !ctx.filePath.includes(when.filePath)) return false;
   if (when.inSection && !ctx.sectionName) return false;
   return true;
+}
+
+/** 写作文件中时写作域置顶 */
+function getDomainOrder(ctx: ActionContext): typeof DOMAIN_ORDER {
+  const inWriting = ctx.fileType === "chapter" || ctx.fileType === "writing-project";
+  if (!inWriting) return DOMAIN_ORDER;
+  return ["writing", ...DOMAIN_ORDER.filter((d) => d !== "writing")];
 }

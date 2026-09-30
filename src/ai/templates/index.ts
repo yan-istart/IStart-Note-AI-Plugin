@@ -162,7 +162,7 @@ export const TEMPLATES: Record<ContentType, NoteTemplate> = {
       "风险使用 > [!warning]",
     ],
     mermaidRules: [],
-    formattingRules: [...COMMON_FORMATTING, "行动项格式：- [ ] 内容 @责任人 📅日期"],
+    formattingRules: [...COMMON_FORMATTING, "行动项格式：- [ ] 内容 @责任人 (日期)"],
   },
 
   [ContentType.TASK_PLAN]: {

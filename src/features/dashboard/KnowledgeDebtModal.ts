@@ -23,7 +23,7 @@ export class KnowledgeDebtModal extends Modal {
   }
 
   onOpen() {
-    this.titleEl.setText("📊 知识债务看板");
+    this.titleEl.setText(" 知识债务看板");
     this.stats = this.computeStats();
     this.render();
   }
@@ -39,7 +39,7 @@ export class KnowledgeDebtModal extends Modal {
       this.stats.staleNotes.length;
 
     if (total === 0) {
-      contentEl.createEl("p", { text: "🎉 你的知识库很健康，没有发现待处理的知识债务。" });
+      contentEl.createEl("p", { text: " 你的知识库很健康，没有发现待处理的知识债务。" });
       new Setting(contentEl).addButton((btn) => btn.setButtonText("关闭").onClick(() => this.close()));
       return;
     }
@@ -52,7 +52,7 @@ export class KnowledgeDebtModal extends Modal {
     // ── Empty concepts ──
     this.renderSection(
       contentEl,
-      `📝 空概念页 (${this.stats.emptyConcepts.length})`,
+      ` 空概念页 (${this.stats.emptyConcepts.length})`,
       this.stats.emptyConcepts,
       "补全这些概念",
       "complete-concepts"
@@ -61,7 +61,7 @@ export class KnowledgeDebtModal extends Modal {
     // ── Orphan questions ──
     this.renderSection(
       contentEl,
-      `❓ 孤立问题 (${this.stats.orphanQuestions.length})`,
+      ` 孤立问题 (${this.stats.orphanQuestions.length})`,
       this.stats.orphanQuestions,
       "分类这些问题",
       "classify-questions"
@@ -70,7 +70,7 @@ export class KnowledgeDebtModal extends Modal {
     // ── Unfinished readings ──
     this.renderSection(
       contentEl,
-      `📖 未完成阅读章节 (${this.stats.unfinishedReadings.length})`,
+      ` 未完成阅读章节 (${this.stats.unfinishedReadings.length})`,
       this.stats.unfinishedReadings,
       null,
       null
@@ -79,7 +79,7 @@ export class KnowledgeDebtModal extends Modal {
     // ── Stale drafts ──
     this.renderSection(
       contentEl,
-      `🕸 长期未更新草稿 (${this.stats.staleNotes.length})`,
+      ` 长期未更新草稿 (${this.stats.staleNotes.length})`,
       this.stats.staleNotes,
       null,
       null

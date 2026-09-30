@@ -31,6 +31,8 @@ export interface LLMChatOptions {
    * Useful for tasks that always need a specific model.
    */
   model?: string;
+  /** Maximum generated tokens. Prevents overlong/cut-off output. */
+  maxTokens?: number;
 }
 
 export class LLMError extends Error {
@@ -74,6 +76,7 @@ export class LLMClient {
         model: options.model ?? this.settings.model,
         messages,
         temperature: options.temperature ?? 0.5,
+        ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
       }),
       throw: false,
     });

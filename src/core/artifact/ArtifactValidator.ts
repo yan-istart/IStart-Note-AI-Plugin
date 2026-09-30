@@ -62,7 +62,7 @@ export class ArtifactValidator {
     }));
 
     return {
-      title: raw.title || "未命名执行资产",
+      title: raw.title || "未命名模板",
       artifactType: raw.artifactType || "checklist",
       usageMode: raw.usageMode || "one-off",
       sourceScope: raw.sourceScope || "freeform",

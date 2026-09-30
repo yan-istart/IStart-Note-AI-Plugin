@@ -59,7 +59,7 @@ export class ArtifactRenderer {
       : `# ${artifact.title}`;
 
     const meta = [
-      `> [!info] ${isRun ? "今日执行" : "执行资产模板"}`,
+      `> [!info] ${isRun ? "今日记录" : "实用模板"}`,
       `> 类型：${ARTIFACT_TYPE_LABELS[artifact.artifactType]}`,
       `> 使用方式：${USAGE_MODE_LABELS[artifact.usageMode]}`,
       artifact.target ? `> 对象：${artifact.target}` : null,
@@ -71,7 +71,7 @@ export class ArtifactRenderer {
 
     // Safety disclaimer for sensitive domains
     const disclaimer = this.needsSafetyDisclaimer(artifact)
-      ? `\n> [!warning] 使用边界\n> 该执行资产用于记录、观察和复盘，不构成医学、法律或投资建议。出现异常情况请咨询专业人士。\n`
+      ? `\n> [!warning] 使用边界\n> 该模板用于记录、观察和复盘，不构成医学、法律或投资建议。出现异常情况请咨询专业人士。\n`
       : "";
 
     // Group items by category
@@ -98,7 +98,7 @@ export class ArtifactRenderer {
   private renderItem(item: ArtifactItem, isRun: boolean): string {
     const lines: string[] = [];
     const checkbox = isRun ? "- [ ]" : "-";
-    const riskMark = item.riskLevel === "high" ? " ⚠️" : item.riskLevel === "watch" ? " 👀" : "";
+    const riskMark = item.riskLevel === "high" ? " [高风险]" : item.riskLevel === "watch" ? " [需关注]" : "";
 
     lines.push(`${checkbox} ${item.title}${riskMark}`);
 

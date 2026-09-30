@@ -531,3 +531,26 @@
   color: var(--text-muted);
   margin-bottom: 12px;
 }
+
+/* ── 写作状态栏快捷入口 ────────────────────────────────────── */
+
+.istart-writing-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.istart-writing-status-btn {
+  cursor: pointer;
+  padding: 2px 8px;
+  border-radius: 4px;
+  color: var(--text-normal);
+  background: var(--background-modifier-hover);
+  font-size: 12px;
+  transition: background 0.1s;
+}
+
+.istart-writing-status-btn:hover {
+  background: var(--background-modifier-active-hover);
+  color: var(--text-accent);
+}

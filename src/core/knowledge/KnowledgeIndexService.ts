@@ -33,6 +33,8 @@ export interface SearchOptions {
   types?: string[];
   /** Filter by domain. */
   domains?: string[];
+  /** Exclude these frontmatter types (e.g. writing artifacts from knowledge Q&A). */
+  excludeTypes?: string[];
   /** Boost entries that link to or are linked from this file path. */
   contextFile?: string;
 }
@@ -102,7 +104,7 @@ export class KnowledgeIndexService {
    * If `contextFile` is provided, entries linked from/to it get +3 boost.
    */
   search(query: string, options: SearchOptions = {}): SearchResult[] {
-    const { limit = 10, types, domains, contextFile } = options;
+    const { limit = 10, types, domains, excludeTypes, contextFile } = options;
     const terms = this.tokenize(query);
     if (terms.length === 0) return [];
 
@@ -114,6 +116,7 @@ export class KnowledgeIndexService {
       // Filters
       if (types && types.length > 0 && (!entry.type || !types.includes(entry.type))) continue;
       if (domains && domains.length > 0 && (!entry.domain || !domains.includes(entry.domain))) continue;
+      if (excludeTypes && excludeTypes.length > 0 && entry.type && excludeTypes.includes(entry.type)) continue;
 
       let score = 0;
       const matchedOn: SearchResult["matchedOn"] = [];

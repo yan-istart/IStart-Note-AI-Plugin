@@ -44,7 +44,7 @@ export class ArtifactPreviewModal extends Modal {
     if (this.validation.warnings.length > 0) {
       const warnEl = contentEl.createDiv({ attr: { style: "margin-bottom: 12px;" } });
       for (const w of this.validation.warnings) {
-        warnEl.createEl("p", { text: `⚠ ${w}`, attr: { style: "color: var(--text-warning); font-size: 13px; margin: 2px 0;" } });
+        warnEl.createEl("p", { text: `${w}`, attr: { style: "color: var(--text-warning); font-size: 13px; margin: 2px 0;" } });
       }
     }
 

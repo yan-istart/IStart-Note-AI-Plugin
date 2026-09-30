@@ -7,6 +7,9 @@ export interface DeepSeekSettings {
   autoOpenGraph: boolean;
   conceptsPath: string;
   questionsIndexPath: string;
+  writingPath: string;
+  continueContextChars: number;
+  continueTargetWords: number;
   baiduSync: BaiduSyncConfig;
 }
 
@@ -47,6 +50,9 @@ export const DEFAULT_SETTINGS: DeepSeekSettings = {
   autoOpenGraph: false,
   conceptsPath: "Knowledge/Concepts",
   questionsIndexPath: "Knowledge/Questions",
+  writingPath: "Writing",
+  continueContextChars: 2000,
+  continueTargetWords: 800,
   baiduSync: { ...DEFAULT_BAIDU_SYNC_CONFIG },
 };
 
