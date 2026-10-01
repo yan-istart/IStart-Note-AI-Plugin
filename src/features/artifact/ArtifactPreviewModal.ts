@@ -36,9 +36,18 @@ export class ArtifactPreviewModal extends Modal {
 
     // File impact notice
     const safeName = this.artifact.title.replace(/[\\/:*?"<>|#[\]]/g, "-").slice(0, 50);
-    contentEl.createEl("div", {
+    const today = new Date().toISOString().slice(0, 10);
+    const impactEl = contentEl.createDiv({
       attr: { style: "font-size: 12px; color: var(--text-muted); margin-bottom: 8px; padding: 6px 8px; background: var(--background-secondary); border-radius: 4px;" },
-    }).innerHTML = `将创建：<br>• <code>Knowledge/Artifacts/${safeName}.md</code><br>• <code>Knowledge/Artifact Runs/${new Date().toISOString().slice(0, 10)} ${safeName}.md</code>（仅"保存并生成今日记录"时）`;
+    });
+    impactEl.appendText("将创建：");
+    impactEl.createEl("br");
+    impactEl.createSpan({ text: "• " });
+    impactEl.createEl("code", { text: `Knowledge/Artifacts/${safeName}.md` });
+    impactEl.createEl("br");
+    impactEl.createSpan({ text: "• " });
+    impactEl.createEl("code", { text: `Knowledge/Artifact Runs/${today} ${safeName}.md` });
+    impactEl.createSpan({ text: '（仅"保存并生成今日记录"时）' });
 
     // Warnings
     if (this.validation.warnings.length > 0) {

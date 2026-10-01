@@ -229,12 +229,13 @@ export default class DeepSeekPlugin extends Plugin {
     const sourceFile = this.app.workspace.getActiveFile();
     const sourcePath = sourceFile?.path ?? "";
 
-    // 1. 先在原文档中把选中词替换为 [[双链]]
+    // 1. 先在原文档中把选中词替换为 [[双链]](保护已有链接,不依赖 lookbehind)
     if (sourceFile && name) {
       const sourceContent = await this.app.vault.read(sourceFile);
       const escaped = this.escapeRegex(name);
-      const linked = sourceContent.replace(
-        new RegExp(`(?<!\\[\\[)${escaped}(?!\\]\\])`, "g"),
+      const linked = this.replaceOutsideLinks(
+        sourceContent,
+        new RegExp(escaped + "(?!\\]\\])", "g"),
         `[[${name}]]`
       );
       if (linked !== sourceContent) {
@@ -283,6 +284,14 @@ export default class DeepSeekPlugin extends Plugin {
 
   private escapeRegex(str: string): string {
     return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  /** 在非 [[链接]] 段内做替换(兼容 iOS 16.4 以下,不依赖 lookbehind) */
+  private replaceOutsideLinks(text: string, regex: RegExp, replacement: string): string {
+    const parts = text.split(/(\[\[[^\]]*\]\])/g);
+    return parts
+      .map((part, i) => (i % 2 === 1 ? part : part.replace(regex, replacement)))
+      .join("");
   }
 
   /** 找一个未被占用的概念页路径（追加 -2、-3 ...） */
