@@ -26,6 +26,18 @@ IStart-Note-AI 是一个面向 Obsidian 的 AI 插件,围绕三大业务场景:*
 - 写作:把灵感变成作品——网文小说、论文、长文
 - 辅助:多模型接入、百度网盘同步
 
+---
+
+## English
+
+IStart-Note-AI is an Obsidian plugin built around three business scenarios: **Knowledge** (read in), **Writing** (write out), and **Auxiliary** (cross-device support).
+
+- **Knowledge** — turn scattered notes into a searchable, interlinked knowledge system: Q&A generation, concept pages, reading projects, vault Q&A with source citations, and a knowledge-debt dashboard.
+- **Writing** — turn ideas into works (web novels, papers, long-form articles): generate outlines, characters, and world settings; continue writing from the cursor with setting injection; generate the next chapter; import existing manuscripts (split, classify, clean) without touching the originals.
+- **Auxiliary** — OpenAI-compatible LLM (DeepSeek by default), multiple output styles, and optional Baidu Pan sync.
+
+For the full English documentation see [README.en.md](./README.en.md).
+
 > [!warning] 测试版
 > v3.0 引入了写作场景并移除了执行模块。Frontmatter schema 尚在演进。升级前请备份 Vault。
 
