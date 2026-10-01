@@ -86,24 +86,54 @@ ${lines.join("\n")}
     const filePath = normalizePath(`${folder}/${this.chapterFileName(ch)}.md`);
     if (this.app.vault.getAbstractFileByPath(filePath)) return;
 
-    const content = `---
+    await this.app.vault.create(filePath, this.buildChapterContent(bookTitle, genre, ch, "", "draft"));
+  }
+
+  /** 写入章节正文(导入原稿用),覆盖模板占位内容 */
+  async writeChapterBody(
+    folder: string,
+    bookTitle: string,
+    genre: WritingGenre,
+    ch: ChapterOutline,
+    body: string,
+    status: string
+  ): Promise<void> {
+    const filePath = normalizePath(`${folder}/${this.chapterFileName(ch)}.md`);
+    const content = this.buildChapterContent(bookTitle, genre, ch, body, status);
+    const existing = this.app.vault.getAbstractFileByPath(filePath);
+    if (existing instanceof TFile) {
+      await this.app.vault.modify(existing, content);
+    } else {
+      await this.app.vault.create(filePath, content);
+    }
+  }
+
+  private buildChapterContent(
+    bookTitle: string,
+    genre: WritingGenre,
+    ch: ChapterOutline,
+    body: string,
+    status: string
+  ): string {
+    const heading = ch.number === 0 ? "# 前言" : `# 第${ch.number}章：${ch.title}`;
+    return `---
 type: chapter
 schema_version: ${SCHEMA_VERSION}
 genre: ${genre}
 project: "${bookTitle}"
 number: ${ch.number}
-title: "${ch.title}"
-synopsis: "${ch.synopsis.replace(/"/g, "'")}"
-status: draft
+title: "${ch.title.replace(/"/g, "'")}"
+synopsis: "${(ch.synopsis || "").replace(/"/g, "'")}"
+status: ${status}
 word_target: ${genre === "paper" ? 1500 : 3000}
 ---
 
-# 第${ch.number}章：${ch.title}
+${heading}
 
-> 本章梗概：${ch.synopsis}
+> 本章梗概：${ch.synopsis || "（待补全）"}
 
+${body.trim()}
 `;
-    await this.app.vault.create(filePath, content);
   }
 
   private async createCharacterNote(folder: string, c: { name: string; role: string; summary: string }): Promise<void> {
@@ -174,7 +204,8 @@ ${w.content}
     const chapterLinks = plan.chapters
       .map((ch) => {
         const fileName = this.chapterFileName(ch);
-        return `- [ ] 第${ch.number}章 [[${fileName}|${ch.title}]]：${ch.synopsis}`;
+        const label = ch.number === 0 ? "前言" : `第${ch.number}章`;
+        return `- [ ] ${label} [[${fileName}|${ch.title}]]：${ch.synopsis}`;
       })
       .join("\n");
 
@@ -393,6 +424,11 @@ ${card.summary}
         const m = this.app.metadataCache.getFileCache(f)?.frontmatter;
         return { path: f.path, name: (m?.name as string) ?? f.basename };
       });
+  }
+
+  /** 章节文件完整路径 */
+  chapterPath(folder: string, ch: ChapterOutline): string {
+    return normalizePath(`${folder}/${this.chapterFileName(ch)}.md`);
   }
 
   private chapterFileName(ch: ChapterOutline): string {

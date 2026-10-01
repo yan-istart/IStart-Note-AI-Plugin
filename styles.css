@@ -554,3 +554,70 @@
   background: var(--background-modifier-active-hover);
   color: var(--text-accent);
 }
+
+/* ── 原稿导入向导 ────────────────────────────────────────── */
+
+.istart-import-modal .istart-import-step {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-bottom: 12px;
+}
+
+.istart-import-list {
+  max-height: 280px;
+  overflow-y: auto;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 6px;
+  padding: 4px;
+  margin: 8px 0;
+}
+
+.istart-import-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.istart-import-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.istart-import-row-title {
+  flex: 1;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.istart-import-row-count {
+  color: var(--text-muted);
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+button.istart-import-merge {
+  font-size: 11px;
+  padding: 2px 6px;
+  flex-shrink: 0;
+}
+
+.istart-import-warning {
+  color: var(--text-warning);
+  font-size: 13px;
+}
+
+.istart-import-progress {
+  color: var(--text-accent);
+  font-size: 13px;
+  margin: 8px 0;
+}
+
+.istart-import-row select.istart-import-kind {
+  font-size: 11px;
+  height: 24px;
+  flex-shrink: 0;
+  max-width: 110px;
+}

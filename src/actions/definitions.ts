@@ -112,6 +112,17 @@ export const ALL_ACTIONS: ActionDef[] = [
     run: (ctx) => { ctx.plugin.openNewWritingProject(); },
   },
   {
+    id: "import-novel",
+    label: "导入原稿",
+    icon: "file-input",
+    description: "把已有网文原稿导入为写作项目(切章/清洗/AI 反推)",
+    domain: "writing",
+    section: "writing-project",
+    when: { always: true },
+    showIn: ["panel"],
+    run: (ctx) => { ctx.plugin.openImportNovel(); },
+  },
+  {
     id: "continue-writing",
     label: "续写",
     icon: "pen-line",

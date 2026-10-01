@@ -34,6 +34,7 @@ import { WritingProjectManager } from "./features/writing/WritingProjectManager"
 import { NewWritingModal, NewWritingInput } from "./features/writing/NewWritingModal";
 import { ContinueModal } from "./features/writing/ContinueModal";
 import { WritingPlanPreviewModal } from "./features/writing/WritingPlanPreviewModal";
+import { ImportModal } from "./features/writing/import/ImportModal";
 import { WritingGenre, WritingContext, WritingPlan, ContinueRequest, ChapterOutline } from "./features/writing/types";
 
 export default class DeepSeekPlugin extends Plugin {
@@ -658,6 +659,11 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
     new NewWritingModal(this.app, (input) => {
       void this.createWritingProject(input);
     }).open();
+  }
+
+  /** 导入已有原稿(网文/论文),原稿不动 */
+  openImportNovel() {
+    new ImportModal(this.app, this.settings).open();
   }
 
   private async createWritingProject(input: NewWritingInput) {

@@ -49,6 +49,7 @@ Build and maintain a structured knowledge base.
 Create and grow your works. Three genres: **web novel / paper / article**.
 
 - **New work** — from a one-line premise, AI generates the project home page, chapter outline (with synopses), and chapter files; novels also get character cards and world settings
+- **Import manuscript** — turn an existing novel draft (paste / file / folder) into a writing project: chapter splitting, content classification (rule pre-check + AI recognition: chapters / outline / settings / reference), cleaning, AI metadata inference; the original stays untouched
 - **Continue writing** (core) — pick up from the cursor or the end of the chapter, automatically carrying in preceding text, chapter/adjacent synopses, style profile, and relevant character/world settings
 - **Generate next chapter** — from the outline synopsis, preview before writing
 - **Polish** — rewrite a selection while keeping the work's voice
@@ -76,6 +77,7 @@ Data boundary: writing artifacts live under `Writing/`; Vault QA excludes them b
 | Knowledge | Knowledge Debt | Experimental | Dashboard statistics |
 | Knowledge | Practical Templates | Experimental | Checklist / SOP / review generator |
 | Writing | New Work | Experimental | Outline + characters + world settings |
+| Writing | Import Manuscript | Experimental | Split / clean / AI inference, original untouched |
 | Writing | Continue Writing | Experimental | Cursor / chapter modes, setting injection |
 | Writing | Next Chapter | Experimental | Generated from outline synopsis |
 | Auxiliary | Baidu Sync | Stable | Manual/auto backup and config sync |
