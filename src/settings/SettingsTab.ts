@@ -18,7 +18,6 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
     containerEl.addClass("istart-settings-root");
 
     // ── Header ───────────────────────────────────────────────
-    new Setting(containerEl).setName("IStart-Note-AI").setHeading();
     containerEl.createEl("p", {
       text: "知识沉淀 · 创作写作 · 同步辅助",
       attr: { style: "color: var(--text-muted); margin-top: -8px; margin-bottom: 16px;" },

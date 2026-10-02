@@ -1,4 +1,5 @@
 import { App, TFile, normalizePath, stringifyYaml } from "obsidian";
+import { frontmatterOf, fmString } from "../../util/frontmatter";
 import { DeepSeekSettings, QuestionClassification } from "../../types";
 import { SCHEMA_VERSION, todayIso } from "../../core/schema";
 
@@ -25,7 +26,7 @@ export class QuestionGraphManager {
     const titles: string[] = [];
     for (const f of files) {
       const meta = this.app.metadataCache.getFileCache(f);
-      const q = (meta?.frontmatter?.question as string) || f.basename;
+      const q = fmString(frontmatterOf(meta), "question") || f.basename;
       titles.push(q);
     }
     return titles;
@@ -156,8 +157,8 @@ export class QuestionGraphManager {
         continue;
       }
       const meta = this.app.metadataCache.getFileCache(qFile);
-      const category = (meta?.frontmatter?.category as string) || "new";
-      const parent = (meta?.frontmatter?.parent as string) || null;
+      const category = fmString(frontmatterOf(meta), "category") || "new";
+      const parent = fmString(frontmatterOf(meta), "parent") || null;
       questions.push({ path: qPath, title: qTitle, category, parent });
     }
 

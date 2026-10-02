@@ -239,7 +239,11 @@ export class ConceptPageManager {
     const match = content.match(/^---\n([\s\S]*?)\n---\n?([\s\S]*)$/);
     if (!match) return { frontmatter: null, body: content };
     try {
-      return { frontmatter: parseYaml(match[1]) as Record<string, unknown>, body: match[2].trimStart() };
+      const parsed: unknown = parseYaml(match[1]);
+      const fm = parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : {};
+      return { frontmatter: fm, body: match[2].trimStart() };
     } catch {
       return { frontmatter: null, body: content };
     }

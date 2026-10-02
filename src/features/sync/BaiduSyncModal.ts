@@ -190,7 +190,7 @@ export class BaiduSyncModal extends Modal {
 
     for (const f of targetFiles) {
       try {
-        await this.app.vault.delete(f);
+        await this.app.fileManager.trashFile(f);
       } catch { /* 忽略删除失败 */ }
     }
 

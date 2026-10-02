@@ -1,6 +1,7 @@
-import { App, TFile, normalizePath, Notice } from "obsidian";
+import { App, TFile, normalizePath } from "obsidian";
 import { ReadingPlan, ChapterSkeleton, ChapterDetail, ChapterSummaryResult, ReadingPlanner } from "../../ai/ReadingPlanner";
 import { DeepSeekSettings } from "../../types";
+import { frontmatterOf, fmString, fmNumber } from "../../util/frontmatter";
 
 const READING_ROOT = "Knowledge/Reading";
 
@@ -59,15 +60,14 @@ export class ReadingProjectManager {
     indexFile: TFile,
     onProgress?: (current: number, total: number, chapter: string) => void
   ): Promise<number> {
-    const content = await this.app.vault.read(indexFile);
     const meta = this.app.metadataCache.getFileCache(indexFile);
-    const fm = meta?.frontmatter;
+    const fm = frontmatterOf(meta);
 
-    if (fm?.type !== "reading-project") {
+    if (fmString(fm, "type") !== "reading-project") {
       throw new Error("当前文件不是阅读项目索引页");
     }
 
-    const bookTitle = (fm.book as string) || "";
+    const bookTitle = fmString(fm, "book") || "";
     const projectFolder = indexFile.parent?.path ?? "";
 
     // 扫描所有章节笔记，找出缺少问题的
@@ -79,8 +79,8 @@ export class ReadingProjectManager {
 
     for (const file of chapterFiles) {
       const fileMeta = this.app.metadataCache.getFileCache(file);
-      const fileFm = fileMeta?.frontmatter;
-      if (fileFm?.type !== "reading-note") continue;
+      const fileFm = frontmatterOf(fileMeta);
+      if (fmString(fileFm, "type") !== "reading-note") continue;
       if (fileFm?.questions_generated === true) continue;
 
       // 读取文件检查是否有预设问题内容
@@ -93,8 +93,8 @@ export class ReadingProjectManager {
       if (!hasQuestions) {
         incomplete.push({
           file,
-          number: (fileFm?.chapter as number) || 0,
-          title: (fileFm?.title as string) || file.basename,
+          number: fmNumber(fileFm, "chapter") || 0,
+          title: fmString(fileFm, "title") || file.basename,
           summary: "",
           concepts: [],
         });
@@ -149,7 +149,7 @@ export class ReadingProjectManager {
     // 更新索引页状态
     const totalChapters = chapterFiles.filter((f) => {
       const m = this.app.metadataCache.getFileCache(f);
-      return m?.frontmatter?.type === "reading-note";
+      return fmString(frontmatterOf(m), "type") === "reading-note";
     }).length;
     await this.updateGenerationStatus(indexFile, totalChapters - (incomplete.length - done), totalChapters);
 

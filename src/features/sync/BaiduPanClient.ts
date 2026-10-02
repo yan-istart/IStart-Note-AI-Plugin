@@ -36,8 +36,37 @@ export interface BaiduUserInfo {
   avatar_url: string;
 }
 
+/** 网盘 API 通用 JSON 响应(收窄 requestUrl 的 any 返回值) */
+interface BaiduJsonResponse {
+  errno?: number;
+  errmsg?: string;
+  list?: BaiduFileEntry[];
+  uploadid?: string;
+  md5?: string;
+}
+
+/** OAuth token 响应 */
+interface OAuthTokenResponse {
+  error?: string;
+  error_description?: string;
+  access_token?: string;
+  refresh_token?: string;
+  expires_in?: number;
+}
+
 export class BaiduPanClient {
   constructor(private config: BaiduSyncConfig) {}
+
+  /** 把 requestUrl 的 any JSON 收窄为类型化对象 */
+  private jsonOf(res: { json: unknown }): BaiduJsonResponse {
+    const value = res.json;
+    return value && typeof value === "object" ? value as BaiduJsonResponse : {};
+  }
+
+  private tokenJsonOf(res: { json: unknown }): OAuthTokenResponse {
+    const value = res.json;
+    return value && typeof value === "object" ? value as OAuthTokenResponse : {};
+  }
 
   // ── OAuth ──────────────────────────────────────────────────
 
@@ -56,12 +85,12 @@ export class BaiduPanClient {
         console.error("[BaiduPan] exchangeToken failed:", res.status, res.text);
         return null;
       }
-      const d = res.json;
-      if (d.error) {
+      const d = this.tokenJsonOf(res);
+      if (d.error || !d.access_token) {
         console.error("[BaiduPan] exchangeToken error:", d.error, d.error_description);
         return null;
       }
-      return { accessToken: d.access_token, refreshToken: d.refresh_token, expiresIn: d.expires_in };
+      return { accessToken: d.access_token, refreshToken: d.refresh_token ?? "", expiresIn: d.expires_in ?? 0 };
     } catch (e) {
       console.error("[BaiduPan] exchangeToken exception:", e);
       return null;
@@ -76,9 +105,9 @@ export class BaiduPanClient {
         throw: false,
       });
       if (res.status !== 200) return null;
-      const d = res.json;
-      if (d.error) return null;
-      return { accessToken: d.access_token, expiresIn: d.expires_in };
+      const d = this.tokenJsonOf(res);
+      if (d.error || !d.access_token) return null;
+      return { accessToken: d.access_token, expiresIn: d.expires_in ?? 0 };
     } catch {
       return null;
     }
@@ -99,8 +128,9 @@ export class BaiduPanClient {
         headers: { "User-Agent": "pan.baidu.com" },
         throw: false,
       });
-      if (res.status !== 200 || res.json.errno !== 0) return null;
-      return res.json as BaiduUserInfo;
+      const d = this.jsonOf(res);
+      if (res.status !== 200 || d.errno !== 0) return null;
+      return d as unknown as BaiduUserInfo;
     } catch {
       return null;
     }
@@ -112,11 +142,12 @@ export class BaiduPanClient {
     try {
       const url = `${PAN_API}/file?method=list&access_token=${this.config.accessToken}&dir=${encodeURIComponent(dir)}&order=name&start=${start}&limit=${limit}`;
       const res = await requestUrl({ url, method: "GET", headers: { "User-Agent": "pan.baidu.com" }, throw: false });
-      if (res.status !== 200 || res.json.errno !== 0) {
-        console.error("[BaiduPan] listFiles error:", res.json?.errno, res.json?.errmsg);
+      const d = this.jsonOf(res);
+      if (res.status !== 200 || d.errno !== 0) {
+        console.error("[BaiduPan] listFiles error:", d.errno, d.errmsg);
         return [];
       }
-      return res.json.list as BaiduFileEntry[];
+      return d.list ?? [];
     } catch {
       return [];
     }
@@ -148,8 +179,9 @@ export class BaiduPanClient {
         body,
         throw: false,
       });
+      const d = this.jsonOf(res);
       // errno -8 = 目录已存在，视为成功
-      return res.status === 200 && (res.json.errno === 0 || res.json.errno === -8);
+      return res.status === 200 && (d.errno === 0 || d.errno === -8);
     } catch {
       return false;
     }
@@ -210,11 +242,12 @@ export class BaiduPanClient {
         throw: false,
       });
 
-      if (res.status !== 200 || res.json.errno !== 0) {
-        console.error("[BaiduPan] precreate response:", res.status, JSON.stringify(res.json));
+      const d = this.jsonOf(res);
+      if (res.status !== 200 || d.errno !== 0) {
+        console.error("[BaiduPan] precreate response:", res.status, JSON.stringify(d));
         return null;
       }
-      return res.json.uploadid as string;
+      return d.uploadid ?? null;
     } catch (e) {
       console.error("[BaiduPan] precreate exception:", e);
       return null;
@@ -250,8 +283,9 @@ export class BaiduPanClient {
         throw: false,
       });
 
-      if (res.status !== 200 || !res.json?.md5) {
-        console.error(`[BaiduPan] uploadChunk part=${partseq} response:`, res.status, JSON.stringify(res.json));
+      const d = this.jsonOf(res);
+      if (res.status !== 200 || !d.md5) {
+        console.error(`[BaiduPan] uploadChunk part=${partseq} response:`, res.status, JSON.stringify(d));
         return false;
       }
       return true;
@@ -280,8 +314,9 @@ export class BaiduPanClient {
         throw: false,
       });
 
-      if (res.status !== 200 || res.json.errno !== 0) {
-        console.error("[BaiduPan] createFile response:", res.status, JSON.stringify(res.json));
+      const d = this.jsonOf(res);
+      if (res.status !== 200 || d.errno !== 0) {
+        console.error("[BaiduPan] createFile response:", res.status, JSON.stringify(d));
         return false;
       }
       return true;
@@ -330,7 +365,8 @@ export class BaiduPanClient {
         body,
         throw: false,
       });
-      return res.status === 200 && res.json.errno === 0;
+      const d = this.jsonOf(res);
+      return res.status === 200 && d.errno === 0;
     } catch {
       return false;
     }

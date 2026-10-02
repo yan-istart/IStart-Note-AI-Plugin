@@ -44,7 +44,7 @@ export class QuestionModal extends Modal {
       );
 
     // 自动聚焦
-    setTimeout(() => textArea.focus(), 50);
+    window.setTimeout(() => textArea.focus(), 50);
   }
 
   private submit() {

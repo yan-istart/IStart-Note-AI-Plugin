@@ -30,7 +30,7 @@ export interface SplitInputFile {
 const CN_TITLE = /^\s*第\s*([0-9零〇一二三四五六七八九十百千万两]+)\s*[章节卷回部集]\s*[.:：、\-\s]?\s*(.{0,60}?)\s*$/;
 const EN_TITLE = /^\s*(?:Chapter|CHAPTER)\s+([0-9]+)\s*[.:：、\-\s]?\s*(.{0,60}?)\s*$/;
 const NUM_TITLE = /^\s*(\d{1,4})\s*[.、:：]\s*(.{2,60}?)\s*$/;
-const SEPARATOR = /^\s*([\-=*_]{3,}|[·•]{8,}|※{3,})\s*$/;
+const SEPARATOR = /^\s*([-=*_]{3,}|[·•]{8,}|※{3,})\s*$/;
 
 /** 去掉章题中的编号前缀:"第3章 风起" → "风起";"Chapter 2 x" → "x" */
 export function normalizeTitle(title: string): string {

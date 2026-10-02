@@ -35,6 +35,10 @@ export interface LLMChatOptions {
   maxTokens?: number;
 }
 
+interface ChatCompletionResponse {
+  choices?: { message?: { content?: string } }[];
+}
+
 export class LLMError extends Error {
   constructor(public status: number, message: string, public body?: string) {
     super(message);
@@ -85,6 +89,7 @@ export class LLMClient {
       throw new LLMError(res.status, `LLM API 错误: ${res.status}`, res.text);
     }
 
-    return res.json?.choices?.[0]?.message?.content ?? "";
+    const data = res.json as ChatCompletionResponse | undefined;
+    return data?.choices?.[0]?.message?.content ?? "";
   }
 }

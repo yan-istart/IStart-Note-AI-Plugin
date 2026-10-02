@@ -1,4 +1,4 @@
-import { App, Modal, Setting, MarkdownRenderer, Component, Notice, normalizePath, TFile } from "obsidian";
+import { App, Modal, Setting, MarkdownRenderer, Component, Notice, normalizePath } from "obsidian";
 import { AssistantResult } from "../../ai/AIAssistant";
 import { todayIso } from "../../core/schema";
 
@@ -60,7 +60,7 @@ export class AssistantInputModal extends Modal {
       .addButton((btn) => btn.setButtonText("执行 (Ctrl+Enter)").setCta().onClick(() => this.submit()))
       .addButton((btn) => btn.setButtonText("取消").onClick(() => this.close()));
 
-    setTimeout(() => this.inputEl.focus(), 50);
+    window.setTimeout(() => this.inputEl.focus(), 50);
   }
 
   private submit() {
@@ -110,7 +110,7 @@ function buildSmartActions(
       return {
         primary: { label: "插入到光标位置", cta: true, callback: onWriteToDoc },
         secondary: [
-          ...(isLong ? [{ label: "保存为新笔记", callback: () => saveAsNote(app, result) }] : []),
+          ...(isLong ? [{ label: "保存为新笔记", callback: () => { void saveAsNote(app, result); } }] : []),
           { label: "复制", callback: () => copyToClipboard(content) },
         ],
       };
@@ -119,7 +119,7 @@ function buildSmartActions(
       return {
         primary: { label: "追加到文档末尾", cta: true, callback: onWriteToDoc },
         secondary: [
-          { label: "保存为新笔记", callback: () => saveAsNote(app, result) },
+          { label: "保存为新笔记", callback: () => { void saveAsNote(app, result); } },
         ],
       };
 
@@ -130,14 +130,14 @@ function buildSmartActions(
         return {
           primary: { label: "创建为概念页", cta: true, callback: onCreateConcept },
           secondary: [
-            { label: "保存为新笔记", callback: () => saveAsNote(app, result) },
+            { label: "保存为新笔记", callback: () => { void saveAsNote(app, result); } },
             { label: "插入到光标位置", callback: onWriteToDoc },
           ],
         };
       }
       // Default show: save as note
       return {
-        primary: { label: "保存为新笔记", cta: true, callback: () => saveAsNote(app, result) },
+        primary: { label: "保存为新笔记", cta: true, callback: () => { void saveAsNote(app, result); } },
         secondary: [
           { label: "插入到光标位置", callback: onWriteToDoc },
           ...(onCreateConcept ? [{ label: "创建为概念页", callback: onCreateConcept }] : []),

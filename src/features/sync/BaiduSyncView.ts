@@ -1,4 +1,4 @@
-import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Modal, Notice, Setting, TFile, WorkspaceLeaf } from "obsidian";
 import { BaiduSyncService } from "./BaiduSyncService";
 import { BaiduSyncMeta, SyncAction } from "./BaiduSyncMeta";
 import { BaiduPanClient } from "./BaiduPanClient";
@@ -260,33 +260,33 @@ export class BaiduSyncView extends ItemView {
 
     // 二次确认
     const confirmed = await new Promise<boolean>((resolve) => {
-      const modal = new (class extends (require("obsidian") as { Modal: new (app: import("obsidian").App) => import("obsidian").Modal }).Modal {
+      class OverwriteConfirmModal extends Modal {
         onOpen() {
           this.titleEl.setText("确认强制覆盖");
           this.contentEl.createEl("p", {
             text: "此操作将删除本地所有同步文件，然后从云端完整恢复。不可撤销！",
             cls: "istart-sync-modal-warning",
           });
-          const { Setting } = require("obsidian") as typeof import("obsidian");
           new Setting(this.contentEl)
-            .addButton((btn: import("obsidian").ButtonComponent) => btn.setButtonText("确认覆盖").setWarning().onClick(() => { this.close(); resolve(true); }))
-            .addButton((btn: import("obsidian").ButtonComponent) => btn.setButtonText("取消").onClick(() => { this.close(); resolve(false); }));
+            .addButton((btn) => btn.setButtonText("确认覆盖").setWarning().onClick(() => { this.close(); resolve(true); }))
+            .addButton((btn) => btn.setButtonText("取消").onClick(() => { this.close(); resolve(false); }));
         }
         onClose() { this.contentEl.empty(); resolve(false); }
-      })(this.app);
+      }
+      const modal = new OverwriteConfirmModal(this.app);
       modal.open();
     });
 
     if (!confirmed) return;
 
-    const notice = new Notice(" 强制覆盖：清理本地...", 0);
+    const notice = new Notice("强制覆盖：清理本地...", 0);
 
-    // 删除本地文件
+    // 删除本地文件(走回收站,尊重用户删除偏好)
     const files = this.app.vault.getFiles().filter(
       (f) => !f.path.split("/").some((p) => p.startsWith("."))
     );
     for (const f of files) {
-      try { await this.app.vault.delete(f); } catch { /* ignore */ }
+      try { await this.app.fileManager.trashFile(f); } catch { /* ignore */ }
     }
 
     // 从云端恢复

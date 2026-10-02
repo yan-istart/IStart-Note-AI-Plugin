@@ -48,7 +48,8 @@ export class BaiduSyncMeta {
   constructor(raw?: string) {
     if (raw) {
       try {
-        this.data = JSON.parse(raw);
+        const parsed: unknown = JSON.parse(raw);
+        this.data = (parsed && typeof parsed === "object" ? parsed : {}) as SyncMeta;
       } catch {
         this.data = {};
       }

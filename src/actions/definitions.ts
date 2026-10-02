@@ -108,7 +108,6 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "writing-project",
     when: { always: true },
     showIn: ["panel"],
-    hotkeys: [{ modifiers: ["Mod", "Shift"], key: "W" }],
     run: (ctx) => { ctx.plugin.openNewWritingProject(); },
   },
   {
@@ -131,7 +130,6 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "writing-chapter",
     when: { fileType: ["chapter"] },
     showIn: ["panel", "editor-menu"],
-    hotkeys: [{ modifiers: ["Mod", "Shift"], key: "J" }],
     run: (ctx) => { void ctx.plugin.continueWriting(); },
   },
   {
@@ -143,7 +141,6 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "writing-chapter",
     when: { fileType: ["chapter", "writing-project"] },
     showIn: ["panel"],
-    hotkeys: [{ modifiers: ["Mod", "Shift"], key: "N" }],
     run: (ctx) => { void ctx.plugin.generateNextChapter(); },
   },
   {
@@ -182,7 +179,6 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "assistant",
     when: { always: true },
     showIn: ["panel", "editor-menu", "file-menu"],
-    hotkeys: [{ modifiers: ["Mod", "Shift"], key: "A" }],
     run: (ctx) => { ctx.plugin.openAssistant(); },
   },
   {

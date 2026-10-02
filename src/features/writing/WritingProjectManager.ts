@@ -1,6 +1,7 @@
 import { App, TFile, normalizePath } from "obsidian";
 import { DeepSeekSettings } from "../../types";
 import { SCHEMA_VERSION, todayIso } from "../../core/schema";
+import { frontmatterOf, fmString, fmNumber } from "../../util/frontmatter";
 import { WritingPlan, WritingGenre, WritingContext, ChapterOutline, CharacterCard, WorldSetting } from "./types";
 
 const GENRE_LABEL: Record<WritingGenre, string> = {
@@ -255,12 +256,13 @@ ${novelSections}
   async loadContext(chapterFile: TFile): Promise<WritingContext | null> {
     const folder = chapterFile.parent?.path ?? "";
     const meta = this.app.metadataCache.getFileCache(chapterFile);
-    const fm = meta?.frontmatter;
-    if (fm?.type !== "chapter") return null;
+    const fm = frontmatterOf(meta);
+    if (fmString(fm, "type") !== "chapter") return null;
 
-    const projectMeta = this.app.metadataCache.getFileCache(
-      this.app.vault.getAbstractFileByPath(normalizePath(`${folder}/_作品.md`)) as TFile
-    )?.frontmatter;
+    const projectIndex = this.app.vault.getAbstractFileByPath(normalizePath(`${folder}/_作品.md`));
+    const projectFm = projectIndex instanceof TFile
+      ? frontmatterOf(this.app.metadataCache.getFileCache(projectIndex))
+      : undefined;
 
     // 大纲中的前后章梗概
     const outlineFile = this.app.vault.getAbstractFileByPath(normalizePath(`${folder}/_大纲.md`));
@@ -268,7 +270,7 @@ ${novelSections}
       ? this.parseOutlineSynopses(await this.app.vault.read(outlineFile))
       : [];
 
-    const chapterNumber = Number(fm.number) || 0;
+    const chapterNumber = fmNumber(fm, "number") || 0;
     const current = synopses.find((s) => s.number === chapterNumber);
     const prev = synopses.filter((s) => s.number < chapterNumber).pop();
     const next = synopses.find((s) => s.number > chapterNumber);
@@ -276,14 +278,15 @@ ${novelSections}
     const characters = await this.readCards<CharacterCard>(normalizePath(`${folder}/_角色`));
     const worldSettings = await this.readCards<WorldSetting>(normalizePath(`${folder}/_设定`));
 
+    const genreValue = fmString(fm, "genre");
     return {
-      projectTitle: (projectMeta?.title as string) || fm.project || chapterFile.basename,
-      oneLiner: (projectMeta?.one_liner as string) || "",
-      styleProfile: (projectMeta?.style_profile as string) || "",
-      genre: (fm.genre as WritingGenre) || "article",
+      projectTitle: fmString(projectFm, "title") || fmString(fm, "project") || chapterFile.basename,
+      oneLiner: fmString(projectFm, "one_liner") || "",
+      styleProfile: fmString(projectFm, "style_profile") || "",
+      genre: (genreValue as WritingGenre) || "article",
       chapterNumber,
-      chapterTitle: (fm.title as string) || chapterFile.basename,
-      chapterSynopsis: (fm.synopsis as string) || current?.synopsis || "",
+      chapterTitle: fmString(fm, "title") || chapterFile.basename,
+      chapterSynopsis: fmString(fm, "synopsis") || current?.synopsis || "",
       prevSynopsis: prev?.synopsis ?? "",
       nextSynopsis: next?.synopsis ?? "",
       characters,
@@ -403,13 +406,13 @@ ${card.summary}
     const cards: T[] = [];
     const files = this.app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(folder + "/"));
     for (const f of files) {
-      const m = this.app.metadataCache.getFileCache(f)?.frontmatter;
+      const m = frontmatterOf(this.app.metadataCache.getFileCache(f));
       const body = await this.app.vault.cachedRead(f);
       const bodyText = body.replace(/^---\n[\s\S]*?\n---\n?/, "").trim();
       cards.push({
-        name: m?.name ?? f.basename,
-        role: m?.role ?? "support",
-        category: m?.category ?? "",
+        name: fmString(m, "name") ?? f.basename,
+        role: fmString(m, "role") ?? "support",
+        category: fmString(m, "category") ?? "",
         summary: bodyText.slice(0, 600),
         content: bodyText.slice(0, 600),
       } as unknown as T);
@@ -421,8 +424,8 @@ ${card.summary}
     return this.app.vault.getMarkdownFiles()
       .filter((f) => f.path.startsWith(folder + "/"))
       .map((f) => {
-        const m = this.app.metadataCache.getFileCache(f)?.frontmatter;
-        return { path: f.path, name: (m?.name as string) ?? f.basename };
+        const m = frontmatterOf(this.app.metadataCache.getFileCache(f));
+        return { path: f.path, name: fmString(m, "name") ?? f.basename };
       });
   }
 

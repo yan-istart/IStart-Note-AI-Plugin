@@ -10,8 +10,6 @@ import { AssistantInputModal, AssistantResultModal } from "./features/assistant/
 import { ReadingPlanner } from "./ai/ReadingPlanner";
 import { NewReadingModal } from "./features/reading/ReadingModal";
 import { ReadingProjectManager } from "./features/reading/ReadingProjectManager";
-import { SectionAppender } from "./ai/SectionAppender";
-import { MarkdownBeautifier } from "./ai/formatter/MarkdownBeautifier";
 import { registerAllActions } from "./actions/registry";
 import { ALL_ACTIONS } from "./actions/definitions";
 import { ConceptCompleter } from "./ai/ConceptCompleter";
@@ -28,6 +26,7 @@ import { ArtifactFeatureController } from "./features/artifact/ArtifactFeatureCo
 import { SCHEMA_VERSION, todayIso } from "./core/schema";
 import { KnowledgeIndexService } from "./core/knowledge";
 import { LLMClient, parseJsonSafe } from "./core/llm";
+import { frontmatterOf, fmString } from "./util/frontmatter";
 import { WritingPlanner } from "./ai/WritingPlanner";
 import { StoryContinuer } from "./ai/StoryContinuer";
 import { WritingProjectManager } from "./features/writing/WritingProjectManager";
@@ -84,7 +83,7 @@ export default class DeepSeekPlugin extends Plugin {
       item.empty();
       const file = this.app.workspace.getActiveFile();
       const meta = file ? this.app.metadataCache.getFileCache(file) : null;
-      if (meta?.frontmatter?.type !== "chapter") return;
+      if (fmString(frontmatterOf(meta), "type") !== "chapter") return;
 
       const continueBtn = item.createSpan({ cls: "istart-writing-status-btn", text: "续写" });
       continueBtn.setAttribute("aria-label", "续写当前章节");
@@ -107,8 +106,6 @@ export default class DeepSeekPlugin extends Plugin {
     const activeFile = this.app.workspace.getActiveFile();
     const selection = editor?.getSelection().trim() ?? "";
     const fileName = activeFile?.basename ?? "";
-    const fileMeta = activeFile ? this.app.metadataCache.getFileCache(activeFile) : null;
-    const fileType = fileMeta?.frontmatter?.type as string | undefined;
 
     // 构建上下文提示
     const hints: string[] = [];
@@ -128,7 +125,7 @@ export default class DeepSeekPlugin extends Plugin {
     const fileContent = editor?.getValue() ?? "";
     const fileName = activeFile?.basename ?? "";
     const fileMeta = activeFile ? this.app.metadataCache.getFileCache(activeFile) : null;
-    const fileType = fileMeta?.frontmatter?.type as string | undefined;
+    const fileType = fmString(frontmatterOf(fileMeta), "type");
 
     // 计算光标上下文
     let cursorLineBefore = "";

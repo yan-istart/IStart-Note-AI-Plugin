@@ -59,8 +59,6 @@ export interface ActionDef {
   risk?: "none" | "low" | "medium" | "high";
   /** 是否实验性功能 */
   experimental?: boolean;
-  /** 默认快捷键(Obsidian Hotkey 格式) */
-  hotkeys?: { modifiers: ("Mod" | "Shift" | "Alt" | "Ctrl")[]; key: string }[];
   run: (ctx: ActionContext) => void;
 }
 

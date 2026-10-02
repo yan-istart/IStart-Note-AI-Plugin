@@ -230,7 +230,9 @@ export class BaiduSyncService {
       const buf = await this.client.downloadFile(remotePath);
       if (!buf) return null;
 
-      const remote: SyncableConfig = JSON.parse(new TextDecoder().decode(buf));
+      const parsed: unknown = JSON.parse(new TextDecoder().decode(buf));
+      if (!parsed || typeof parsed !== "object") return null;
+      const remote = parsed as SyncableConfig;
 
       if (localUpdatedAt && new Date(localUpdatedAt) >= new Date(remote.updatedAt)) {
         return null;
@@ -407,7 +409,7 @@ export class BaiduSyncService {
     let failed = 0;
 
     // 备份插件文件
-    const pluginDir = ".obsidian/plugins/istart-note-ai";
+    const pluginDir = `${this.app.vault.configDir}/plugins/istart-note-ai`;
     const pluginFiles = ["main.js", "manifest.json", "styles.css", "data.json"];
     const remotePluginDir = `${this.config.remotePath}/_plugin`.replace(/\/+/g, "/");
     await this.client.mkdir(remotePluginDir);
@@ -419,11 +421,12 @@ export class BaiduSyncService {
     }
 
     // 备份 Obsidian 关键配置
+    const configDir = this.app.vault.configDir;
     const configFiles = [
-      ".obsidian/app.json",                // 全局设置（含移动端工具栏）
-      ".obsidian/hotkeys.json",            // 快捷键
-      ".obsidian/community-plugins.json",  // 已安装插件列表
-      ".obsidian/appearance.json",         // 外观设置
+      `${configDir}/app.json`,                // 全局设置（含移动端工具栏）
+      `${configDir}/hotkeys.json`,            // 快捷键
+      `${configDir}/community-plugins.json`,  // 已安装插件列表
+      `${configDir}/appearance.json`,         // 外观设置
     ];
     const remoteConfigDir = `${this.config.remotePath}/_obsidian-config`.replace(/\/+/g, "/");
     await this.client.mkdir(remoteConfigDir);
@@ -459,7 +462,7 @@ export class BaiduSyncService {
 
     // 恢复插件文件
     const remotePluginDir = `${this.config.remotePath}/_plugin`.replace(/\/+/g, "/");
-    const pluginDir = ".obsidian/plugins/istart-note-ai";
+    const pluginDir = `${this.app.vault.configDir}/plugins/istart-note-ai`;
     const dirExists = await this.app.vault.adapter.exists(pluginDir);
     if (!dirExists) await this.app.vault.adapter.mkdir(pluginDir);
 
@@ -476,7 +479,7 @@ export class BaiduSyncService {
     const configFiles = await this.client.listFiles(remoteConfigDir);
     for (const entry of configFiles) {
       if (entry.isdir) continue;
-      const result = await this.downloadConfigFile(entry.path, `.obsidian/${entry.server_filename}`);
+      const result = await this.downloadConfigFile(entry.path, `${this.app.vault.configDir}/${entry.server_filename}`);
       if (result === "ok") downloaded++;
       else if (result === "failed") failed++;
     }

@@ -1,4 +1,5 @@
-import { App, TFile, CachedMetadata, normalizePath } from "obsidian";
+import { App, TFile, CachedMetadata } from "obsidian";
+import { frontmatterOf, fmString } from "../../util/frontmatter";
 
 /**
  * A single indexed vault entry.
@@ -220,7 +221,7 @@ export class KnowledgeIndexService {
 
   private indexFile(file: TFile): void {
     const meta: CachedMetadata | null = this.app.metadataCache.getFileCache(file);
-    const fm = meta?.frontmatter;
+    const fm = frontmatterOf(meta);
 
     const title = meta?.headings?.find((h) => h.level === 1)?.heading ?? file.basename;
     const headings = (meta?.headings ?? [])

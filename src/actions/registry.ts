@@ -1,8 +1,9 @@
-import { Notice, TFile } from "obsidian";
+import { TFile } from "obsidian";
+import { frontmatterOf, fmString } from "../util/frontmatter";
 import type DeepSeekPlugin from "../main";
 import { ActionDef, ActionContext, DOMAIN_TITLES, DOMAIN_ORDER } from "./types";
 import { CommandPanelModal } from "../features/command-panel/CommandPanelModal";
-import type { PanelGroup, PanelAction } from "../features/command-panel/CommandPanelModal";
+import type { PanelGroup } from "../features/command-panel/CommandPanelModal";
 
 /**
  * 注册所有 actions 到插件的各个入口
@@ -10,12 +11,10 @@ import type { PanelGroup, PanelAction } from "../features/command-panel/CommandP
 export function registerAllActions(plugin: DeepSeekPlugin, actions: ActionDef[]) {
   // 1. 为每个 action 注册命令
   for (const action of actions) {
-    const hotkeys = action.hotkeys as import("obsidian").Hotkey[] | undefined;
     if (action.showIn.includes("editor-menu")) {
       plugin.addCommand({
         id: action.id,
         name: action.label,
-        hotkeys,
         editorCallback: () => {
           const ctx = buildContext(plugin, null);
           action.run(ctx);
@@ -25,7 +24,6 @@ export function registerAllActions(plugin: DeepSeekPlugin, actions: ActionDef[])
       plugin.addCommand({
         id: action.id,
         name: action.label,
-        hotkeys,
         callback: () => {
           const ctx = buildContext(plugin, null);
           action.run(ctx);
@@ -81,7 +79,7 @@ export function registerAllActions(plugin: DeepSeekPlugin, actions: ActionDef[])
   // 4. 面板命令 + ribbon
   plugin.addCommand({
     id: "open-panel",
-    name: "Open command panel",
+    name: "打开功能面板",
     callback: () => openPanel(plugin, actions),
   });
 
@@ -150,7 +148,7 @@ function buildContext(plugin: DeepSeekPlugin, targetFile: TFile | null): ActionC
     activeFile,
     selection: "",
     fileContent: "",
-    fileType: fileMeta?.frontmatter?.type as string | undefined,
+    fileType: fmString(frontmatterOf(fileMeta), "type"),
     filePath: file?.path ?? "",
     sectionName: null,
     targetFile,
