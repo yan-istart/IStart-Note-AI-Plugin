@@ -36,7 +36,7 @@
     "url": "https://github.com/yan-istart/IStart-Note-AI-Plugin.git"
   },
   "devDependencies": {
-    "@types/node": "^16.11.6",
+    "@types/node": "^25.9.1",
     "@typescript-eslint/eslint-plugin": "5.29.0",
     "@typescript-eslint/parser": "5.29.0",
     "esbuild": "0.17.3",
