@@ -55,7 +55,7 @@ check_prerequisites() {
 
   [[ -f "$PROJECT_DIR/manifest.json" ]] || die "manifest.json not found."
 
-  if [[ ! -f "$PROJECT_DIR/README.md" ]] && [[ ! -f "$PROJECT_DIR/Readme.md" ]]; then
+  if [[ ! -f "$PROJECT_DIR/README.md" ]]; then
     die "README.md not found. It is required for plugin submission."
   fi
 

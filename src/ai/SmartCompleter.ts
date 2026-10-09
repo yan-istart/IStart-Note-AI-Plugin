@@ -1,5 +1,5 @@
-import { requestUrl } from "obsidian";
 import { DeepSeekSettings } from "../types";
+import { LLMClient, parseJsonSafe } from "../core/llm";
 
 export type CompletionMode =
   | "concept"        // 概念页补全
@@ -77,7 +77,11 @@ export interface DocumentSuggestion {
 }
 
 export class SmartCompleter {
-  constructor(private settings: DeepSeekSettings) {}
+  private llm: LLMClient;
+
+  constructor(settings: DeepSeekSettings) {
+    this.llm = new LLMClient(settings);
+  }
 
   /** 补全空 section */
   async completeSection(
@@ -106,60 +110,26 @@ export class SmartCompleter {
 
   /** 续写 */
   async continueWriting(beforeCursor: string): Promise<SmartCompletionResult> {
-    const prompt = CONTINUE_PROMPT
-      .replace("{{before}}", beforeCursor.slice(-1500));
-
+    const prompt = CONTINUE_PROMPT.replace("{{before}}", beforeCursor.slice(-1500));
     const content = await this.call(prompt);
     return { mode: "continue", content, explanation: "已续写" };
   }
 
   /** 分析文档缺失部分 */
   async analyzeDocument(content: string): Promise<DocumentSuggestion[]> {
-    const prompt = DOCUMENT_PROMPT
-      .replace("{{content}}", content.slice(0, 3000));
-
+    const prompt = DOCUMENT_PROMPT.replace("{{content}}", content.slice(0, 3000));
     const raw = await this.call(prompt);
     return this.parseDocumentSuggestions(raw);
   }
 
   private async call(prompt: string): Promise<string> {
-    if (!this.settings.apiKey) {
-      throw new Error("请先配置 API Key");
-    }
-
-    const res = await requestUrl({
-      url: `${this.settings.baseUrl}/v1/chat/completions`,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.settings.model,
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.6,
-      }),
-      throw: false,
-    });
-
-    if (res.status !== 200) {
-      throw new Error(`API 错误: ${res.status} - ${res.text}`);
-    }
-
-    return res.json.choices?.[0]?.message?.content ?? "";
+    return this.llm.chat({ userPrompt: prompt, temperature: 0.6 });
   }
 
   private parseDocumentSuggestions(raw: string): DocumentSuggestion[] {
-    const jsonMatch = raw.match(/```(?:json)?\s*([\s\S]*?)```/) || raw.match(/(\{[\s\S]*\})/);
-    const jsonStr = jsonMatch ? jsonMatch[1] : raw;
-
-    try {
-      const p = JSON.parse(jsonStr.trim()) as Record<string, unknown>;
-      const suggestions = p.suggestions;
-      if (!Array.isArray(suggestions)) return [];
-      return suggestions as DocumentSuggestion[];
-    } catch {
-      return [];
-    }
+    const p = parseJsonSafe<Record<string, unknown> | null>(raw, null);
+    if (!p) return [];
+    const suggestions = p.suggestions;
+    return Array.isArray(suggestions) ? (suggestions as DocumentSuggestion[]) : [];
   }
 }

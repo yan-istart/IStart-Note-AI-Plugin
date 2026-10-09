@@ -58,20 +58,20 @@ export class BaiduAuthModal extends Modal {
       return;
     }
 
-    const notice = new Notice("⏳ 正在获取 Token...", 0);
+    const notice = new Notice(" 正在获取 Token...", 0);
     const client = new BaiduPanClient(this.config);
     const result = await client.exchangeToken(this.code);
     notice.hide();
 
     if (!result) {
-      new Notice("❌ 授权失败，请检查授权码是否正确");
+      new Notice("授权失败，请检查授权码是否正确");
       return;
     }
 
     const expiresAt = new Date(Date.now() + result.expiresIn * 1000).toISOString();
     this.close();
     this.onSuccess(result.accessToken, result.refreshToken, expiresAt);
-    new Notice("✅ 百度网盘授权成功");
+    new Notice(" 百度网盘授权成功");
   }
 
   onClose() {

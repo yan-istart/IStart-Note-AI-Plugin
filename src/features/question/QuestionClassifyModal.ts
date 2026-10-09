@@ -2,9 +2,9 @@ import { App, Modal, Setting } from "obsidian";
 import { QuestionClassification, QuestionCategory } from "../../types";
 
 const CATEGORY_LABELS: Record<QuestionCategory, string> = {
-  new: "🆕 新问题",
-  refinement: "🔍 深化问题",
-  expansion: "🌐 扩展问题",
+  new: " 新问题",
+  refinement: " 深化问题",
+  expansion: " 扩展问题",
 };
 
 export class QuestionClassifyModal extends Modal {
@@ -45,8 +45,8 @@ export class QuestionClassifyModal extends Modal {
           .addOption("refinement", CATEGORY_LABELS.refinement)
           .addOption("expansion", CATEGORY_LABELS.expansion)
           .setValue(this.classification.category)
-          .onChange((v: QuestionCategory) => {
-            this.classification.category = v;
+          .onChange((v: string) => {
+            this.classification.category = v as QuestionCategory;
           })
       );
 

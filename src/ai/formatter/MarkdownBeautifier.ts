@@ -33,9 +33,9 @@ export class MarkdownBeautifier {
       if (paragraphLines.length <= 4) {
         result.push(...paragraphLines);
       } else {
-        // 合并后按句号拆分
+        // 合并后按句号拆分(不依赖 lookbehind,兼容 iOS 16.4 以下)
         const text = paragraphLines.join("\n");
-        const sentences = text.split(/(?<=[。！？.!?])\s*/);
+        const sentences = text.match(/[^。！？.!?]+[。！？.!?]?/g) ?? [text];
         let chunk: string[] = [];
         let lineCount = 0;
         for (const sentence of sentences) {
@@ -76,13 +76,13 @@ export class MarkdownBeautifier {
 
     // 模式：风险：xxx / 注意：xxx / 警告：xxx
     result = result.replace(
-      /^(风险|注意|警告|⚠️)[:：]\s*(.+)$/gm,
+      /^(风险|注意|警告)[:：]\s*(.+)$/gm,
       "> [!warning] $1\n> $2"
     );
 
     // 模式：建议：xxx / 技巧：xxx / 提示：xxx
     result = result.replace(
-      /^(建议|技巧|提示|💡)[:：]\s*(.+)$/gm,
+      /^(建议|技巧|提示)[:：]\s*(.+)$/gm,
       "> [!tip] $1\n> $2"
     );
 
@@ -152,25 +152,37 @@ export class MarkdownBeautifier {
     for (const concept of sorted) {
       if (concept.length < 2) continue; // 跳过太短的
 
-      // 不在以下位置替换：已有双链内、代码块内、标题内、Mermaid 内
+      // 词边界用捕获组实现(不依赖 lookbehind,兼容 iOS 16.4 以下):
+      // 前一个字符必须不是 \w,后一个字符必须不是 \w 且不是 ]]
       const regex = new RegExp(
-        `(?<!\\[\\[)(?<!\\w)${this.escapeRegex(concept)}(?!\\w)(?!\\]\\])`,
+        `(^|[^\\w])(${this.escapeRegex(concept)})(?![\\w]|\\]\\])`,
         "g"
       );
 
-      // 只替换正文中的（跳过代码块和 mermaid）
+      // 只替换正文中的(跳过代码块和 mermaid)
       const lines = result.split("\n");
       let inCodeBlock = false;
       result = lines.map((line) => {
         if (line.startsWith("```")) inCodeBlock = !inCodeBlock;
         if (inCodeBlock) return line;
         if (/^#/.test(line)) return line; // 跳过标题
-        if (/^>/.test(line)) return line.replace(regex, `[[${concept}]]`); // callout 内也替换
-        return line.replace(regex, `[[${concept}]]`);
+        // 保护已有 [[链接]]:先拆出链接段,只在非链接段内替换
+        return this.replaceOutsideLinks(line, regex, `$1[[${concept}]]`);
       }).join("\n");
     }
 
     return result;
+  }
+
+  /**
+   * 在非 [[链接]] 段内做替换(拆出链接段保护,替换后重组)。
+   * 不依赖 lookbehind。
+   */
+  private replaceOutsideLinks(text: string, regex: RegExp, replacement: string): string {
+    const parts = text.split(/(\[\[[^\]]*\]\])/g);
+    return parts
+      .map((part, i) => (i % 2 === 1 ? part : part.replace(regex, replacement)))
+      .join("");
   }
 
   /**

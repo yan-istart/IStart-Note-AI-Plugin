@@ -58,7 +58,7 @@ export class ContextQAModal extends Modal {
       )
       .addButton((btn) => btn.setButtonText("取消").onClick(() => this.close()));
 
-    setTimeout(() => textArea.focus(), 50);
+    window.setTimeout(() => textArea.focus(), 50);
   }
 
   private submit() {

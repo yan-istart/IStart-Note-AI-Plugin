@@ -1,5 +1,6 @@
 import { App, TFile, normalizePath } from "obsidian";
 import { DeepSeekResponse, DeepSeekSettings, ContextQAInput, ContextQAResponse } from "../types";
+import { SCHEMA_VERSION, todayIso } from "../core/schema";
 
 export class VaultWriter {
   constructor(private app: App, private settings: DeepSeekSettings) {}
@@ -7,12 +8,11 @@ export class VaultWriter {
   async writeQANote(question: string, response: DeepSeekResponse): Promise<TFile> {
     const date = new Date().toISOString().slice(0, 10);
     const safeTitle = this.sanitizeFilename(question).slice(0, 50);
-    const filename = `${date}-${safeTitle}.md`;
     const folderPath = normalizePath(this.settings.savePath);
-    const filePath = normalizePath(`${folderPath}/${filename}`);
 
     await this.ensureFolder(folderPath);
 
+    const filePath = await this.uniqueFilePath(folderPath, `${date}-${safeTitle}`);
     const content = this.buildNoteContent(question, response);
     const file = await this.app.vault.create(filePath, content);
 
@@ -26,12 +26,11 @@ export class VaultWriter {
   async writeContextQANote(input: ContextQAInput, response: ContextQAResponse): Promise<TFile> {
     const date = new Date().toISOString().slice(0, 10);
     const safeTitle = this.sanitizeFilename(input.question).slice(0, 50);
-    const filename = `${date}-ctx-${safeTitle}.md`;
     const folderPath = normalizePath(this.settings.savePath);
-    const filePath = normalizePath(`${folderPath}/${filename}`);
 
     await this.ensureFolder(folderPath);
 
+    const filePath = await this.uniqueFilePath(folderPath, `${date}-ctx-${safeTitle}`);
     const content = this.buildContextNoteContent(input, response);
     const file = await this.app.vault.create(filePath, content);
 
@@ -144,9 +143,10 @@ ${tagLine || "暂无标签"}
     const filePath = normalizePath(`${uncategorizedPath}/${concept}.md`);
     const exists = this.app.vault.getAbstractFileByPath(filePath);
     if (!exists) {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = todayIso();
       const content = `---
 type: concept
+schema_version: ${SCHEMA_VERSION}
 name: ${concept}
 status: empty
 completion_status: pending
@@ -177,6 +177,21 @@ created_at: ${today}
     if (!exists) {
       await this.app.vault.createFolder(path);
     }
+  }
+
+  /**
+   * Resolve a non-conflicting `.md` file path inside `folderPath`.
+   * Appends `-2`, `-3`, ... when a file with the same name already exists.
+   */
+  private async uniqueFilePath(folderPath: string, baseName: string): Promise<string> {
+    const safeBase = baseName || "note";
+    let candidate = normalizePath(`${folderPath}/${safeBase}.md`);
+    let suffix = 2;
+    while (this.app.vault.getAbstractFileByPath(candidate)) {
+      candidate = normalizePath(`${folderPath}/${safeBase}-${suffix}.md`);
+      suffix++;
+    }
+    return candidate;
   }
 
   private sanitizeFilename(name: string): string {

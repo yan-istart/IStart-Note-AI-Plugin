@@ -1,5 +1,5 @@
-import { requestUrl } from "obsidian";
 import { DeepSeekSettings, CompletionDepth, ConceptCompletionResult } from "../types";
+import { LLMClient, parseJsonSafe } from "../core/llm";
 
 const LIGHT_PROMPT = `你是一个个人知识图谱助手。请为以下概念生成简明的定义和关联概念。
 
@@ -49,17 +49,17 @@ const STANDARD_PROMPT = `你是一个个人知识图谱助手。请根据给定�
 }`;
 
 export class ConceptCompleter {
-  constructor(private settings: DeepSeekSettings) {}
+  private llm: LLMClient;
+
+  constructor(settings: DeepSeekSettings) {
+    this.llm = new LLMClient(settings);
+  }
 
   async complete(
     concept: string,
     depth: CompletionDepth,
     context: { sourceQuestion?: string; sourceAnswer?: string; relatedConcepts?: string[] }
   ): Promise<ConceptCompletionResult> {
-    if (!this.settings.apiKey) {
-      throw new Error("请先在插件设置中配置 DeepSeek API Key");
-    }
-
     const template = depth === "light" ? LIGHT_PROMPT : STANDARD_PROMPT;
     const prompt = template
       .replace("{{concept}}", concept)
@@ -67,47 +67,13 @@ export class ConceptCompleter {
       .replace("{{source_answer}}", context.sourceAnswer || "无")
       .replace("{{related_concepts}}", (context.relatedConcepts || []).join("、") || "无");
 
-    const res = await requestUrl({
-      url: `${this.settings.baseUrl}/v1/chat/completions`,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.settings.model,
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.5,
-      }),
-      throw: false,
-    });
-
-    if (res.status !== 200) {
-      throw new Error(`DeepSeek API 错误: ${res.status} - ${res.text}`);
-    }
-
-    const data = res.json;
-    const content = data.choices?.[0]?.message?.content ?? "";
+    const content = await this.llm.chat({ userPrompt: prompt, temperature: 0.5 });
     return this.parse(content);
   }
 
   private parse(content: string): ConceptCompletionResult {
-    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) ||
-      content.match(/(\{[\s\S]*\})/);
-    const jsonStr = jsonMatch ? jsonMatch[1] : content;
-
-    try {
-      const p = JSON.parse(jsonStr.trim()) as Record<string, unknown>;
-      return {
-        definition: (p.definition as string) || "",
-        explanation: (p.explanation as string) || "",
-        examples: Array.isArray(p.examples) ? p.examples as string[] : [],
-        related_concepts: Array.isArray(p.related_concepts) ? p.related_concepts as ConceptCompletionResult["related_concepts"] : [],
-        related_questions: Array.isArray(p.related_questions) ? p.related_questions as string[] : [],
-        tags: Array.isArray(p.tags) ? p.tags as string[] : [],
-        domain: typeof p.domain === "string" ? p.domain : undefined,
-      };
-    } catch {
+    const p = parseJsonSafe<Record<string, unknown> | null>(content, null);
+    if (!p) {
       return {
         definition: content,
         explanation: "",
@@ -117,5 +83,16 @@ export class ConceptCompleter {
         tags: [],
       };
     }
+    return {
+      definition: (p.definition as string) || "",
+      explanation: (p.explanation as string) || "",
+      examples: Array.isArray(p.examples) ? (p.examples as string[]) : [],
+      related_concepts: Array.isArray(p.related_concepts)
+        ? (p.related_concepts as ConceptCompletionResult["related_concepts"])
+        : [],
+      related_questions: Array.isArray(p.related_questions) ? (p.related_questions as string[]) : [],
+      tags: Array.isArray(p.tags) ? (p.tags as string[]) : [],
+      domain: typeof p.domain === "string" ? p.domain : undefined,
+    };
   }
 }

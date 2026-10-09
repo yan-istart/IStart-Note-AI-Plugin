@@ -88,19 +88,19 @@ export class FeynmanModal extends Modal {
     }
 
     const difficultyLabels: Record<string, string> = {
-      basic: "🟢 基础",
-      intermediate: "🟡 进阶",
-      advanced: "🔴 深入",
+      basic: " 基础",
+      intermediate: " 进阶",
+      advanced: " 深入",
     };
 
     for (const q of this.questions) {
       const row = contentEl.createDiv({ cls: "istart-smart-suggestion-row" });
       const header = row.createDiv({ cls: "istart-smart-suggestion-header" });
-      header.createEl("span", { text: difficultyLabels[q.difficulty] || "❓" });
+      header.createEl("span", { text: difficultyLabels[q.difficulty] || "" });
       header.createEl("strong", { text: q.question });
 
       const details = row.createEl("details");
-      details.createEl("summary", { text: "💡 提示" });
+      details.createEl("summary", { text: " 提示" });
       details.createEl("p", { text: q.hint, cls: "istart-smart-suggestion-reason" });
     }
 

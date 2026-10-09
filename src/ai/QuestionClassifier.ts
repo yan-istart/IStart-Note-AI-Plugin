@@ -1,5 +1,5 @@
-import { requestUrl } from "obsidian";
 import { DeepSeekSettings, QuestionClassification } from "../types";
+import { LLMClient, parseJsonSafe } from "../core/llm";
 
 const CLASSIFY_PROMPT = `你是一个知识图谱助手，负责对用户的问题进行分类和关联。
 
@@ -25,37 +25,30 @@ const CLASSIFY_PROMPT = `你是一个知识图谱助手，负责对用户的问�
 }`;
 
 export class QuestionClassifier {
-  constructor(private settings: DeepSeekSettings) {}
+  private llm: LLMClient;
+
+  constructor(settings: DeepSeekSettings) {
+    this.llm = new LLMClient(settings);
+  }
 
   async classify(question: string, history: string[]): Promise<QuestionClassification> {
-    if (!this.settings.apiKey) {
+    try {
+      this.llm.ensureApiKey();
+    } catch {
       return this.defaultClassification();
     }
 
     const prompt = CLASSIFY_PROMPT
       .replace("{{question}}", question)
-      .replace("{{history}}", history.length > 0 ? history.map((q, i) => `${i + 1}. ${q}`).join("\n") : "（无历史问题）");
+      .replace(
+        "{{history}}",
+        history.length > 0
+          ? history.map((q, i) => `${i + 1}. ${q}`).join("\n")
+          : "（无历史问题）"
+      );
 
     try {
-      const res = await requestUrl({
-        url: `${this.settings.baseUrl}/v1/chat/completions`,
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${this.settings.apiKey}`,
-        },
-        body: JSON.stringify({
-          model: this.settings.model,
-          messages: [{ role: "user", content: prompt }],
-          temperature: 0.3,
-        }),
-        throw: false,
-      });
-
-      if (res.status !== 200) throw new Error(`API ${res.status}`);
-
-      const data = res.json;
-      const content = data.choices?.[0]?.message?.content ?? "";
+      const content = await this.llm.chat({ userPrompt: prompt, temperature: 0.3 });
       return this.parse(content);
     } catch {
       return this.defaultClassification();
@@ -63,23 +56,21 @@ export class QuestionClassifier {
   }
 
   private parse(content: string): QuestionClassification {
-    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) ||
-      content.match(/(\{[\s\S]*\})/);
-    const jsonStr = jsonMatch ? jsonMatch[1] : content;
+    const p = parseJsonSafe<Record<string, unknown> | null>(content, null);
+    if (!p) return this.defaultClassification();
 
-    try {
-      const p = JSON.parse(jsonStr.trim()) as Record<string, unknown>;
-      return {
-        category: (["new", "refinement", "expansion"].includes(p.category as string) ? p.category : "new") as QuestionClassification["category"],
-        parent: typeof p.parent === "string" ? p.parent : null,
-        related: Array.isArray(p.related) ? p.related as string[] : [],
-        confidence: typeof p.confidence === "number" ? p.confidence : 0.5,
-        refinements: Array.isArray(p.refinements) ? p.refinements as string[] : [],
-        expansions: Array.isArray(p.expansions) ? p.expansions as string[] : [],
-      };
-    } catch {
-      return this.defaultClassification();
-    }
+    const category = ["new", "refinement", "expansion"].includes(p.category as string)
+      ? (p.category as QuestionClassification["category"])
+      : "new";
+
+    return {
+      category,
+      parent: typeof p.parent === "string" ? p.parent : null,
+      related: Array.isArray(p.related) ? (p.related as string[]) : [],
+      confidence: typeof p.confidence === "number" ? p.confidence : 0.5,
+      refinements: Array.isArray(p.refinements) ? (p.refinements as string[]) : [],
+      expansions: Array.isArray(p.expansions) ? (p.expansions as string[]) : [],
+    };
   }
 
   private defaultClassification(): QuestionClassification {

@@ -1,4 +1,4 @@
-import { ItemView, Notice, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Modal, Notice, Setting, TFile, WorkspaceLeaf } from "obsidian";
 import { BaiduSyncService } from "./BaiduSyncService";
 import { BaiduSyncMeta, SyncAction } from "./BaiduSyncMeta";
 import { BaiduPanClient } from "./BaiduPanClient";
@@ -60,11 +60,11 @@ export class BaiduSyncView extends ItemView {
     // 操作按钮行
     const btnRow = root.createDiv({ cls: "istart-sync-btn-row" });
 
-    this.makeBtn(btnRow, "🔍 扫描状态", "default", () => { void this.scan(); });
-    this.makeBtn(btnRow, "⬆ 强制备份", "default", () => { void this.forceBackup(); });
-    this.makeBtn(btnRow, "⬇ 强制更新", "default", () => { void this.forceUpdate(); });
-    this.makeBtn(btnRow, "⇄ 双向同步", "cta", () => { void this.runSync(); });
-    this.makeBtn(btnRow, "⚠️ 强制覆盖", "default", () => { void this.forceOverwrite(); });
+    this.makeBtn(btnRow, "扫描状态", "default", () => { void this.scan(); });
+    this.makeBtn(btnRow, "强制备份", "default", () => { void this.forceBackup(); });
+    this.makeBtn(btnRow, "强制更新", "default", () => { void this.forceUpdate(); });
+    this.makeBtn(btnRow, "双向同步", "cta", () => { void this.runSync(); });
+    this.makeBtn(btnRow, "强制覆盖", "default", () => { void this.forceOverwrite(); });
 
     // 上次扫描时间
     if (this.lastScanTime) {
@@ -75,12 +75,12 @@ export class BaiduSyncView extends ItemView {
     }
 
     if (this.isScanning) {
-      root.createEl("p", { text: "⏳ 扫描中...", cls: "istart-sync-status-msg" });
+      root.createEl("p", { text: "扫描中...", cls: "istart-sync-status-msg" });
       return;
     }
 
     if (this.statusList.length === 0 && this.lastScanTime) {
-      root.createEl("p", { text: "✅ 已是最新，无需同步", cls: "istart-sync-success" });
+      root.createEl("p", { text: "已是最新，无需同步", cls: "istart-sync-success" });
       return;
     }
 
@@ -92,15 +92,15 @@ export class BaiduSyncView extends ItemView {
     // 统计摘要
     const counts = this.countByAction();
     const summaryEl = root.createDiv({ cls: "istart-sync-summary" });
-    if (counts.upload) this.makeBadge(summaryEl, `↑ ${counts.upload} 待上传`, "istart-sync-badge-upload");
-    if (counts.download) this.makeBadge(summaryEl, `↓ ${counts.download} 待下载`, "istart-sync-badge-download");
-    if (counts.conflict) this.makeBadge(summaryEl, `⚠ ${counts.conflict} 冲突`, "istart-sync-badge-conflict");
-    if (counts.unchanged) this.makeBadge(summaryEl, `✓ ${counts.unchanged} 已同步`, "istart-sync-badge-unchanged");
+    if (counts.upload) this.makeBadge(summaryEl, `待上传 ${counts.upload}`, "istart-sync-badge-upload");
+    if (counts.download) this.makeBadge(summaryEl, `待下载 ${counts.download}`, "istart-sync-badge-download");
+    if (counts.conflict) this.makeBadge(summaryEl, `冲突 ${counts.conflict}`, "istart-sync-badge-conflict");
+    if (counts.unchanged) this.makeBadge(summaryEl, `已同步 ${counts.unchanged}`, "istart-sync-badge-unchanged");
 
     // 文件列表（只显示需要操作的）
     const actionItems = this.statusList.filter((s) => s.action !== SyncAction.Unchanged);
     if (actionItems.length === 0) {
-      root.createEl("p", { text: "✅ 所有文件已同步", cls: "istart-sync-success" });
+      root.createEl("p", { text: "所有文件已同步", cls: "istart-sync-success" });
       return;
     }
 
@@ -206,12 +206,12 @@ export class BaiduSyncView extends ItemView {
     const tokenOk = await service.ensureValidToken();
     if (!tokenOk) { new Notice("Token 已过期，请重新授权"); return; }
 
-    const notice = new Notice("⏳ 强制备份中...", 0);
+    const notice = new Notice("强制备份中...", 0);
     const result = await service.backup("", (c, t, f) =>
-      notice.setMessage(`⏳ 备份 (${c}/${t})：${f.split("/").pop()}`)
+      notice.setMessage(`备份 (${c}/${t})：${f.split("/").pop()}`)
     );
     notice.hide();
-    new Notice(`✅ 备份完成，↑ ${result.uploaded}，跳过 ${result.skipped}，失败 ${result.failed}`);
+    new Notice(`备份完成：上传 ${result.uploaded}，跳过 ${result.skipped}，失败 ${result.failed}`);
     await this.scan();
   }
 
@@ -221,12 +221,12 @@ export class BaiduSyncView extends ItemView {
     const tokenOk = await service.ensureValidToken();
     if (!tokenOk) { new Notice("Token 已过期，请重新授权"); return; }
 
-    const notice = new Notice("⏳ 强制更新中...", 0);
+    const notice = new Notice("强制更新中...", 0);
     const result = await service.restore("", true, (c, t, f) =>
-      notice.setMessage(`⏳ 更新 (${c}/${t})：${f.split("/").pop()}`)
+      notice.setMessage(`更新 (${c}/${t})：${f.split("/").pop()}`)
     );
     notice.hide();
-    new Notice(`✅ 更新完成，↓ ${result.downloaded}，跳过 ${result.skipped}，失败 ${result.failed}`);
+    new Notice(`更新完成：下载 ${result.downloaded}，跳过 ${result.skipped}，失败 ${result.failed}`);
     await this.scan();
   }
 
@@ -236,19 +236,19 @@ export class BaiduSyncView extends ItemView {
     const tokenOk = await service.ensureValidToken();
     if (!tokenOk) { new Notice("Token 已过期，请重新授权"); return; }
 
-    const notice = new Notice("⏳ 同步中...", 0);
+    const notice = new Notice("同步中...", 0);
     const result = await service.sync("", { conflictStrategy: "keep-both" }, (msg) =>
-      notice.setMessage(`⏳ ${msg}`)
+      notice.setMessage(`${msg}`)
     );
     notice.hide();
 
     const parts = [
-      result.uploaded && `↑ ${result.uploaded}`,
-      result.downloaded && `↓ ${result.downloaded}`,
-      result.conflicts.length && `⚠ 冲突 ${result.conflicts.length}`,
-      result.failed && `❌ ${result.failed}`,
+      result.uploaded && `上传 ${result.uploaded}`,
+      result.downloaded && `下载 ${result.downloaded}`,
+      result.conflicts.length && `冲突 ${result.conflicts.length}`,
+      result.failed && `失败 ${result.failed}`,
     ].filter(Boolean).join("  ");
-    new Notice(parts ? `✅ 同步完成  ${parts}` : "✅ 已是最新");
+    new Notice(parts ? `同步完成：${parts}` : "已是最新");
     await this.scan();
   }
 
@@ -260,43 +260,43 @@ export class BaiduSyncView extends ItemView {
 
     // 二次确认
     const confirmed = await new Promise<boolean>((resolve) => {
-      const modal = new (class extends (require("obsidian") as { Modal: new (app: import("obsidian").App) => import("obsidian").Modal }).Modal {
+      class OverwriteConfirmModal extends Modal {
         onOpen() {
-          this.titleEl.setText("⚠️ 确认强制覆盖");
+          this.titleEl.setText("确认强制覆盖");
           this.contentEl.createEl("p", {
             text: "此操作将删除本地所有同步文件，然后从云端完整恢复。不可撤销！",
             cls: "istart-sync-modal-warning",
           });
-          const { Setting } = require("obsidian") as typeof import("obsidian");
           new Setting(this.contentEl)
-            .addButton((btn: import("obsidian").ButtonComponent) => btn.setButtonText("确认覆盖").setWarning().onClick(() => { this.close(); resolve(true); }))
-            .addButton((btn: import("obsidian").ButtonComponent) => btn.setButtonText("取消").onClick(() => { this.close(); resolve(false); }));
+            .addButton((btn) => btn.setButtonText("确认覆盖").setWarning().onClick(() => { this.close(); resolve(true); }))
+            .addButton((btn) => btn.setButtonText("取消").onClick(() => { this.close(); resolve(false); }));
         }
         onClose() { this.contentEl.empty(); resolve(false); }
-      })(this.app);
+      }
+      const modal = new OverwriteConfirmModal(this.app);
       modal.open();
     });
 
     if (!confirmed) return;
 
-    const notice = new Notice("⏳ 强制覆盖：清理本地...", 0);
+    const notice = new Notice("强制覆盖：清理本地...", 0);
 
-    // 删除本地文件
+    // 删除本地文件(走回收站,尊重用户删除偏好)
     const files = this.app.vault.getFiles().filter(
       (f) => !f.path.split("/").some((p) => p.startsWith("."))
     );
     for (const f of files) {
-      try { await this.app.vault.delete(f); } catch { /* ignore */ }
+      try { await this.app.fileManager.trashFile(f); } catch { /* ignore */ }
     }
 
     // 从云端恢复
-    notice.setMessage("⏳ 强制覆盖：从云端恢复...");
+    notice.setMessage("强制覆盖：从云端恢复...");
     const result = await service.restore("", true, (c, t, file) => {
-      notice.setMessage(`⏳ 恢复中 (${c}/${t})：${file.split("/").pop()}`);
+      notice.setMessage(`恢复中 (${c}/${t})：${file.split("/").pop()}`);
     });
     notice.hide();
 
-    new Notice(`✅ 强制覆盖完成：恢复 ${result.downloaded} 个文件`);
+    new Notice(`强制覆盖完成：恢复 ${result.downloaded} 个文件`);
     await this.scan();
   }
 
@@ -308,7 +308,7 @@ export class BaiduSyncView extends ItemView {
     const content = await this.app.vault.readBinary(abstract);
     const remotePath = `${cfg.remotePath}/${path}`.replace(/\/+/g, "/");
     const ok = await client.uploadFile(content, remotePath);
-    new Notice(ok ? `✅ 已上传：${path.split("/").pop()}` : `❌ 上传失败：${path}`);
+    new Notice(ok ? `已上传：${path.split("/").pop()}` : `上传失败：${path}`);
     if (ok) await this.scan();
   }
 
@@ -317,7 +317,7 @@ export class BaiduSyncView extends ItemView {
     const client = new BaiduPanClient(cfg);
     const remotePath = `${cfg.remotePath}/${item.path}`.replace(/\/+/g, "/");
     const content = await client.downloadFile(remotePath);
-    if (!content) { new Notice(`❌ 下载失败：${item.path}`); return; }
+    if (!content) { new Notice(`下载失败：${item.path}`); return; }
 
     const dir = item.path.substring(0, item.path.lastIndexOf("/"));
     if (dir && !(await this.app.vault.adapter.exists(dir))) await this.app.vault.adapter.mkdir(dir);
@@ -326,7 +326,7 @@ export class BaiduSyncView extends ItemView {
     if (existing instanceof TFile) await this.app.vault.modifyBinary(existing, content);
     else await this.app.vault.createBinary(item.path, content);
 
-    new Notice(`✅ 已下载：${item.path.split("/").pop()}`);
+    new Notice(`已下载：${item.path.split("/").pop()}`);
     await this.scan();
   }
 
@@ -340,7 +340,7 @@ export class BaiduSyncView extends ItemView {
     const client = new BaiduPanClient(cfg);
     const remotePath = `${cfg.remotePath}/${path}`.replace(/\/+/g, "/");
     const ok = await client.deleteFile(remotePath);
-    new Notice(ok ? `✅ 已删除远端：${path.split("/").pop()}` : `❌ 删除失败`);
+    new Notice(ok ? `已删除远端：${path.split("/").pop()}` : `删除失败`);
     if (ok) await this.scan();
   }
 
@@ -360,13 +360,13 @@ export class BaiduSyncView extends ItemView {
   private actionIcon(action: SyncAction): string {
     switch (action) {
       case SyncAction.Upload:
-      case SyncAction.LocalOnly: return "↑";
+      case SyncAction.LocalOnly: return "上传";
       case SyncAction.Download:
-      case SyncAction.RemoteOnly: return "↓";
-      case SyncAction.Conflict: return "⚠";
-      case SyncAction.LocalDeleted: return "🗑";
-      case SyncAction.RemoteDeleted: return "🗑";
-      default: return "✓";
+      case SyncAction.RemoteOnly: return "下载";
+      case SyncAction.Conflict: return "冲突";
+      case SyncAction.LocalDeleted: return "删除";
+      case SyncAction.RemoteDeleted: return "删除";
+      default: return "已同步";
     }
   }
 

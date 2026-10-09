@@ -1,4 +1,4 @@
-import { ContentType, NoteTemplate, OutputStyle } from "../templates/types";
+import { ContentType, OutputStyle } from "../templates/types";
 import { TEMPLATES } from "../templates/index";
 import { AssistantContext } from "../AIAssistant";
 

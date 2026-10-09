@@ -1,5 +1,7 @@
 import { App, TFile, normalizePath, stringifyYaml } from "obsidian";
+import { frontmatterOf, fmString } from "../../util/frontmatter";
 import { DeepSeekSettings, QuestionClassification } from "../../types";
+import { SCHEMA_VERSION, todayIso } from "../../core/schema";
 
 export interface QuestionMeta {
   file: TFile;
@@ -24,7 +26,7 @@ export class QuestionGraphManager {
     const titles: string[] = [];
     for (const f of files) {
       const meta = this.app.metadataCache.getFileCache(f);
-      const q = (meta?.frontmatter?.question as string) || f.basename;
+      const q = fmString(frontmatterOf(meta), "question") || f.basename;
       titles.push(q);
     }
     return titles;
@@ -38,16 +40,16 @@ export class QuestionGraphManager {
     concepts: string[]
   ): Promise<void> {
     const content = await this.app.vault.read(file);
-    const today = new Date().toISOString().slice(0, 10);
 
     const fm: Record<string, unknown> = {
       type: "question",
+      schema_version: SCHEMA_VERSION,
       question,
       category: classification.category,
       parent: classification.parent ?? null,
       related: classification.related,
       concepts,
-      created_at: today,
+      created_at: todayIso(),
       status: "linked",
     };
 
@@ -155,8 +157,8 @@ export class QuestionGraphManager {
         continue;
       }
       const meta = this.app.metadataCache.getFileCache(qFile);
-      const category = (meta?.frontmatter?.category as string) || "new";
-      const parent = (meta?.frontmatter?.parent as string) || null;
+      const category = fmString(frontmatterOf(meta), "category") || "new";
+      const parent = fmString(frontmatterOf(meta), "parent") || null;
       questions.push({ path: qPath, title: qTitle, category, parent });
     }
 

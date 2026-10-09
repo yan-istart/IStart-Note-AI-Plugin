@@ -1,5 +1,5 @@
-import { requestUrl } from "obsidian";
 import { DeepSeekSettings } from "../types";
+import { LLMClient, parseJsonSafe } from "../core/llm";
 
 export type DiagramType =
   | "auto"
@@ -56,17 +56,17 @@ const PROMPT = `你是一个技术文档可视化助手。根据用户提供的�
 }`;
 
 export class DiagramGenerator {
-  constructor(private settings: DeepSeekSettings) {}
+  private llm: LLMClient;
+
+  constructor(settings: DeepSeekSettings) {
+    this.llm = new LLMClient(settings);
+  }
 
   async generate(
     selection: string,
     type: DiagramType = "auto",
     surroundingContext?: string
   ): Promise<DiagramResult> {
-    if (!this.settings.apiKey) {
-      throw new Error("请先配置 API Key");
-    }
-
     const contextSection = surroundingContext
       ? `当前文件的上下文（供参考）：\n${surroundingContext}`
       : "";
@@ -76,39 +76,12 @@ export class DiagramGenerator {
       .replace("{{context_section}}", contextSection)
       .replace("{{type}}", type === "auto" ? "auto（请自动判断最合适的类型）" : type);
 
-    const res = await requestUrl({
-      url: `${this.settings.baseUrl}/v1/chat/completions`,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.settings.model,
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.4,
-      }),
-      throw: false,
-    });
-
-    if (res.status !== 200) {
-      throw new Error(`API 错误: ${res.status} - ${res.text}`);
-    }
-
-    const data = res.json;
-    const content = data.choices?.[0]?.message?.content ?? "";
+    const content = await this.llm.chat({ userPrompt: prompt, temperature: 0.4 });
     return this.parse(content);
   }
 
   /** 优化/扩展已有的图表代码 */
-  async refine(
-    existingCode: string,
-    instruction: string
-  ): Promise<DiagramResult> {
-    if (!this.settings.apiKey) {
-      throw new Error("请先配置 API Key");
-    }
-
+  async refine(existingCode: string, instruction: string): Promise<DiagramResult> {
     const prompt = `你是一个技术文档可视化助手。用户有一段已有的 Mermaid/LaTeX 代码，需要你根据指令进行优化或扩展。
 
 已有代码：
@@ -129,37 +102,13 @@ ${existingCode}
   "explanation": "修改说明"
 }`;
 
-    const res = await requestUrl({
-      url: `${this.settings.baseUrl}/v1/chat/completions`,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: this.settings.model,
-        messages: [{ role: "user", content: prompt }],
-        temperature: 0.4,
-      }),
-      throw: false,
-    });
-
-    if (res.status !== 200) {
-      throw new Error(`API 错误: ${res.status} - ${res.text}`);
-    }
-
-    const data = res.json;
-    const content = data.choices?.[0]?.message?.content ?? "";
+    const content = await this.llm.chat({ userPrompt: prompt, temperature: 0.4 });
     return this.parse(content);
   }
 
   private parse(content: string): DiagramResult {
-    const jsonMatch = content.match(/```(?:json)?\s*([\s\S]*?)```/) ||
-      content.match(/(\{[\s\S]*\})/);
-    const jsonStr = jsonMatch ? jsonMatch[1] : content;
-
-    try {
-      const p = JSON.parse(jsonStr.trim()) as Record<string, unknown>;
+    const p = parseJsonSafe<Record<string, unknown> | null>(content, null);
+    if (p) {
       const type = (p.type as DiagramType) || "flowchart";
       return {
         type,
@@ -167,14 +116,13 @@ ${existingCode}
         code: (p.code as string) || "",
         explanation: (p.explanation as string) || undefined,
       };
-    } catch {
-      // 降级：尝试直接提取 mermaid 代码
-      const mermaidMatch = content.match(/```mermaid\s*([\s\S]*?)```/);
-      if (mermaidMatch) {
-        return { type: "flowchart", typeName: "流程图", code: mermaidMatch[1].trim() };
-      }
-      return { type: "flowchart", typeName: "流程图", code: content };
     }
+    // 降级：尝试直接提取 mermaid 代码
+    const mermaidMatch = content.match(/```mermaid\s*([\s\S]*?)```/);
+    if (mermaidMatch) {
+      return { type: "flowchart", typeName: "流程图", code: mermaidMatch[1].trim() };
+    }
+    return { type: "flowchart", typeName: "流程图", code: content };
   }
 
   /** 将结果格式化为可插入笔记的 Markdown */
@@ -187,15 +135,15 @@ ${existingCode}
 
   static getTypeLabels(): { value: DiagramType; label: string }[] {
     return [
-      { value: "auto", label: "🤖 智能推荐" },
-      { value: "flowchart", label: "📊 流程图" },
-      { value: "sequence", label: "🔄 时序图" },
-      { value: "state", label: "🔀 状态图" },
-      { value: "class", label: "🏗 类图" },
-      { value: "architecture", label: "🏛 架构图" },
-      { value: "er", label: "🗃 ER 图" },
-      { value: "gantt", label: "📅 甘特图" },
-      { value: "formula", label: "📐 数学公式" },
+      { value: "auto", label: " 智能推荐" },
+      { value: "flowchart", label: " 流程图" },
+      { value: "sequence", label: " 时序图" },
+      { value: "state", label: " 状态图" },
+      { value: "class", label: " 类图" },
+      { value: "architecture", label: " 架构图" },
+      { value: "er", label: " ER 图" },
+      { value: "gantt", label: " 甘特图" },
+      { value: "formula", label: " 数学公式" },
     ];
   }
 }

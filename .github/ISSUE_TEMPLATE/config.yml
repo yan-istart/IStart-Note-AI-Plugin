@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Security report
+    url: https://github.com/yan-istart/IStart-Note-AI-Plugin/security/advisories/new
+    about: Please report security issues privately, not via public issues.
+  - name: Question or discussion
+    url: https://github.com/yan-istart/IStart-Note-AI-Plugin/discussions
+    about: Ask a question or discuss an idea before filing a feature request.
