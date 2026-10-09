@@ -253,6 +253,25 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
   private renderBaiduSyncSettings(el: HTMLElement): void {
     const cfg = this.plugin.settings.baiduSync;
 
+    new Setting(el).setName("同步方式")
+      .setDesc("Git 模式支持提交历史和文本合并；切换不会删除旧备份，所有设备需选择相同方式。")
+      .addDropdown((drop) => drop.addOption("git", "Git 版本同步（支持电脑与手机）")
+        .addOption("files", "原有文件备份与同步").setValue(cfg.syncEngine).onChange(async (value) => {
+          cfg.syncEngine = value as "git" | "files";
+          await this.plugin.saveSettings(); this.display();
+        }));
+
+    if (cfg.syncEngine === "git") {
+      new Setting(el).setName("自动 Git 同步")
+        .setDesc("默认关闭。开启后，在应用处于前台时每分钟同步，启动时也同步一次。")
+        .addToggle((toggle) => toggle.setValue(cfg.autoSync).onChange(async (value) => {
+          cfg.autoSync = value; await this.plugin.saveSettings();
+        }));
+      new Setting(el).setName("手动 Git 同步")
+        .setDesc("保存本地版本后合并云端修改；冲突可选择版本或编辑内容。")
+        .addButton((btn) => btn.setButtonText("打开同步").onClick(() => this.plugin.openBaiduSyncModal()));
+    }
+
     new Setting(el)
       .setName("App ID")
       .addText((t) =>
@@ -300,14 +319,16 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         })
       );
 
-    new Setting(el)
-      .setName("自动备份")
-      .setDesc("生成笔记后自动备份")
-      .addToggle((t) => t.setValue(cfg.autoBackup).onChange(async (v) => { cfg.autoBackup = v; await this.plugin.saveSettings(); }));
+    if (cfg.syncEngine === "files") {
+      new Setting(el)
+        .setName("自动备份")
+        .setDesc("原有文件备份偏好，默认关闭")
+        .addToggle((t) => t.setValue(cfg.autoBackup).onChange(async (v) => { cfg.autoBackup = v; await this.plugin.saveSettings(); }));
 
-    new Setting(el)
-      .setName("备份插件本身")
-      .addToggle((t) => t.setValue(cfg.backupPlugin).onChange(async (v) => { cfg.backupPlugin = v; await this.plugin.saveSettings(); }));
+      new Setting(el)
+        .setName("备份插件本身")
+        .addToggle((t) => t.setValue(cfg.backupPlugin).onChange(async (v) => { cfg.backupPlugin = v; await this.plugin.saveSettings(); }));
+    }
 
     new Setting(el)
       .setName("忽略规则")
@@ -330,6 +351,12 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
 
     // 配置同步
     new Setting(el).setName("跨设备配置同步").setDesc("不含凭证").setHeading();
+
+    new Setting(el).setName("启动时自动拉取配置")
+      .setDesc("默认关闭；自动同步开关始终由本设备控制。")
+      .addToggle((toggle) => toggle.setValue(cfg.autoPullConfig).onChange(async (value) => {
+        cfg.autoPullConfig = value; await this.plugin.saveSettings();
+      }));
 
     new Setting(el)
       .addButton((btn) => btn.setButtonText("推送配置").onClick(() => void this.plugin.pushConfig()))

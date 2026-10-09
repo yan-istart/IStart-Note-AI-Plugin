@@ -2,6 +2,8 @@ import { ItemView, Modal, Notice, Setting, TFile, WorkspaceLeaf } from "obsidian
 import { BaiduSyncService } from "./BaiduSyncService";
 import { BaiduSyncMeta, SyncAction } from "./BaiduSyncMeta";
 import { BaiduPanClient } from "./BaiduPanClient";
+import { BaiduGitSyncService } from "./BaiduGitSyncService";
+import { runGitSync, GitHistoryModal } from "./BaiduGitSyncModal";
 import type DeepSeekPlugin from "../../main";
 
 export const SYNC_VIEW_TYPE = "istart-baidu-sync-view";
@@ -54,6 +56,24 @@ export class BaiduSyncView extends ItemView {
         text: "请先在设置中启用百度云同步并完成授权。",
         cls: "istart-sync-hint",
       });
+      return;
+    }
+
+    if (cfg.syncEngine === "git") {
+      root.createEl("p", { text: cfg.autoSync ? "Git 版本同步 · 前台自动同步已开启" : "Git 版本同步 · 自动同步已关闭", cls: "istart-sync-hint" });
+      const buttons = root.createDiv({ cls: "istart-sync-btn-row" });
+      this.makeBtn(buttons, "手动同步", "cta", () => {
+        void runGitSync(this.app, cfg, () => this.plugin.saveSettings()).then(() => this.render());
+      });
+      this.makeBtn(buttons, "版本历史", "default", () => new GitHistoryModal(this.app, cfg).open());
+      const history = root.createDiv();
+      void new BaiduGitSyncService(this.app, cfg).history().then((entries) => {
+        if (!root.isConnected) return;
+        if (!entries.length) history.createEl("p", { text: "尚无提交，点击手动同步保存第一个版本。" });
+        for (const entry of entries.slice(0, 10)) {
+          history.createDiv({ cls: "istart-sync-file-row", text: `${entry.oid.slice(0, 8)} · ${entry.message} · ${new Date(entry.timestamp).toLocaleString()}` });
+        }
+      }).catch((error: Error) => { history.createEl("p", { text: error.message }); });
       return;
     }
 
@@ -180,6 +200,7 @@ export class BaiduSyncView extends ItemView {
       for (const e of remoteEntries) {
         if (!e.isdir && !e.path.endsWith("istart-sync-meta.json")) {
           const rel = e.path.replace(remoteRoot + "/", "").replace(/^\//, "");
+          if (rel.startsWith("_istart-git/")) continue;
           remoteMap.set(rel, e.server_mtime);
         }
       }

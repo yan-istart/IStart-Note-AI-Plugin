@@ -8,7 +8,7 @@
   <a href="./README.md">简体中文</a> ·
   <a href="#quick-start">Quick Start</a> ·
   <a href="#privacy">Privacy</a> ·
-  <a href="#roadmap">Roadmap</a>
+  <a href="#current-limitations">Current limitations</a>
 </p>
 
 <p align="center">
@@ -24,10 +24,9 @@ IStart-Note-AI is an Obsidian plugin built around three business scenarios: **Kn
 
 - Knowledge: turn scattered notes into a searchable, interlinked knowledge system
 - Writing: turn ideas into works — web novels, papers, long-form articles
-- Auxiliary: multi-provider LLM, Baidu Pan sync
+- Auxiliary: AI assistant, document beautification, model settings, Baidu Pan sync
 
-> [!warning] Beta
-> v3.0 introduces the Writing scenario and removes the execution module. The frontmatter schema is still evolving. Back up your vault before upgrading.
+> Documentation reflects the current source tree. `package.json` and `manifest.json` declare version **2.2.6**; minimum Obsidian version: **1.7.2**. The UI currently uses Chinese labels; English names below describe those controls.
 
 ---
 
@@ -37,51 +36,47 @@ IStart-Note-AI is an Obsidian plugin built around three business scenarios: **Kn
 
 Build and maintain a structured knowledge base.
 
-- **Ask questions** — classify, generate Q&A notes, and update the question graph
-- **Concept pages** — auto-create, scan empty ones, batch-complete (definition / explanation / examples / relations)
-- **Reading projects** — book skeleton, per-chapter pre-reading questions, summaries, Feynman tests
+- **Ask questions** — classify, confirm or adjust the classification, generate Q&A notes, and update the question graph
+- **Concept pages** — auto-create, scan empty ones, batch-complete (definition / explanation / examples / relations); single-page completion has a preview, while batch completion writes selected pages directly
+- **Reading projects** — book skeleton (with an optional supplied table of contents), per-chapter pre-reading questions, concept pages, and note templates with a summary section
 - **Vault QA** — metadata-index retrieval with `[[source]]` references, no embeddings
 - **Knowledge debt dashboard** — empty concepts, orphan questions, unfinished readings, stale drafts
-- **Practical templates** — checklists, SOPs, routines, action plans, review sheets generated from your knowledge
+- **Practical templates** — checklists, SOPs, routines, action plans, review sheets, question lists, decision records, and custom formats; preview before saving
 
 ### 2. Writing
 
 Create and grow your works. Three genres: **web novel / paper / article**.
 
-- **New work** — from a one-line premise, AI generates the project home page, chapter outline (with synopses), and chapter files; novels also get character cards and world settings
-- **Import manuscript** — turn an existing novel draft (paste / file / folder) into a writing project: chapter splitting, content classification (rule pre-check + AI recognition: chapters / outline / settings / reference), cleaning, AI metadata inference; the original stays untouched
+- **New work** — from a one-line premise, preview the AI plan before creating the project home page, chapter outline (with synopses), and chapter templates; novels also get character cards and world settings
+- **Import manuscript** — turn an existing novel, paper, or article draft (paste / current file / vault file / vault folder / desktop local file / desktop local folder; `.md` and `.txt`) into a writing project: chapter splitting, content classification (rules plus optional AI recognition: chapters / outline / settings / reference / skip), manual classification adjustment and merging adjacent chapters, cleaning, AI metadata inference; the original stays untouched
 - **Continue writing** (core) — pick up from the cursor or the end of the chapter, automatically carrying in preceding text, chapter/adjacent synopses, style profile, and relevant character/world settings
 - **Generate next chapter** — from the outline synopsis, preview before writing
 - **Polish** — rewrite a selection while keeping the work's voice
-- **Extract characters** — scan a chapter and write character cards into `_角色/`
+- **Extract characters** — for novels, analyze up to the first 6,000 characters of the current chapter and write character cards into `_角色/`
 
-Data boundary: writing artifacts live under `Writing/`; Vault QA excludes them by default (one-way reference from writing to knowledge, configurable).
+Writing projects live under the configurable `Writing/` root. Vault QA excludes `chapter`, `writing-project`, `character`, `setting`, `outline`, and `snippet` frontmatter types. This filter has no settings toggle and does not exclude an entire directory; untyped notes and imported `reference` notes may still be retrieved.
 
 ### 3. Auxiliary
 
-- **OpenAI-compatible LLM** — DeepSeek by default; change the Base URL for other providers
+- **AI assistant** — process a selection, current note, or cursor context with natural-language instructions; preview before replacing a selection, inserting, or appending, with options to copy results or create a concept page
+- **AI service** — DeepSeek by default. API key and Base URL are configurable; requests use `POST {baseUrl}/v1/chat/completions`. The model dropdown only offers `deepseek-v4-flash` (default) and `deepseek-v4-pro`; another endpoint must accept the selected model name. There is no custom-model input or provider manager
+- **Beautify current document** — preview AI restructuring, Callouts, links, and optional Mermaid diagrams before replacing the full document
 - **Configurable output styles** — knowledge-base, technical, minimal, product, academic, story, dashboard
-- **Optional Baidu Pan sync** — incremental backup, bidirectional sync, plugin and Obsidian config backup
+- **Optional Baidu Pan sync** — Git history, incremental bidirectional sync, text merging, and per-file version restore; the original file-backup mode remains available
+
+Enable Baidu Pan sync, enter your Baidu App ID and App Secret, authorize your account, choose **Git version sync**, then use **Open sync** or **Manual sync** in the sidebar. Automatic sync and startup configuration pull are off by default. Desktop and mobile use the same JavaScript Git engine; optional automatic sync runs only while the app is in the foreground.
+
+Sync is disabled by default. New installations default to Git mode; older configurations without a mode retain file sync until you select Git explicitly. All devices must use Git mode with the same remote path. Existing cloud backups are preserved; restore any old backup in file mode before your first Git sync if needed. See [Git sync documentation](./docs/git-sync.md).
 
 ---
 
-## Status
+## Current limitations
 
-| Module | Feature | Status | Notes |
-| --- | --- | --- | --- |
-| Knowledge | AI Assistant | Stable | Insert / replace / append / show |
-| Knowledge | Reading Projects | Stable | Skeleton, chapter questions, summaries, Feynman |
-| Knowledge | Vault QA | Experimental | Metadata index, no embeddings |
-| Knowledge | Concept Completion | Experimental | Preview before write |
-| Knowledge | Question Graph | Experimental | Classification + index + Mermaid |
-| Knowledge | Knowledge Debt | Experimental | Dashboard statistics |
-| Knowledge | Practical Templates | Experimental | Checklist / SOP / review generator |
-| Writing | New Work | Experimental | Outline + characters + world settings |
-| Writing | Import Manuscript | Experimental | Split / clean / AI inference, original untouched |
-| Writing | Continue Writing | Experimental | Cursor / chapter modes, setting injection |
-| Writing | Next Chapter | Experimental | Generated from outline synopsis |
-| Auxiliary | Baidu Sync | Stable | Manual/auto backup and config sync |
-| Auxiliary | Multi-provider LLM | Partial | OpenAI-compatible Base URL |
+- Vault QA searches titles, tags, headings, links, concepts, and domains using an in-memory metadata index. It sends up to eight matching notes, using the first 600 characters of each, plus any selection. It has no embeddings or full-text semantic search.
+- Reading project creation generates pre-reading questions and note templates. Dedicated commands for resuming a project, generating chapter summaries, and Feynman tests are not registered; use the AI assistant for these tasks.
+- Continue writing and next-chapter generation require an open note with `type: chapter`. Open a chapter before generating the next one, even if the panel shows that action on a project home page. New projects create chapter templates, not complete prose.
+- Novel setting injection matches names in the preceding text, synopsis, and instruction, including protagonists, with at most three characters and two world settings. It does not recognize aliases automatically.
+- Git sync has automated engine and adapter tests. Actual Baidu authorization/network behavior and Android/iOS device behavior still require installation testing; see the sync documentation.
 
 ---
 
@@ -89,24 +84,22 @@ Data boundary: writing artifacts live under `Writing/`; Vault QA excludes them b
 
 1. Install the plugin (see [Installation](#installation)).
 2. Go to **Settings → IStart-Note-AI → Auxiliary → AI Service** and enter your API key.
-3. Click the ribbon icon, or press `Cmd/Ctrl+Shift+A` for the AI assistant.
+3. Click the brain ribbon icon → **AI 助手**, or open Obsidian’s command palette and select an IStart-Note-AI command.
 4. Type a request in natural language — or create a work and continue writing in the **Writing** group.
 
 ---
 
 ## Installation
 
-### From community plugins (once available)
+### Community plugins
 
-1. Settings → Community plugins → Browse.
-2. Search **IStart-Note-AI**.
-3. Install → Enable.
+If **IStart-Note-AI** appears in Settings → Community plugins → Browse, install and enable it there. Otherwise use manual installation or build from source.
 
-### Manual (recommended during beta)
+### Manual
 
 Download `main.js`, `manifest.json`, `styles.css` from a [GitHub Release](https://github.com/yan-istart/IStart-Note-AI-Plugin/releases) and place them in `<vault>/.obsidian/plugins/istart-note-ai/`.
 
-> Don't clone the source repo — the bundle lives in `dist/` and is not committed. Use release assets.
+> Build a source checkout before installation. Use release assets, or copy the files generated in `dist/` after building.
 
 ### Build from source
 
@@ -120,12 +113,14 @@ npm run build
 
 ## Configuration
 
+Default AI settings: Base URL `https://api.deepseek.com`, model `deepseek-v4-flash`, output style `knowledge-base`. Enter the root URL without a trailing slash or `/v1/chat/completions`, since the client appends that suffix.
+
 Settings are organized into three tabs:
 
 | Tab | Key settings |
 | --- | --- |
 | **Knowledge** | Q&A path, Concepts path, Questions index path, index status + rebuild |
-| **Writing** | Works path (Writing/), continue context length, default continue word count |
+| **Writing** | Works path (`Writing`), preceding context (2,000 characters), continuation target (800 Chinese characters) |
 | **Auxiliary** | API key, Base URL, model, output style, Baidu sync |
 
 ---
@@ -134,30 +129,24 @@ Settings are organized into three tabs:
 
 ### Desktop
 
-- **Command panel** — ribbon icon; three domain groups (Knowledge / Writing / Auxiliary); the Writing group is pinned first inside chapter files
-- **Default hotkeys** (remappable in settings):
-
-  | Hotkey | Action |
-  | --- | --- |
-  | `Cmd/Ctrl+Shift+A` | AI assistant |
-  | `Cmd/Ctrl+Shift+J` | Continue current chapter |
-  | `Cmd/Ctrl+Shift+N` | Generate next chapter |
-  | `Cmd/Ctrl+Shift+W` | New work |
-
+- **Command panel** — ribbon icon; three domain groups (Knowledge / Writing / Auxiliary); the Writing group is pinned first inside chapter files or project home pages
+- **Hotkeys** — the plugin does not register default hotkeys. Assign your preferred shortcuts in Settings → Hotkeys to AI assistant, continue writing, next chapter, or new work.
 - **Status bar** — "Continue" / "Next chapter" buttons appear when a chapter file is open
-- **Editor right-click** — continue / polish / extract characters / AI assistant
-- **File right-click** — AI assistant / beautify
+- **Editor right-click** — AI assistant, Vault QA, concept completion, practical templates, and document beautification; chapter notes also show continue / polish / extract characters
+- **File right-click** — AI assistant / beautify; these handlers operate on the active editor, so open the target note first
+- **Cloud ribbon icon** — opens the Baidu sync sidebar with manual sync and version history in Git mode
 
 ### Mobile
 
 - Ribbon icon → command panel, same domain groups.
 - Add frequent commands to the mobile toolbar for one-tap access.
+- Importing files/folders outside the vault requires desktop Obsidian; mobile can use pasted text or vault sources.
 
 ---
 
 ## Data Layout
 
-Plugin-managed notes live under two roots (paths configurable in settings):
+Default layout below. Q&A, Questions, Concepts, and Writing paths are configurable; Reading and Artifacts currently use fixed paths:
 
 ```
 Knowledge/                 # knowledge domain (read in)
@@ -172,12 +161,13 @@ Writing/                   # writing domain (write out)
     _大纲.md               # type: outline (per-chapter synopsis)
     _角色/                 # type: character
     _设定/                 # type: setting (worldbuilding)
+    _资料/                 # imported outlines/reference material, type: reference
     01-chapter.md          # type: chapter
   Papers/<paper>/
   Articles/<article>/
 ```
 
-Frontmatter types: `concept` / `question` / `reading-project` / `reading-note` / `writing-project` / `chapter` / `outline` / `character` / `setting`.
+Frontmatter types: `concept` / `question` / `reading-project` / `reading-note` / `writing-project` / `chapter` / `outline` / `character` / `setting` / `reference`; practical templates use `execution-artifact-*` types.
 
 ---
 
@@ -189,11 +179,12 @@ src/
     llm/              Unified LLM client + JSON extractor
     knowledge/        Metadata knowledge index
     artifact/         Practical template types, prompt, validation, rendering
+    sync/             JavaScript Git engine, bundle exchange, merge and recovery
     schema.ts         SCHEMA_VERSION + helpers
   ai/                 AI feature modules (assistant, classifier, reading planner, writing planner, continuer, ...)
   features/
     assistant/        AI assistant modals
-    writing/          Writing scenario (new work, continue, project/context management)
+    writing/          New work, plan preview, continue, import, project/context management
     reading/          Reading project manager
     concept/          Concept completion
     question/         Question classify + graph
@@ -201,7 +192,7 @@ src/
     dashboard/        Knowledge debt modal
     sync/             Baidu sync
     command-panel/    Unified command panel
-  vault/              Vault writer (conflict-safe)
+  vault/              Q&A and concept-note writer
   settings/           Settings tab (Knowledge / Writing / Auxiliary)
   actions/            Action registry + definitions
   main.ts
@@ -211,32 +202,17 @@ src/
 
 ## Privacy
 
-AI features send your selection and partial note context to the configured chat-completions endpoint. Sync features upload to your own Baidu Pan. No telemetry. No plugin-operated servers. Full details in [PRIVACY.md](./PRIVACY.md).
+AI features send your selection and partial note context to the configured chat-completions endpoint. Sync features upload to your own Baidu Pan. Git sync excludes hidden paths, the Obsidian config directory, credentials, and Git metadata. History retains past content after deletion and has no additional encryption. Separate configuration sync excludes API keys and Baidu credentials. In file mode, enabling plugin backup uploads the plugin `data.json` (including credentials) and selected Obsidian configuration files. No telemetry. No plugin-operated servers. Full details in [PRIVACY.md](./PRIVACY.md).
 
 ---
 
-## Roadmap
+## Sync and configuration transfer
 
-### v3.0 — Writing Scenario (in development)
+File mode retains backup, restore, status scanning, bidirectional sync, per-file conflict choices, and optional plugin backup. Its “automatic backup” setting is retained, but current note-generation flows do not trigger it; use manual backup.
 
-- Three business scenarios: Knowledge / Writing / Auxiliary; broken execution module removed
-- Writing: new work (outline + characters + world settings), continue, next chapter, polish, character extraction
-- Data boundary: writing artifacts isolated from knowledge; Vault QA excludes them by default
-- Quick entries: default hotkeys, status bar buttons, context menus
-- All emoji removed; icons use Obsidian-native Lucide
+Git mode syncs ordinary vault files, including attachments and deletions, with configured ignore rules and size limits (100 MB per file by default). It saves commits, exchanges incremental Git bundles, merges text, allows conflict resolution, and restores individual file versions. It needs no system Git. Automatic sync is off by default; when enabled it runs at startup and every minute while the app is visible.
 
-### v3.1 — Writing Studio
-
-- Sidebar writing studio view: outline tree, word counts and chapter status, settings lookup
-- Idea snippets collection and expansion
-- Character alias/nickname recognition for better setting injection
-- Style learning from the first three chapters
-
-### v3.2 — Integrations
-
-- Tasks / Periodic Notes integration
-- Optional local vector index for richer Vault QA
-- Multi-vault support
+Configuration push/pull transfers Base URL, model, the three knowledge paths, automatic graph opening, remote path, ignore rules, and file size limit. Writing settings, output style, credentials, sync mode, and automatic behavior stay local. Startup configuration pull is off by default. See [Git sync documentation](./docs/git-sync.md) (Chinese) for migration, history storage, and recovery details.
 
 ---
 

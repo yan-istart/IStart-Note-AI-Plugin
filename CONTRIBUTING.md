@@ -4,6 +4,8 @@ Thanks for your interest in improving IStart-Note-AI. This document covers how t
 
 ## Setup
 
+Use Node.js 22.12 or newer for development and CI.
+
 ```bash
 git clone https://github.com/yan-istart/IStart-Note-AI-Plugin.git
 cd IStart-Note-AI-Plugin
@@ -68,7 +70,7 @@ When introducing new file types, plan for migration: include `schema_version` in
 
 ## Testing
 
-A formal test framework is not wired in yet. The `npm test` script is a placeholder so CI passes. When you add tests, use [vitest](https://vitest.dev) and put them next to the unit under test as `*.test.ts`. We will switch the placeholder script over once the first tests land.
+Run `npm test` for the Vitest suite. Put tests next to the unit under test as `*.test.ts`. Git synchronization tests use an in-memory Obsidian adapter and a mock cloud, test browser execution without Node globals, and check bundle compatibility with the standard `git` executable.
 
 If your change is non-trivial, please describe how you manually verified it in the PR description.
 

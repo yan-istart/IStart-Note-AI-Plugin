@@ -15,6 +15,9 @@ export interface DeepSeekSettings {
 
 export interface BaiduSyncConfig {
   enabled: boolean;
+  syncEngine: "git" | "files";
+  autoSync: boolean;       // 前台自动同步，默认关闭，不跨设备同步此偏好
+  autoPullConfig: boolean; // 启动时拉取配置，默认关闭
   appId: string;           // 百度开放平台 App ID
   appSecret: string;       // App Secret
   accessToken: string;
@@ -29,6 +32,9 @@ export interface BaiduSyncConfig {
 
 export const DEFAULT_BAIDU_SYNC_CONFIG: BaiduSyncConfig = {
   enabled: false,
+  syncEngine: "git",
+  autoSync: false,
+  autoPullConfig: false,
   appId: "",
   appSecret: "",
   accessToken: "",
@@ -40,6 +46,17 @@ export const DEFAULT_BAIDU_SYNC_CONFIG: BaiduSyncConfig = {
   ignorePattern: "",
   fileSizeLimitMB: 100,
 };
+
+export function loadBaiduSyncConfig(saved?: Partial<BaiduSyncConfig>): BaiduSyncConfig {
+  return {
+    ...DEFAULT_BAIDU_SYNC_CONFIG,
+    ...saved,
+    // Do not silently change an existing vault's synchronization protocol.
+    syncEngine: saved?.syncEngine ?? (saved ? "files" : "git"),
+    autoSync: saved?.autoSync === true,
+    autoPullConfig: saved?.autoPullConfig === true,
+  };
+}
 
 export const DEFAULT_SETTINGS: DeepSeekSettings = {
   apiKey: "",

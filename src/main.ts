@@ -4,7 +4,9 @@ import { DeepSeekSettingsTab } from "./settings/SettingsTab";
 import { BaiduSyncService } from "./features/sync/BaiduSyncService";
 import { BaiduSyncModal } from "./features/sync/BaiduSyncModal";
 import { BaiduSyncView, SYNC_VIEW_TYPE } from "./features/sync/BaiduSyncView";
-import { DEFAULT_BAIDU_SYNC_CONFIG } from "./types";
+import { BaiduGitSyncModal } from "./features/sync/BaiduGitSyncModal";
+import { BaiduGitSyncService } from "./features/sync/BaiduGitSyncService";
+import { loadBaiduSyncConfig } from "./types";
 import { AIAssistant, AssistantContext, AssistantResult } from "./ai/AIAssistant";
 import { AssistantInputModal, AssistantResultModal } from "./features/assistant/AssistantModal";
 import { ReadingPlanner } from "./ai/ReadingPlanner";
@@ -40,6 +42,8 @@ export default class DeepSeekPlugin extends Plugin {
   settings!: DeepSeekSettings;
   /** In-memory vault knowledge index, rebuilt on load, updated incrementally. */
   knowledgeIndex!: KnowledgeIndexService;
+  private automaticSyncRunning = false;
+  private automaticSyncMessage = "";
 
   async onload() {
     await this.loadSettings();
@@ -69,6 +73,8 @@ export default class DeepSeekPlugin extends Plugin {
 
     this.registerView(SYNC_VIEW_TYPE, (leaf) => new BaiduSyncView(leaf, this));
     this.addRibbonIcon("cloud", "Baidu cloud sync", () => { void this.activateSyncView(); });
+    this.registerInterval(window.setInterval(() => { void this.runAutomaticGitSync(); }, 60_000));
+    this.app.workspace.onLayoutReady(() => { void this.runAutomaticGitSync(); });
     this.addSettingTab(new DeepSeekSettingsTab(this.app, this));
     registerAllActions(this, ALL_ACTIONS);
     this.registerWritingStatusBar();
@@ -909,11 +915,33 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
 
   openBaiduSyncModal() {
     if (!this.settings.baiduSync.enabled) { new Notice("请先在设置中启用百度云同步"); return; }
+    if (this.settings.baiduSync.syncEngine === "git") {
+      new BaiduGitSyncModal(this.app, this.settings.baiduSync, () => this.saveSettings()).open();
+      return;
+    }
     new BaiduSyncModal(this.app, this.settings.baiduSync, async (accessToken, expiresAt) => {
       this.settings.baiduSync.accessToken = accessToken;
       this.settings.baiduSync.tokenExpiresAt = expiresAt;
       await this.saveSettings();
     }).open();
+  }
+
+  private async runAutomaticGitSync() {
+    const cfg = this.settings.baiduSync;
+    if (!cfg.enabled || cfg.syncEngine !== "git" || !cfg.autoSync || !cfg.accessToken
+      || document.visibilityState !== "visible" || this.automaticSyncRunning) return;
+    this.automaticSyncRunning = true;
+    try {
+      const result = await new BaiduGitSyncService(this.app, cfg).sync();
+      await this.saveSettings();
+      const message = result.conflicts.length ? "Git 同步存在冲突，请打开同步窗口处理" : "";
+      if (message && message !== this.automaticSyncMessage) new Notice(message);
+      this.automaticSyncMessage = message;
+    } catch (error) {
+      const message = (error as Error).message;
+      if (message !== this.automaticSyncMessage) new Notice(`自动 Git 同步：${message}`);
+      this.automaticSyncMessage = message;
+    } finally { this.automaticSyncRunning = false; }
   }
 
   private async activateSyncView() {
@@ -978,9 +1006,12 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
   // ── 设置 ───────────────────────────────────────────────────
 
   async loadSettings() {
-    this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
-    this.settings.baiduSync = Object.assign({}, DEFAULT_BAIDU_SYNC_CONFIG, this.settings.baiduSync);
-    if (this.settings.baiduSync.enabled && this.settings.baiduSync.accessToken) { void this.pullConfig(true); }
+    const saved: Partial<DeepSeekSettings> | null = await this.loadData();
+    this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
+    this.settings.baiduSync = loadBaiduSyncConfig(saved?.baiduSync);
+    if (this.settings.baiduSync.enabled && this.settings.baiduSync.accessToken && this.settings.baiduSync.autoPullConfig) {
+      void this.pullConfig(true);
+    }
   }
 
   async saveSettings() { await this.saveData(this.settings); }

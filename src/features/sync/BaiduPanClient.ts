@@ -138,31 +138,36 @@ export class BaiduPanClient {
 
   // ── 文件列表 ───────────────────────────────────────────────
 
-  async listFiles(dir: string, start = 0, limit = 1000): Promise<BaiduFileEntry[]> {
+  async listFiles(dir: string, start = 0, limit = 1000, strict = false): Promise<BaiduFileEntry[]> {
     try {
       const url = `${PAN_API}/file?method=list&access_token=${this.config.accessToken}&dir=${encodeURIComponent(dir)}&order=name&start=${start}&limit=${limit}`;
       const res = await requestUrl({ url, method: "GET", headers: { "User-Agent": "pan.baidu.com" }, throw: false });
       const d = this.jsonOf(res);
       if (res.status !== 200 || d.errno !== 0) {
+        if (strict) throw new Error(`读取云端目录失败：${d.errno ?? res.status} ${d.errmsg ?? ""}`);
         console.error("[BaiduPan] listFiles error:", d.errno, d.errmsg);
         return [];
       }
       return d.list ?? [];
-    } catch {
+    } catch (error) {
+      if (strict) throw error;
       return [];
     }
   }
 
-  async listAllFiles(dir: string): Promise<BaiduFileEntry[]> {
+  async listAllFiles(dir: string, strict = false): Promise<BaiduFileEntry[]> {
     const result: BaiduFileEntry[] = [];
-    const entries = await this.listFiles(dir);
-    for (const entry of entries) {
-      if (entry.isdir) {
-        const children = await this.listAllFiles(entry.path);
-        result.push(...children);
-      } else {
-        result.push(entry);
+    for (let start = 0; ; start += 1000) {
+      const entries = await this.listFiles(dir, start, 1000, strict);
+      for (const entry of entries) {
+        if (entry.isdir) {
+          const children = await this.listAllFiles(entry.path, strict);
+          result.push(...children);
+        } else {
+          result.push(entry);
+        }
       }
+      if (entries.length < 1000) break;
     }
     return result;
   }

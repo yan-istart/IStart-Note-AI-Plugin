@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- Baidu Pan Git synchronization with a shared desktop/mobile JavaScript engine, immutable full/incremental Git bundles, three-way text merging, conflict resolution, commit history, and per-file restore.
+- Opt-in foreground Git auto-sync and startup configuration pull, both disabled by default. Existing installations keep file sync until manually switched.
+- Durable interrupted-sync recovery, protection for edits during transfer, and Vitest coverage including native Git bundle compatibility and a browser runtime without Node globals.
 - `src/core/llm/`: unified LLM client (`LLMClient`) and JSON extractor (`extractJson`, `parseJsonSafe`, `parseJsonStrict`) shared by every AI feature.
 - `src/core/schema.ts`: `SCHEMA_VERSION` constant (starts at `1`) and `todayIso()` helper. All plugin-managed frontmatter now includes `schema_version: 1`.
 - Bilingual documentation: `README.md`, `README.zh-CN.md`, `PRIVACY.md`, `PRIVACY.zh-CN.md`.
@@ -28,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - `PlanExecutor.ts`: applies plans to the vault and persists execution logs under `Knowledge/_Executions/`.
 
 ### Changed
+- Baidu directory traversal now paginates; Git operations fail on listing errors instead of treating an unavailable cloud as empty. File sync excludes the separate Git bundle directory.
+- Remote configuration never enables local automatic behavior.
 - All nine LLM call sites (`AIAssistant`, `DeepSeekClient`, `QuestionClassifier`, `ConceptCompleter`, `ContextQAClient`, `ReadingPlanner`, `SectionAppender`, `DiagramGenerator`, `SmartCompleter`) now go through `LLMClient` and `extractJson`.
 - `tsconfig.json`: enabled full strict mode (`strict: true`) and scoped `include` to `src/**/*.ts`.
 - `package.json`: pinned `obsidian` to `^1.7.2` (was `latest`), added `homepage`, `repository`, `bugs`, `keywords`, and `author` fields, added `typecheck`, `test`, and `ci` scripts.

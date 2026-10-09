@@ -14,6 +14,7 @@ const prod = process.argv[2] === "production";
 const context = await esbuild.context({
   banner: { js: banner },
   entryPoints: ["src/main.ts"],
+  inject: ["src/core/sync/browserBuffer.ts"],
   bundle: true,
   external: [
     "obsidian",
@@ -29,7 +30,8 @@ const context = await esbuild.context({
     "@lezer/common",
     "@lezer/highlight",
     "@lezer/lr",
-    ...builtinModules,
+    // Git's browser dependencies need the bundled Buffer polyfill on mobile.
+    ...builtinModules.filter((name) => name !== "buffer"),
   ],
   format: "cjs",
   target: "es2018",

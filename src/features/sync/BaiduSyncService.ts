@@ -160,7 +160,8 @@ export class BaiduSyncService {
     const result: SyncResult = { uploaded: 0, downloaded: 0, conflicts: [], deleted: 0, skipped: 0, failed: 0, errors: [] };
 
     const remoteRoot = this.remoteRoot(localFolder);
-    const remoteFiles = await this.client.listAllFiles(remoteRoot);
+    const gitRoot = `${this.config.remotePath.replace(/\/+$/, "")}/_istart-git/`;
+    const remoteFiles = (await this.client.listAllFiles(remoteRoot)).filter((entry) => !entry.path.startsWith(gitRoot));
     const total = remoteFiles.filter((f) => !f.isdir).length;
 
     let done = 0;
@@ -256,7 +257,8 @@ export class BaiduSyncService {
       baiduSync: {
         ...settings.baiduSync,
         remotePath: remote.baiduRemotePath,
-        autoBackup: remote.baiduAutoBackup,
+        // Automatic behavior is a local preference and is never enabled by remote config.
+        autoBackup: settings.baiduSync.autoBackup,
         ignorePattern: remote.baiduIgnorePattern,
         fileSizeLimitMB: remote.baiduFileSizeLimitMB,
       },
@@ -364,6 +366,7 @@ export class BaiduSyncService {
       for (const e of entries) {
         if (e.isdir) continue;
         const rel = e.path.replace(remoteRoot + "/", "").replace(/^\//, "");
+        if (rel === "_istart-git" || rel.startsWith("_istart-git/")) continue;
         if (rel === META_FILENAME) continue;
         map.set(rel, e.server_mtime);
       }

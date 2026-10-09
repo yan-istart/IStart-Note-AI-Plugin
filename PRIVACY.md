@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: 2026-05-20. [简体中文版本 →](./PRIVACY.zh-CN.md)_
+_Last updated: 2026-10-09. [简体中文版本 →](./PRIVACY.zh-CN.md)_
 
 This document describes what data IStart-Note-AI handles, where it goes, and how to control it. The plugin runs entirely inside your Obsidian client — there are no plugin-operated servers, no analytics, and no telemetry.
 
@@ -45,11 +45,14 @@ Baidu Cloud sync is **disabled by default**. When you enable it under **Settings
 After enabling sync, the plugin can upload to your own Baidu Pan account at the path you configure (default: `/apps/istart-note-ai`). The data uploaded depends on your settings:
 
 - **Notes**: the markdown files in the folders you choose to sync.
+- **Git mode**: version bundles containing included notes, attachments, and earlier versions (including deleted content), under `_istart-git/v1/`. Hidden files, the vault configuration directory, and plugin credentials are excluded from Git note synchronization.
 - **Plugin config (optional)**: a small JSON file containing non-secret plugin settings.
 - **Plugin itself (optional)**: the compiled plugin files in `.obsidian/plugins/istart-note-ai/`.
 - **Obsidian config (optional)**: a curated set of files from `.obsidian/` (toolbar, hotkeys, appearance, community-plugins).
 
 Files are uploaded over HTTPS using the Baidu Pan REST API. The plugin **does not encrypt files end-to-end**; treat your Baidu Pan account security as the boundary.
+
+Automatic Git sync and startup configuration pull are off by default. With automatic sync disabled, Git versions are uploaded only when you trigger sync. Git history is also stored locally under `<vault.configDir>/plugins/istart-note-ai/git-sync/`; deleting a note does not delete its past versions. Incremental bundles depend on earlier bundles, so individual history bundles should not be removed while continuing to use the same remote history.
 
 You can disable sync at any time. Removing the local plugin data file (or running Settings → Community plugins → Reset) clears stored Baidu tokens.
 

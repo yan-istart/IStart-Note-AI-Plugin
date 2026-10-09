@@ -196,6 +196,37 @@
   color: var(--text-normal);
 }
 
+.istart-git-comparison {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 12px;
+}
+
+.istart-git-preview {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 320px;
+  overflow: auto;
+  padding: 10px;
+  background: var(--background-secondary);
+  font-size: var(--font-smaller);
+}
+
+.istart-git-conflict {
+  border-bottom: 1px solid var(--background-modifier-border);
+  margin-bottom: 16px;
+}
+
+.istart-git-editor {
+  width: 100%;
+  min-height: 180px;
+  resize: vertical;
+}
+
+@media (max-width: 600px) {
+  .istart-git-comparison { grid-template-columns: minmax(0, 1fr); }
+}
+
 /* ── Question Modal ───────────────────────────── */
 
 .istart-question-textarea {
