@@ -47,12 +47,15 @@ export interface WritingPlan {
 /** 续写模式 */
 export type ContinueMode = "cursor" | "chapter";
 
-export interface ContinueRequest {
-  mode: ContinueMode;
+export interface InsertRequest {
   /** 用户附加指令(可选) */
   instruction: string;
   /** 目标字数(中文字符) */
   targetWords: number;
+}
+
+export interface ContinueRequest extends InsertRequest {
+  mode: ContinueMode;
 }
 
 /** 续写/生成章节时的作品级上下文 */

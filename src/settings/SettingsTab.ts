@@ -141,11 +141,11 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         })
       );
 
-    new Setting(el).setName("续写").setHeading();
+    new Setting(el).setName("续写与插写").setHeading();
 
     new Setting(el)
-      .setName("带入上文长度")
-      .setDesc("续写时向 AI 提供的上文字符数")
+      .setName("上下文长度")
+      .setDesc("续写提供这些字符的上文；插写分别提供这些字符的前文与后文")
       .addText((t) =>
         t.setPlaceholder("2000").setValue(String(this.plugin.settings.continueContextChars)).onChange(async (v) => {
           const n = parseInt(v);
@@ -160,6 +160,16 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         t.setPlaceholder("800").setValue(String(this.plugin.settings.continueTargetWords)).onChange(async (v) => {
           const n = parseInt(v);
           if (!isNaN(n) && n > 0) { this.plugin.settings.continueTargetWords = n; await this.plugin.saveSettings(); }
+        })
+      );
+
+    new Setting(el)
+      .setName("默认插写字数")
+      .setDesc("在前后文之间补充内容的目标字数（中文字符），独立于续写")
+      .addText((t) =>
+        t.setPlaceholder("200").setValue(String(this.plugin.settings.insertTargetWords)).onChange(async (v) => {
+          const n = Number(v);
+          if (Number.isInteger(n) && n > 0) { this.plugin.settings.insertTargetWords = n; await this.plugin.saveSettings(); }
         })
       );
   }

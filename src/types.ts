@@ -10,6 +10,7 @@ export interface DeepSeekSettings {
   writingPath: string;
   continueContextChars: number;
   continueTargetWords: number;
+  insertTargetWords: number;
   continueMode: "cursor" | "chapter";
   baiduSync: BaiduSyncConfig;
 }
@@ -71,6 +72,7 @@ export const DEFAULT_SETTINGS: DeepSeekSettings = {
   writingPath: "Writing",
   continueContextChars: 2000,
   continueTargetWords: 800,
+  insertTargetWords: 200,
   continueMode: "cursor",
   baiduSync: { ...DEFAULT_BAIDU_SYNC_CONFIG },
 };

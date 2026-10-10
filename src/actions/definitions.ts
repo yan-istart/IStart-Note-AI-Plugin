@@ -6,7 +6,7 @@ import { ActionDef } from "./types";
  * The "AI 助手" is placed in Auxiliary as a cross-cutting entry point.
  * The command panel renders it as a pinned top-level button above the grouped actions.
  *
- * Icons use Lucide names (https://lucide.dev) which Obsidian supports natively.
+ * Icons use Obsidian's Lucide names and locally registered Phosphor icons.
  */
 export const ALL_ACTIONS: ActionDef[] = [
   // ══════════════════════════════════════════════════════════════
@@ -131,6 +131,28 @@ export const ALL_ACTIONS: ActionDef[] = [
     when: { hasEditor: true, noSelection: true },
     showIn: ["panel", "editor-menu"],
     run: (ctx) => { void ctx.plugin.continueWriting(); },
+  },
+  {
+    id: "insert-writing",
+    label: "插写",
+    icon: "istart-insert",
+    description: "参考光标前后文，补充承上启下的内容",
+    domain: "writing",
+    section: "writing-chapter",
+    when: { hasEditor: true, noSelection: true },
+    showIn: ["panel", "editor-menu"],
+    run: (ctx) => { void ctx.plugin.insertWriting(); },
+  },
+  {
+    id: "insert-writing-settings",
+    label: "插写设置",
+    icon: "sliders-horizontal",
+    description: "调整插写字数和要求，如承上启下、补充解释、转场",
+    domain: "writing",
+    section: "writing-chapter",
+    when: { hasEditor: true, noSelection: true },
+    showIn: ["panel", "editor-menu"],
+    run: (ctx) => { void ctx.plugin.insertWriting(true); },
   },
   {
     id: "continue-writing-settings",

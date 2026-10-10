@@ -34,9 +34,12 @@ import { StoryContinuer } from "./ai/StoryContinuer";
 import { WritingProjectManager } from "./features/writing/WritingProjectManager";
 import { NewWritingModal, NewWritingInput } from "./features/writing/NewWritingModal";
 import { ContinueModal } from "./features/writing/ContinueModal";
+import { InsertModal } from "./features/writing/InsertModal";
+import { getInsertionContext } from "./editor/InsertionContext";
+import { buildInsertionPrompt } from "./ai/InsertionPrompt";
 import { WritingPlanPreviewModal } from "./features/writing/WritingPlanPreviewModal";
 import { ImportModal } from "./features/writing/import/ImportModal";
-import { WritingGenre, WritingContext, WritingPlan, ContinueRequest, ChapterOutline } from "./features/writing/types";
+import { WritingGenre, WritingContext, WritingPlan, ContinueRequest, InsertRequest, ChapterOutline } from "./features/writing/types";
 import { registerQuickIcons } from "./ui/icons";
 import { availableQuickActions, QuickActionId } from "./actions/quickActions";
 import { captureEditorTarget, checkEditorTarget, writeEditorResult, EditorTarget } from "./editor/EditorTarget";
@@ -126,9 +129,11 @@ export default class DeepSeekPlugin extends Plugin {
 
     new AssistantInputModal(this.app, contextHint, (instruction) => {
       if (instruction.trim() === "续写") { void this.continueWriting(false, target); }
+      else if (instruction.trim() === "插写") { void this.insertWriting(false, target); }
       else { void this.runAssistant(instruction, target); }
     }, {
-      quickActions: target ? availableQuickActions(!!selection) : [],
+      quickActions: target ? availableQuickActions(!!selection,
+        !!getInsertionContext(target.content, target.editor.posToOffset(target.cursor))) : [],
       onQuickAction: (id) => { void this.runQuickAction(id, target); },
     }).open();
   }
@@ -243,6 +248,7 @@ export default class DeepSeekPlugin extends Plugin {
   async runQuickAction(id: QuickActionId, target: EditorTarget | null = captureEditorTarget(this.app)) {
     if (!target) { new Notice("请先打开文档"); return; }
     if (id === "continue") { await this.continueWriting(false, target); return; }
+    if (id === "insert") { await this.insertWriting(false, target); return; }
     if (id === "polish") { await this.polishWriting(target); return; }
     if ((id === "expand" || id === "explain") && !target.selection.trim()) { new Notice("请先选中文字"); return; }
     if (id === "expand") {
@@ -787,6 +793,51 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
       return { mode: request.mode === "cursor" ? "insert" : "append", content: text, explanation: `续写：${target.file.basename}` };
     }, () => { void this.runContinue(target, request); },
     (nextTarget) => { void this.runContinue(nextTarget, request); });
+  }
+
+  /** 插写:同时参考光标前后文,在预览确认后插入原位置 */
+  async insertWriting(configure = false, target: EditorTarget | null = captureEditorTarget(this.app)) {
+    if (!target) { new Notice("请先打开文档"); return; }
+    try {
+      checkEditorTarget(this.app, target);
+      if (target.selection.trim()) throw new Error("请取消选区，将光标放到需要插写的位置");
+      if (!getInsertionContext(target.content, target.editor.posToOffset(target.cursor))) {
+        throw new Error("请将光标放在两段正文之间；文末接着写可使用「续写」");
+      }
+    } catch (error) {
+      new Notice((error as Error).message);
+      return;
+    }
+    const request: InsertRequest = { instruction: "", targetWords: this.settings.insertTargetWords ?? 200 };
+    if (configure) {
+      new InsertModal(this.app, request.targetWords, target.file.basename, (configured) => {
+        this.settings.insertTargetWords = configured.targetWords;
+        void this.saveSettings().catch(() => new Notice("插写偏好保存失败"));
+        void this.runInsertion(target, configured);
+      }).open();
+    } else {
+      await this.runInsertion(target, request);
+    }
+  }
+
+  private async runInsertion(target: EditorTarget, request: InsertRequest) {
+    await this.previewGenerated(target, "AI 插写中...", async () => {
+      const context = getInsertionContext(target.content, target.editor.posToOffset(target.cursor), this.settings.continueContextChars);
+      if (!context) throw new Error("插写需要光标前后都有正文");
+      const fileType = fmString(frontmatterOf(this.app.metadataCache.getFileCache(target.file)), "type");
+      let text: string;
+      if (fileType === "chapter") {
+        const ctx = await new WritingProjectManager(this.app, this.settings).loadContext(target.file);
+        if (!ctx) throw new Error("无法读取章节的大纲与设定");
+        text = await new StoryContinuer(this.settings).insertStory(ctx, request, context);
+      } else {
+        text = await new LLMClient(this.settings).chat({
+          ...buildInsertionPrompt(request, context), temperature: 0.6,
+          maxTokens: Math.max(256, Math.round(request.targetWords * 1.6)),
+        });
+      }
+      return { mode: "insert", content: text, explanation: `插写：${target.file.basename}` };
+    }, () => { void this.runInsertion(target, request); });
   }
 
   /** 按大纲生成下一章 */

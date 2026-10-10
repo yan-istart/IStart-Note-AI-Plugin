@@ -74,8 +74,8 @@ Sync is disabled by default. New installations default to Git mode; older config
 
 - Vault QA searches titles, tags, headings, links, concepts, and domains using an in-memory metadata index. It sends up to eight matching notes, using the first 600 characters of each, plus any selection. It has no embeddings or full-text semantic search.
 - Reading project creation generates pre-reading questions and note templates. Dedicated commands for resuming a project, generating chapter summaries, and Feynman tests are not registered; use the AI assistant for these tasks.
-- Ordinary notes support continuation too. Notes with `type: chapter` also use the outline, characters, and settings. Next-chapter generation requires an open chapter note. New projects create chapter templates, not complete prose.
-- Novel setting injection matches names in the preceding text, synopsis, and instruction, including protagonists, with at most three characters and two world settings. It does not recognize aliases automatically.
+- Ordinary notes support continuation and insertion between existing passages. Insertion reads both sides of the cursor and previews a connecting passage before writing; chapter notes also use the outline, characters, and settings. Next-chapter generation requires an open chapter note. New projects create chapter templates, not complete prose.
+- Novel setting injection matches names in the preceding text (both sides for insertion), synopsis, and instruction, including protagonists, with at most three characters and two world settings. It does not recognize aliases automatically.
 - Git sync has automated engine and adapter tests. Actual Baidu authorization/network behavior and Android/iOS device behavior still require installation testing; see the sync documentation.
 
 ---
@@ -120,7 +120,7 @@ Settings are organized into three tabs:
 | Tab | Key settings |
 | --- | --- |
 | **Knowledge** | Q&A path, Concepts path, Questions index path, index status + rebuild |
-| **Writing** | Works path (`Writing`), preceding context (2,000 characters), continuation target (800 Chinese characters) |
+| **Writing** | Works path (`Writing`), context (2,000 characters before the cursor for continuation, per side for insertion), continuation target (800 Chinese characters), insertion target (200 Chinese characters) |
 | **Auxiliary** | API key, Base URL, model, output style, Baidu sync |
 
 ---
@@ -130,19 +130,21 @@ Settings are organized into three tabs:
 ### Desktop
 
 - **Command panel** — ribbon icon; three domain groups (Knowledge / Writing / Auxiliary); the Writing group is pinned first inside chapter files or project home pages
-- **Hotkeys** — the plugin does not register default hotkeys. Assign your preferred shortcuts in Settings → Hotkeys to AI assistant, continue writing, next chapter, or new work.
+- **Hotkeys** — the plugin does not register default hotkeys. Assign your preferred shortcuts in Settings → Hotkeys to AI assistant, continue writing, insert between passages, next chapter, or new work.
 - **Status bar** — "Continue" / "Next chapter" buttons appear when a chapter file is open
-- **Editor right-click** — AI assistant, Vault QA, concept completion, practical templates, and document beautification; continuation/settings appear without a selection, while polish/expand/explain appear with a selection. Chapter notes also show character extraction.
+- **Editor right-click** — AI assistant, Vault QA, concept completion, practical templates, and document beautification; continuation, insertion, and their settings appear without a selection, while polish/expand/explain appear with a selection. Chapter notes also show character extraction.
 - **File right-click** — AI assistant / beautify; these handlers operate on the active editor, so open the target note first
 - **Cloud ribbon icon** — opens the Baidu sync sidebar with manual sync and version history in Git mode
 
 ### Mobile
 
 - Open the command panel from the IStart-Note-AI icon in the navigation menu or the **Open command panel** command. Contextual shortcuts use Phosphor Duotone icons with short labels; other actions are under **All features**.
-- Add commands such as continue, polish, expand, explain, and summarize in **Settings → Interface → Configure mobile toolbar → Add a command**. Toolbar commands use matching Phosphor Bold icons.
+- With prose on both sides of the cursor, the panel and assistant prioritize **插写** (insert between passages); at the end, they prioritize continuation. **All features** retains both writing entries.
+- Add commands such as continue, insert between passages, polish, expand, explain, and summarize in **Settings → Interface → Configure mobile toolbar → Add a command**. Toolbar commands use matching Phosphor Bold icons; insertion uses arrows converging on the gap.
 - Continuation generates a preview directly. **Continuation settings** adjusts cursor/end position, word count (300/800/1500 or custom), and optional instructions; position and word count become the saved defaults.
-- **Insert and continue** accepts the current result before generating more. **More → Regenerate** retries without inserting. Writes use the original file, cursor, and selection; switching files or changing the original content blocks insertion while leaving the result available to copy.
-- Assistant, continuation, question, new-work, and result dialogs have a scrolling body and persistent footer sized to the visible keyboard viewport. Mobile dialogs do not explicitly focus text fields.
+- Insertion generates a short preview directly, defaulting to 200 Chinese characters. **Insertion settings** offers 100/200/300 or custom length, with bridging, explanation, and transition instructions. Its saved length is independent of continuation. Cancel any selection and place the cursor between existing prose; the beginning, end, and YAML metadata are rejected with guidance.
+- Continuation's **Insert and continue** accepts the current result before generating more; insertion only writes the connecting passage. **More → Regenerate** retries without inserting. Writes use the original file, cursor, and selection; switching files or changing the original content blocks insertion while leaving the result available to copy.
+- Assistant, continuation, insertion, question, new-work, and result dialogs have a scrolling body and persistent footer sized to the visible keyboard viewport. Mobile dialogs do not explicitly focus text fields.
 - Importing files/folders outside the vault requires desktop Obsidian; mobile can use pasted text or vault sources.
 
 ---

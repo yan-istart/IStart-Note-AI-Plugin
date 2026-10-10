@@ -12,6 +12,7 @@ const QUICK_TAGS = [
   { label: "画图", value: "画一个流程图" },
   { label: "补全", value: "补全这个章节" },
   { label: "续写", value: "续写" },
+  { label: "插写", value: "插写" },
   { label: "总结", value: "总结这篇文档" },
   { label: "公式", value: "用 LaTeX 写出公式" },
   { label: "时序图", value: "画时序图" },

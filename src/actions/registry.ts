@@ -5,6 +5,7 @@ import { ActionDef, ActionContext, DOMAIN_TITLES, DOMAIN_ORDER } from "./types";
 import { CommandPanelModal } from "../features/command-panel/CommandPanelModal";
 import type { PanelGroup } from "../features/command-panel/CommandPanelModal";
 import { captureEditorTarget } from "../editor/EditorTarget";
+import { getInsertionContext } from "../editor/InsertionContext";
 
 /**
  * 注册所有 actions 到插件的各个入口
@@ -99,26 +100,31 @@ export function registerAllActions(plugin: DeepSeekPlugin, actions: ActionDef[])
 function openPanel(plugin: DeepSeekPlugin, actions: ActionDef[]) {
   const ctx = buildContext(plugin, null);
   const target = captureEditorTarget(plugin.app);
+  const canInsert = !!target && !!getInsertionContext(target.content, target.editor.posToOffset(target.cursor));
+  const writingId = canInsert ? "insert-writing" : "continue-writing";
+  const settingsId = canInsert ? "insert-writing-settings" : "continue-writing-settings";
   const quickIds = ctx.selection
     ? ["polish-writing", "expand-selection", "explain-selection", "ai-assistant"]
     : ctx.fileType === "chapter"
-    ? ["continue-writing", "generate-next-chapter", "continue-writing-settings", "ai-assistant"]
-    : ["continue-writing", "summarize-note", "ai-assistant"];
+    ? [writingId, "generate-next-chapter", settingsId, "ai-assistant"]
+    : [writingId, "summarize-note", "ai-assistant"];
   const quickActions = quickIds.map((id) => actions.find((action) => action.id === id))
     .filter((action): action is ActionDef => !!action && evaluateWhen(action.when, ctx));
   const run = (action: ActionDef) => {
-    const quick = { "continue-writing": "continue", "polish-writing": "polish", "expand-selection": "expand", "explain-selection": "explain", "summarize-note": "summarize" } as const;
+    const quick = { "continue-writing": "continue", "insert-writing": "insert", "polish-writing": "polish", "expand-selection": "expand", "explain-selection": "explain", "summarize-note": "summarize" } as const;
     const id = quick[action.id as keyof typeof quick];
     if (id) { void plugin.runQuickAction(id, target); }
     else if (action.id === "ai-assistant") plugin.openAssistant(target);
     else if (action.id === "continue-writing-settings") { void plugin.continueWriting(true, target); }
+    else if (action.id === "insert-writing-settings") { void plugin.insertWriting(true, target); }
     else if (action.id === "generate-next-chapter") { void plugin.generateNextChapter(ctx.activeFile); }
     else action.run(ctx);
   };
 
   // Separate pinned action (AI 助手) from grouped actions
   const pinnedAction = actions.find((a) => a.id === "ai-assistant");
-  const groupedActions = actions.filter((a) => a.id !== "ai-assistant" && !quickIds.includes(a.id));
+  const groupedActions = actions.filter((a) => a.id !== "ai-assistant" &&
+    (!quickIds.includes(a.id) || a.id === "continue-writing" || a.id === "insert-writing"));
 
   const groups: PanelGroup[] = [];
 
@@ -154,7 +160,7 @@ function openPanel(plugin: DeepSeekPlugin, actions: ActionDef[]) {
   }
 
   const shortLabels: Record<string, string> = {
-    "polish-writing": "润色", "generate-next-chapter": "下一章", "continue-writing-settings": "设置",
+    "polish-writing": "润色", "generate-next-chapter": "下一章", "continue-writing-settings": "设置", "insert-writing-settings": "设置",
   };
   new CommandPanelModal(plugin.app, groups, quickActions.map((action) => ({
     id: action.id, icon: action.icon, label: shortLabels[action.id] ?? action.label,

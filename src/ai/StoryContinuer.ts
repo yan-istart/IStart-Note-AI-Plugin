@@ -1,6 +1,8 @@
 import { DeepSeekSettings } from "../types";
 import { LLMClient } from "../core/llm";
-import { WritingContext, ContinueRequest, ChapterOutline } from "../features/writing/types";
+import { WritingContext, ContinueRequest, ChapterOutline, InsertRequest } from "../features/writing/types";
+import type { InsertionContext } from "../editor/InsertionContext";
+import { buildInsertionPrompt } from "./InsertionPrompt";
 
 const CONTINUE_SYSTEM = `你是一位专业的续写助手，为用户的现有作品续写正文。
 
@@ -51,6 +53,21 @@ export class StoryContinuer {
       maxTokens: this.tokenBudget(request.targetWords),
     });
     return this.trimIncompleteSentence(raw.trim());
+  }
+
+  /** 参考两侧正文和作品设定补充连接内容 */
+  async insertStory(ctx: WritingContext, request: InsertRequest, context: InsertionContext): Promise<string> {
+    const prompt = buildInsertionPrompt(request, context);
+    // Match characters and settings mentioned on either side of the gap.
+    const parts = this.buildCommonParts(ctx, request.targetWords, context.before + "\n" + context.after, request.instruction);
+    const raw = await this.llm.chat({
+      systemPrompt: this.buildSystem(prompt.systemPrompt + "\n遵守作品文风、大纲、角色卡与世界观设定。小说输出纯叙事正文。{{genreRules}}",
+        ctx, request.targetWords, "cursor"),
+      userPrompt: parts + "\n\n" + prompt.userPrompt,
+      temperature: 0.6,
+      maxTokens: this.tokenBudget(request.targetWords),
+    });
+    return raw.trim();
   }
 
   /** 按大纲梗概生成完整新章节 */
