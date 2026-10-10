@@ -70,11 +70,21 @@
   align-items: center;
   justify-content: space-between;
   margin-bottom: 12px;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .istart-sync-header h4 {
   margin: 0;
   font-size: 14px;
+}
+
+.istart-sync-mode {
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--background-secondary);
+  color: var(--text-accent);
+  font-size: 12px;
 }
 
 .istart-sync-hint {
@@ -200,6 +210,38 @@
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 12px;
+}
+
+.istart-git-file-list {
+  max-height: 320px;
+  overflow-y: auto;
+  margin: 8px 0 16px;
+}
+
+.istart-git-file-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 4px 0;
+}
+
+.istart-git-file-status {
+  flex-shrink: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.istart-git-file-path {
+  height: auto;
+  min-width: 0;
+  text-align: left;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.istart-git-restore-path {
+  padding: 4px 0;
+  overflow-wrap: anywhere;
 }
 
 .istart-git-preview {

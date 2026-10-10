@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ### Added
 - Baidu Pan Git synchronization with a shared desktop/mobile JavaScript engine, immutable full/incremental Git bundles, three-way text merging, conflict resolution, commit history, and per-file restore.
+- Whole-vault version browsing with complete file lists, change summaries, scope counts, and project-wide restore previews. Restores preserve current changes in history, create a forward commit, and recover through the existing journal after interruption.
 - Opt-in foreground Git auto-sync and startup configuration pull, both disabled by default. Existing installations keep file sync until manually switched.
 - Durable interrupted-sync recovery, protection for edits during transfer, and Vitest coverage including native Git bundle compatibility and a browser runtime without Node globals.
 - `src/core/llm/`: unified LLM client (`LLMClient`) and JSON extractor (`extractJson`, `parseJsonSafe`, `parseJsonStrict`) shared by every AI feature.
@@ -31,6 +32,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - `PlanExecutor.ts`: applies plans to the vault and persists execution logs under `Knowledge/_Executions/`.
 
 ### Changed
+- The Baidu sync sidebar shows the active synchronization mode and refreshes immediately when sync settings change, including switching between file and Git modes.
+- Git sync preserves existing special-character filenames instead of applying Windows filename restrictions to every device. Windows checks incompatible names before applying any note changes.
 - Baidu directory traversal now paginates; Git operations fail on listing errors instead of treating an unavailable cloud as empty. File sync excludes the separate Git bundle directory.
 - Remote configuration never enables local automatic behavior.
 - All nine LLM call sites (`AIAssistant`, `DeepSeekClient`, `QuestionClassifier`, `ConceptCompleter`, `ContextQAClient`, `ReadingPlanner`, `SectionAppender`, `DiagramGenerator`, `SmartCompleter`) now go through `LLMClient` and `extractJson`.

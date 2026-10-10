@@ -31,15 +31,30 @@ export interface GitHistoryEntry {
   timestamp: number;
 }
 
+export interface GitVersionFile {
+  path: string;
+  status: "added" | "modified" | "deleted" | "unchanged";
+}
+
+export interface GitVersionDetails {
+  oid: string;
+  files: GitVersionFile[];
+  total: number;
+  added: number;
+  modified: number;
+  deleted: number;
+}
+
 const OID = /^[0-9a-f]{40}$/;
 const REF = "refs/heads/main";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
 export function assertNotePath(path: string): void {
-  if (!path || path.includes("\\") || /[\x00-\x1f<>:"|?*]/.test(path) || path.split("/").some(
-    (part) => !part || part.startsWith(".") || /[. ]$/.test(part)
-      || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part)
+  // Validate vault-relative paths, not Windows filename rules. Git trees retain
+  // existing names verbatim; the vault service checks the destination platform.
+  if (!path || path.includes("\\") || /[\x00-\x1f]/.test(path) || path.split("/").some(
+    (part) => !part || part.startsWith(".")
   )) throw new Error(`不支持的同步路径：${path}`);
 }
 
@@ -335,6 +350,38 @@ export class GitSyncEngine {
     return entries.filter((entry) => entry.commit.parent.length).map((entry) => ({
       oid: entry.oid, message: entry.commit.message.trim(), timestamp: entry.commit.author.timestamp * 1000,
     }));
+  }
+
+  async versionDetails(ref: string, baseRef?: string): Promise<GitVersionDetails> {
+    const { commit } = await git.readCommit({ ...this.args, oid: ref });
+    const current = await this.files(ref);
+    const base = baseRef ?? commit.parent[0];
+    const previous = base ? await this.files(base) : new Map<string, string>();
+    const files: GitVersionFile[] = [...new Set([...current.keys(), ...previous.keys()])].sort().map((path) => ({
+      path,
+      status: !current.has(path) ? "deleted" : !previous.has(path) ? "added"
+        : current.get(path) === previous.get(path) ? "unchanged" : "modified",
+    }));
+    return {
+      oid: ref, files, total: current.size,
+      added: files.filter((file) => file.status === "added").length,
+      modified: files.filter((file) => file.status === "modified").length,
+      deleted: files.filter((file) => file.status === "deleted").length,
+    };
+  }
+
+  /** Create a forward commit; the vault service advances HEAD after applying it. */
+  async prepareRestore(ref: string, protectedPaths = new Set<string>()): Promise<string> {
+    const parent = await this.head();
+    const previous = await this.files(parent);
+    const target = await this.files(ref);
+    for (const path of protectedPaths) {
+      const oid = previous.get(path);
+      if (oid) target.set(path, oid);
+      else target.delete(path);
+    }
+    if (sameTree(previous, target)) return parent;
+    return this.commit(target, [parent], `恢复整个笔记库至 ${ref.slice(0, 8)}`);
   }
 
   async restoreFile(path: string, ref: string): Promise<Uint8Array> {

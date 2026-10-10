@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { App, DataAdapter, TFile } from "obsidian";
+import { App, DataAdapter, Platform, TFile } from "obsidian";
 import { BaiduGitSyncService } from "./BaiduGitSyncService";
 import { BaiduSyncService } from "./BaiduSyncService";
 import { DEFAULT_BAIDU_SYNC_CONFIG, loadBaiduSyncConfig } from "../../types";
@@ -88,9 +88,119 @@ function device() {
   };
 }
 
-beforeEach(() => { cloud.files.clear(); cloud.failList = false; cloud.downloadHook = undefined; });
+beforeEach(() => { cloud.files.clear(); cloud.failList = false; cloud.downloadHook = undefined; Platform.isWin = false; });
 
 describe("mobile adapter and live-vault application", () => {
+  it("syncs every project directory regardless of the active document", async () => {
+    const a = device(), b = device();
+    await a.note("current.md", "active");
+    await a.note("Knowledge/Concepts/closed.md", "closed concept");
+    await a.note("Writing/Project/Chapter.md", "closed chapter");
+    await a.adapter.writeBinary("Attachments/image.png", new Uint8Array([0, 1, 2]).buffer);
+    Object.assign(a.app, { workspace: { getActiveFile: () => a.app.vault.getAbstractFileByPath("current.md") } });
+    Object.assign(b.app, { workspace: { getActiveFile: () => null } });
+    expect(a.service().scope()).toEqual({ included: 4, excluded: 0 });
+    expect((await a.service().sync()).tracked).toBe(4);
+    await b.service().sync();
+    expect(b.app.vault.getFiles().map((file) => file.path).sort()).toEqual(a.app.vault.getFiles().map((file) => file.path).sort());
+    expect(await b.content("Knowledge/Concepts/closed.md")).toBe("closed concept");
+    expect(await b.content("Writing/Project/Chapter.md")).toBe("closed chapter");
+    expect(new Uint8Array(await b.adapter.readBinary("Attachments/image.png"))).toEqual(new Uint8Array([0, 1, 2]));
+    const version = await b.service().versionDetails((await b.service().history())[0].oid);
+    expect(version).toMatchObject({ total: 4, added: 4, modified: 0, deleted: 0 });
+    expect(version.files.map((file) => file.path)).toEqual(b.app.vault.getFiles().map((file) => file.path).sort());
+  });
+
+  it("queues history readers from multiple views behind a running project sync", async () => {
+    const a = device(); await a.note("note.md", "local");
+    const syncing = a.service().sync();
+    const sidebarHistory = a.service().history();
+    const modalHistory = a.service().history();
+    const [result, sidebar, modal] = await Promise.all([syncing, sidebarHistory, modalHistory]);
+    expect(sidebar[0].oid).toBe(result.after);
+    expect(modal).toEqual(sidebar);
+    expect(await a.service().versionDetails(result.after)).toMatchObject({ total: 1, added: 1 });
+  });
+
+  it("restores a complete project version and preserves later history on both devices", async () => {
+    const a = device(), b = device();
+    await a.note("Knowledge/concept.md", "old concept");
+    await a.note("Writing/chapter.md", "old chapter");
+    await a.note("unchanged.md", "stable");
+    await a.adapter.writeBinary("Attachments/image.png", new Uint8Array([0, 1]).buffer);
+    await a.service().sync(); await b.service().sync();
+    const first = (await a.service().history())[0].oid;
+    await a.note("Knowledge/concept.md", "new concept");
+    await a.adapter.remove("Writing/chapter.md");
+    await a.note("New/scratch.md", "new note");
+    await a.adapter.writeBinary("Attachments/image.png", new Uint8Array([0, 2]).buffer);
+    await a.service().sync(); await b.service().sync();
+    await a.note("Knowledge/concept.md", "unsaved latest concept");
+    const plan = await a.service().previewRestoreVersion(first);
+    expect(plan.details).toMatchObject({ total: 4, added: 1, modified: 2, deleted: 1 });
+    expect(await a.content("Knowledge/concept.md")).toBe("unsaved latest concept");
+    expect(await a.adapter.exists("Writing/chapter.md")).toBe(false);
+    expect(await a.service().restoreVersion(first, plan.before)).toMatchObject({ changed: 4, skipped: 0 });
+    expect(await a.content("Knowledge/concept.md")).toBe("old concept");
+    expect(await a.content("Writing/chapter.md")).toBe("old chapter");
+    expect(await a.adapter.exists("New/scratch.md")).toBe(false);
+    expect(new Uint8Array(await a.adapter.readBinary("Attachments/image.png"))).toEqual(new Uint8Array([0, 1]));
+    expect(decode(await a.service().version("Knowledge/concept.md", plan.before))).toBe("unsaved latest concept");
+    expect(decode(await a.service().version("New/scratch.md", plan.before))).toBe("new note");
+    expect((await a.service().history())[0].message).toContain("恢复整个笔记库");
+    await a.service().sync(); await b.service().sync();
+    expect(await b.content("Knowledge/concept.md")).toBe("old concept");
+    expect(await b.content("Writing/chapter.md")).toBe("old chapter");
+    expect(await b.adapter.exists("New/scratch.md")).toBe(false);
+  });
+
+  it("keeps ignored, oversized, and configuration files unchanged during project restore", async () => {
+    const a = device();
+    await a.note("note.md", "one"); await a.note("secret.md", "one"); await a.note("limited.md", "tiny");
+    await a.service().sync();
+    const first = (await a.service().history())[0].oid;
+    await a.note("note.md", "two"); await a.note("secret.md", "local secret");
+    await a.note("limited.md", "x".repeat(20)); await a.note("new.md", "new");
+    await a.note("secret-new.md", "private"); await a.note(".custom-config/data.json", "credentials");
+    a.config.ignorePattern = "secret"; a.config.fileSizeLimitMB = 0.00001;
+    const plan = await a.service().previewRestoreVersion(first);
+    expect(plan.details).toMatchObject({ added: 0, modified: 1, deleted: 1 });
+    await a.service().restoreVersion(first, plan.before);
+    expect(await a.content("note.md")).toBe("one");
+    expect(await a.adapter.exists("new.md")).toBe(false);
+    expect(await a.content("secret.md")).toBe("local secret");
+    expect(await a.content("secret-new.md")).toBe("private");
+    expect(await a.content("limited.md")).toBe("x".repeat(20));
+    expect(await a.content(".custom-config/data.json")).toBe("credentials");
+  });
+
+  it("requires a fresh project restore preview if notes changed after preview", async () => {
+    const a = device(); await a.note("note.md", "one"); await a.service().sync();
+    const first = (await a.service().history())[0].oid;
+    await a.note("note.md", "two"); await a.note("new.md", "new");
+    const plan = await a.service().previewRestoreVersion(first);
+    await a.note("note.md", "edited after preview");
+    await expect(a.service().restoreVersion(first, plan.before)).rejects.toThrow("预览后笔记库发生变化");
+    expect(await a.content("note.md")).toBe("edited after preview");
+    expect(await a.content("new.md")).toBe("new");
+  });
+
+  it("recovers a project restore interrupted between file writes", async () => {
+    const a = device(); await a.note("a.md", "old a"); await a.note("b.md", "old b"); await a.service().sync();
+    const first = (await a.service().history())[0].oid;
+    await a.note("a.md", "new a"); await a.note("b.md", "new b"); await a.service().sync();
+    const plan = await a.service().previewRestoreVersion(first);
+    a.failOn("b.md");
+    await expect(a.service().restoreVersion(first, plan.before)).rejects.toThrow("Write failed");
+    expect(await a.content("a.md")).toBe("old a");
+    expect(await a.content("b.md")).toBe("new b");
+    await expect(a.service().previewRestoreVersion(first)).rejects.toThrow("请先完成中断的同步");
+    a.failOn(""); await a.service().sync();
+    expect(await a.content("a.md")).toBe("old a");
+    expect(await a.content("b.md")).toBe("old b");
+    expect([...a.adapter.files.keys()].some((path) => path.endsWith("/apply.json"))).toBe(false);
+  });
+
   it("runs two devices using only the Obsidian adapter and preserves versions", async () => {
     const a = device(), b = device();
     await a.note("文件夹/笔记.md", "first");
@@ -103,6 +213,43 @@ describe("mobile adapter and live-vault application", () => {
     expect((await b.service().history()).length).toBeGreaterThan(1);
     expect([...b.adapter.files.keys()].some((path) => path.startsWith(".custom-config/plugins/istart-note-ai/git-sync/"))).toBe(true);
     expect([...cloud.files.keys()].every((path) => path.includes("/_istart-git/v1/"))).toBe(true);
+  });
+
+  it("syncs and restores the existing asterisk filename without renaming it", async () => {
+    const a = device(), b = device();
+    const path = "Knowledge/Concepts/_未分类/**体系结构模型**.md";
+    await a.note(path, "first");
+    await a.service().sync(); await b.service().sync();
+    expect(await b.content(path)).toBe("first");
+    const first = (await b.service().history())[0].oid;
+    await b.note(path, "second"); await b.service().sync(); await a.service().sync();
+    expect(await a.content(path)).toBe("second");
+    await b.service().restoreFile(path, first);
+    await b.service().sync(); await a.service().sync();
+    expect(await a.content(path)).toBe("first");
+    expect(a.app.vault.getFiles().map((file) => file.path)).toEqual([path]);
+    expect(b.app.vault.getFiles().map((file) => file.path)).toEqual([path]);
+  });
+
+  it("rejects incompatible Windows filenames before applying any remote notes", async () => {
+    const a = device(), b = device();
+    const path = "Knowledge/Concepts/_未分类/**体系结构模型**.md";
+    await a.note("a-safe.md", "safe"); await a.note(path, "original");
+    await a.service().sync();
+    await b.note("local.md", "retained");
+    Platform.isWin = true;
+    await expect(b.service().sync()).rejects.toThrow(`Windows 不支持此文件名，请在原设备重命名后重新同步：${path}`);
+    expect(b.app.vault.getFiles().map((file) => file.path)).toEqual(["local.md"]);
+    expect(await b.content("local.md")).toBe("retained");
+    Platform.isWin = false;
+    await b.service().sync();
+    expect(await b.content(path)).toBe("original");
+    expect(await b.content("a-safe.md")).toBe("safe");
+    const first = (await b.service().history())[0].oid;
+    await b.note(path, "edited");
+    Platform.isWin = true;
+    await expect(b.service().restoreFile(path, first)).rejects.toThrow("Windows 不支持此文件名");
+    expect(await b.content(path)).toBe("edited");
   });
 
   it("recovers an interrupted application after only some files were written", async () => {

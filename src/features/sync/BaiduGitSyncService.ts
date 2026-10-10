@@ -1,16 +1,22 @@
-import { App, TFile } from "obsidian";
+import { App, Platform, TFile } from "obsidian";
 import { hashBlob } from "isomorphic-git";
 import { BaiduSyncConfig } from "../../types";
 import { md5 } from "../../util/md5";
-import { GitSyncEngine, GitTransport, GitResolution, GitSyncOutcome, assertNotePath } from "../../core/sync/GitSyncEngine";
+import { GitSyncEngine, GitTransport, GitResolution, GitSyncOutcome, GitVersionDetails, assertNotePath } from "../../core/sync/GitSyncEngine";
 import { BaiduPanClient } from "./BaiduPanClient";
 import { BaiduSyncService } from "./BaiduSyncService";
 import { ObsidianGitFs, ensureDirectory } from "./ObsidianGitFs";
 
 interface ApplyJournal { before: string; after: string }
-export interface GitVaultResult extends GitSyncOutcome { changed: number; skipped: number }
+export interface GitVaultResult extends GitSyncOutcome { changed: number; skipped: number; tracked: number }
+export interface GitRestorePreview {
+  version: string;
+  before: string;
+  details: GitVersionDetails;
+  skipped: number;
+}
 
-const busyVaults = new WeakSet<App>();
+const vaultOperations = new WeakMap<App, Promise<void>>();
 
 /** All live-vault writes happen here, after the Git layer finishes validating and merging. */
 export class BaiduGitSyncService {
@@ -47,11 +53,18 @@ export class BaiduGitSyncService {
     };
   }
 
-  private async exclusive<T>(run: () => Promise<T>): Promise<T> {
-    if (busyVaults.has(this.app)) throw new Error("此笔记库正在同步，请等待完成");
-    busyVaults.add(this.app);
+  private async exclusive<T>(run: () => Promise<T>, queue = false): Promise<T> {
+    const previous = vaultOperations.get(this.app);
+    if (previous && !queue) throw new Error("此笔记库正在同步，请等待完成");
+    let complete!: () => void;
+    const operation = new Promise<void>((resolve) => { complete = resolve; });
+    vaultOperations.set(this.app, operation);
+    if (previous) await previous;
     try { await this.engine.initialize(); return await run(); }
-    finally { busyVaults.delete(this.app); }
+    finally {
+      if (vaultOperations.get(this.app) === operation) vaultOperations.delete(this.app);
+      complete();
+    }
   }
 
   private ignored(path: string, size = 0): boolean {
@@ -60,6 +73,19 @@ export class BaiduGitSyncService {
     if (path === configDir || path.startsWith(configDir + "/")) return true;
     if (size > this.config.fileSizeLimitMB * 1024 * 1024) return true;
     return !!this.config.ignorePattern && new RegExp(this.config.ignorePattern).test(path);
+  }
+
+  scope(): { included: number; excluded: number } {
+    const files = this.app.vault.getFiles();
+    const included = files.filter((file) => !this.ignored(file.path, file.stat.size)).length;
+    return { included, excluded: files.length - included };
+  }
+
+  private assertWritablePath(path: string): void {
+    assertNotePath(path);
+    if (Platform.isWin && (/[<>:"|?*]/.test(path) || path.split("/").some(
+      (part) => /[. ]$/.test(part) || /^(con|prn|aux|nul|com[1-9]|lpt[1-9])(?:\.|$)/i.test(part)
+    ))) throw new Error(`Windows 不支持此文件名，请在原设备重命名后重新同步：${path}`);
   }
 
   private async snapshot(): Promise<{ oid: string; skipped: number }> {
@@ -79,6 +105,7 @@ export class BaiduGitSyncService {
         if (previous.has(file.path)) protectedPaths.add(file.path);
         skipped++; continue;
       }
+      this.assertWritablePath(file.path);
       included.push(file);
     }
     const vault = this.app.vault;
@@ -97,17 +124,18 @@ export class BaiduGitSyncService {
       // If an application was interrupted, current edits are committed against the original
       // pre-application tree, then merged with the pending target. Partial writes are idempotent.
       if (pending) await this.engine.setHead(pending.before);
-      onProgress?.("保存本地修改...");
+      onProgress?.("扫描整个笔记库并保存本地修改...");
       const snapshot = await this.snapshot();
       onProgress?.("下载版本并合并设备修改...");
       const result = await this.engine.synchronize(this.transport, resolutions, pending?.after);
-      if (result.conflicts.length) return { ...result, changed: 0, skipped: snapshot.skipped };
+      const tracked = (await this.engine.files(result.after)).size;
+      if (result.conflicts.length) return { ...result, changed: 0, skipped: snapshot.skipped, tracked };
       onProgress?.("应用合并结果...");
       await this.writeJournal({ before: result.before, after: result.after });
       const changed = await this.apply(result.before, result.after);
       await this.engine.setHead(result.after);
       await this.app.vault.adapter.remove(this.journalPath());
-      return { ...result, changed, skipped: snapshot.skipped };
+      return { ...result, changed, skipped: snapshot.skipped, tracked };
     });
   }
 
@@ -140,6 +168,7 @@ export class BaiduGitSyncService {
       if (previous === next || this.ignored(path)) continue;
       const bytes = next ? await this.engine.blob(next) : undefined;
       if (bytes && this.ignored(path, bytes.length)) continue;
+      this.assertWritablePath(path);
       changes.push({ path, previous, next, bytes });
     }
     // Check the entire plan before touching the vault, including new path collisions.
@@ -175,14 +204,59 @@ export class BaiduGitSyncService {
     return true;
   }
 
-  history() { return this.exclusive(() => this.engine.history()); }
+  history() { return this.exclusive(() => this.engine.history(), true); }
+
+  versionDetails(oid: string): Promise<GitVersionDetails> {
+    return this.exclusive(() => this.engine.versionDetails(oid), true);
+  }
+
+  private async planRestore(oid: string, expectedBefore?: string) {
+    if (await this.readJournal()) throw new Error("请先完成中断的同步，再恢复历史版本");
+    const target = await this.engine.files(oid);
+    // Save every current note before any project-level restore, including new files.
+    const snapshot = await this.snapshot();
+    if (expectedBefore && snapshot.oid !== expectedBefore) throw new Error("预览后笔记库发生变化，请重新预览恢复范围");
+    const current = await this.engine.files(snapshot.oid);
+    const protectedPaths = new Set<string>();
+    const excludedLocal = new Set(this.app.vault.getFiles()
+      .filter((file) => this.ignored(file.path, file.stat.size)).map((file) => file.path));
+    for (const path of new Set([...current.keys(), ...target.keys()])) {
+      if (excludedLocal.has(path) || this.ignored(path)) { protectedPaths.add(path); continue; }
+      for (const blob of new Set([current.get(path), target.get(path)])) {
+        if (blob && this.ignored(path, (await this.engine.blob(blob)).length)) { protectedPaths.add(path); break; }
+      }
+      if (!protectedPaths.has(path) && current.get(path) !== target.get(path)) this.assertWritablePath(path);
+    }
+    const after = await this.engine.prepareRestore(oid, protectedPaths);
+    return { before: snapshot.oid, after, skipped: protectedPaths.size };
+  }
+
+  previewRestoreVersion(oid: string): Promise<GitRestorePreview> {
+    return this.exclusive(async () => {
+      const plan = await this.planRestore(oid);
+      return { version: oid, before: plan.before, skipped: plan.skipped,
+        details: await this.engine.versionDetails(plan.after, plan.before) };
+    });
+  }
+
+  restoreVersion(oid: string, expectedBefore?: string): Promise<{ changed: number; skipped: number }> {
+    return this.exclusive(async () => {
+      const plan = await this.planRestore(oid, expectedBefore);
+      await this.writeJournal({ before: plan.before, after: plan.after });
+      const changed = await this.apply(plan.before, plan.after);
+      await this.engine.setHead(plan.after);
+      await this.app.vault.adapter.remove(this.journalPath());
+      return { changed, skipped: plan.skipped };
+    });
+  }
 
   async version(path: string, oid: string): Promise<Uint8Array> {
-    return this.exclusive(() => this.engine.restoreFile(path, oid));
+    return this.exclusive(() => this.engine.restoreFile(path, oid), true);
   }
 
   async restoreFile(path: string, oid: string): Promise<void> {
     return this.exclusive(async () => {
+      this.assertWritablePath(path);
       if (await this.readJournal()) throw new Error("请先完成中断的同步，再恢复历史版本");
       if (this.ignored(path)) throw new Error("此文件不在同步范围内");
       // Capture the current version first so restoring is itself reversible.

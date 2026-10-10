@@ -20,6 +20,9 @@ export class BaiduSyncView extends ItemView {
   private statusList: FileStatus[] = [];
   private isScanning = false;
   private lastScanTime: Date | null = null;
+  private viewIsOpen = false;
+  private renderedSettingsKey = "";
+  private renderGeneration = 0;
 
   constructor(leaf: WorkspaceLeaf, plugin: DeepSeekPlugin) {
     super(leaf);
@@ -31,17 +34,36 @@ export class BaiduSyncView extends ItemView {
   getIcon(): string { return "cloud"; }
 
   onOpen(): Promise<void> {
+    this.viewIsOpen = true;
     this.render();
     return Promise.resolve();
   }
 
   onClose(): Promise<void> {
+    this.viewIsOpen = false;
+    this.renderGeneration++;
     return Promise.resolve();
+  }
+
+  private settingsKey(): string {
+    const cfg = this.plugin.settings.baiduSync;
+    return JSON.stringify([cfg.enabled, !!cfg.accessToken, cfg.syncEngine, cfg.autoSync, cfg.remotePath, cfg.ignorePattern, cfg.fileSizeLimitMB]);
+  }
+
+  /** Update open views when sync settings change without reloading the plugin. */
+  refreshSettings(): void {
+    if (!this.viewIsOpen || this.renderedSettingsKey === this.settingsKey()) return;
+    this.statusList = [];
+    this.lastScanTime = null;
+    this.render();
   }
 
   // ── 渲染 ───────────────────────────────────────────────────
 
   private render() {
+    if (!this.viewIsOpen) return;
+    const generation = ++this.renderGeneration;
+    this.renderedSettingsKey = this.settingsKey();
     const root = this.containerEl.children[1] as HTMLElement;
     root.empty();
     root.addClass("istart-sync-root");
@@ -51,6 +73,10 @@ export class BaiduSyncView extends ItemView {
     header.createEl("h4", { text: "百度云同步状态" });
 
     const cfg = this.plugin.settings.baiduSync;
+    header.createSpan({
+      text: cfg.syncEngine === "git" ? "Git 版本同步" : "文件同步",
+      cls: "istart-sync-mode",
+    });
     if (!cfg.enabled || !cfg.accessToken) {
       root.createEl("p", {
         text: "请先在设置中启用百度云同步并完成授权。",
@@ -60,22 +86,35 @@ export class BaiduSyncView extends ItemView {
     }
 
     if (cfg.syncEngine === "git") {
+      const service = new BaiduGitSyncService(this.app, cfg);
+      root.createEl("p", { text: `同步范围：整个笔记库「${this.app.vault.getName()}」，包括所有子目录的笔记与附件。`, cls: "istart-sync-hint" });
+      try {
+        const scope = service.scope();
+        root.createEl("p", { text: `本地可同步 ${scope.included} 个文件，按规则排除 ${scope.excluded} 个文件。配置与隐藏文件不参与同步。`, cls: "istart-sync-hint" });
+      } catch (error) { root.createEl("p", { text: (error as Error).message }); }
       root.createEl("p", { text: cfg.autoSync ? "Git 版本同步 · 前台自动同步已开启" : "Git 版本同步 · 自动同步已关闭", cls: "istart-sync-hint" });
       const buttons = root.createDiv({ cls: "istart-sync-btn-row" });
-      this.makeBtn(buttons, "手动同步", "cta", () => {
+      this.makeBtn(buttons, "手动同步整库", "cta", () => {
         void runGitSync(this.app, cfg, () => this.plugin.saveSettings()).then(() => this.render());
       });
-      this.makeBtn(buttons, "版本历史", "default", () => new GitHistoryModal(this.app, cfg).open());
+      this.makeBtn(buttons, "整库版本历史", "default", () => new GitHistoryModal(this.app, cfg, () => this.render()).open());
       const history = root.createDiv();
-      void new BaiduGitSyncService(this.app, cfg).history().then((entries) => {
-        if (!root.isConnected) return;
-        if (!entries.length) history.createEl("p", { text: "尚无提交，点击手动同步保存第一个版本。" });
+      void service.history().then((entries) => {
+        if (!this.viewIsOpen || generation !== this.renderGeneration) return;
+        if (!entries.length) history.createEl("p", { text: "尚无提交，点击手动同步整库保存第一个版本。" });
         for (const entry of entries.slice(0, 10)) {
           history.createDiv({ cls: "istart-sync-file-row", text: `${entry.oid.slice(0, 8)} · ${entry.message} · ${new Date(entry.timestamp).toLocaleString()}` });
         }
-      }).catch((error: Error) => { history.createEl("p", { text: error.message }); });
+      }).catch((error: Error) => {
+        if (this.viewIsOpen && generation === this.renderGeneration) history.createEl("p", { text: error.message });
+      });
       return;
     }
+
+    root.createEl("p", {
+      text: "当前使用原有文件同步。需要提交历史与文本合并时，可在插件设置的「同步方式」中选择「Git 版本同步」。",
+      cls: "istart-sync-hint",
+    });
 
     // 操作按钮行
     const btnRow = root.createDiv({ cls: "istart-sync-btn-row" });
@@ -164,7 +203,8 @@ export class BaiduSyncView extends ItemView {
 
   async scan() {
     const cfg = this.plugin.settings.baiduSync;
-    if (!cfg.enabled || !cfg.accessToken) return;
+    if (!cfg.enabled || !cfg.accessToken || cfg.syncEngine === "git") return;
+    const scanSettingsKey = this.settingsKey();
 
     this.isScanning = true;
     this.render();
@@ -206,6 +246,7 @@ export class BaiduSyncView extends ItemView {
       }
 
       const plans = meta.buildSyncPlan(localMap, remoteMap);
+      if (scanSettingsKey !== this.settingsKey()) return;
       this.statusList = plans.map((p) => ({
         path: p.path,
         action: p.action,

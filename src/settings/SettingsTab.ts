@@ -267,8 +267,8 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         .addToggle((toggle) => toggle.setValue(cfg.autoSync).onChange(async (value) => {
           cfg.autoSync = value; await this.plugin.saveSettings();
         }));
-      new Setting(el).setName("手动 Git 同步")
-        .setDesc("保存本地版本后合并云端修改；冲突可选择版本或编辑内容。")
+      new Setting(el).setName("手动 Git 整库同步")
+        .setDesc("同步整个笔记库的笔记与附件，包括所有子目录。忽略规则、大小限制和配置目录排除仍生效；可查看、恢复整库版本。")
         .addButton((btn) => btn.setButtonText("打开同步").onClick(() => this.plugin.openBaiduSyncModal()));
     }
 

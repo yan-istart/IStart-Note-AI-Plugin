@@ -1014,7 +1014,12 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
     }
   }
 
-  async saveSettings() { await this.saveData(this.settings); }
+  async saveSettings() {
+    await this.saveData(this.settings);
+    for (const leaf of this.app.workspace.getLeavesOfType(SYNC_VIEW_TYPE)) {
+      if (leaf.view instanceof BaiduSyncView) leaf.view.refreshSettings();
+    }
+  }
 
   async pushConfig() {
     const cfg = this.settings.baiduSync;
@@ -1032,7 +1037,7 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
     const remote = await service.pullConfig(undefined);
     if (!remote) { if (!silent) new Notice("远端无配置或已是最新"); return; }
     this.settings = BaiduSyncService.applyRemoteConfig(this.settings, remote);
-    await this.saveData(this.settings);
+    await this.saveSettings();
     if (!silent) new Notice(" 已从百度云拉取配置");
   }
 }

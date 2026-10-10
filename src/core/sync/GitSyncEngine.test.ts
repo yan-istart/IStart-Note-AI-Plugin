@@ -53,6 +53,27 @@ describe("Git sync across independent devices", () => {
     expect(await contents(b)).toEqual(await contents(a));
   });
 
+  it("preserves existing special-character filenames through bundles and history", async () => {
+    const a = await device(), b = await device(), cloud = new Cloud();
+    const path = "Knowledge/Concepts/_未分类/**体系结构模型**.md";
+    const original = {
+      [path]: "original",
+      'Notes/问题? <标题> | "引用".md': "punctuation",
+      "Notes/CON.md": "reserved only on Windows",
+      "Notes/trailing.": "trailing dot",
+      "Notes/trailing ": "trailing space",
+      "Notes/topic:name.md": "colon",
+    };
+    await a.snapshot(notes(original));
+    const first = await a.head();
+    await sync(a, cloud); await sync(b, cloud);
+    expect(await contents(b)).toEqual(original);
+    await b.snapshot(notes({ ...original, [path]: "updated" }));
+    await sync(b, cloud); await sync(a, cloud);
+    expect((await contents(a))[path]).toBe("updated");
+    expect(decoder.decode(await a.restoreFile(path, first))).toBe("original");
+  });
+
   it("merges non-overlapping offline Markdown edits and converges", async () => {
     const a = await device(), b = await device(), cloud = new Cloud();
     await a.snapshot(notes({ "笔记.md": "标题\n第一段\n间隔\n第二段\n" }));
@@ -168,12 +189,17 @@ describe("Git sync across independent devices", () => {
     expect(execFileSync("git", ["show", "FETCH_HEAD:note.md"], { cwd: clone, encoding: "utf8" })).toBe("second");
   });
 
-  it("protects ignored tracked paths and rejects nonportable or unsafe names", async () => {
+  it("protects ignored tracked paths and rejects unsafe or colliding names", async () => {
     const a = await device();
     await a.snapshot(notes({ "keep.md": "kept", "delete.md": "deleted" }));
     await a.snapshot(notes({}), new Set(["keep.md"]));
     expect(await contents(a)).toEqual({ "keep.md": "kept" });
-    await expect(a.snapshot(notes({ "../escape.md": "bad" }))).rejects.toThrow("不支持");
+    const before = await a.head();
+    for (const path of ["../escape.md", "folder/../escape.md", "/absolute.md", "folder//note.md",
+      "folder\\note.md", ".obsidian/data.json", "folder/.git/config", "null\0.md"]) {
+      await expect(a.snapshot(notes({ [path]: "bad" }))).rejects.toThrow("不支持");
+      expect(await a.head()).toBe(before);
+    }
     await expect(a.snapshot(notes({ "Foo.md": "a", "foo.md": "b" }))).rejects.toThrow("大小写");
   });
 });
