@@ -1,6 +1,7 @@
-import { App, Modal, Setting } from "obsidian";
+import { App, Setting, Platform } from "obsidian";
+import { ActionModal } from "../../ui/ActionModal";
 
-export class QuestionModal extends Modal {
+export class QuestionModal extends ActionModal {
   private question = "";
   private onSubmit: (question: string) => void;
 
@@ -10,8 +11,9 @@ export class QuestionModal extends Modal {
   }
 
   onOpen() {
-    const { contentEl } = this;
-    new Setting(contentEl).setName("向 DeepSeek 提问").setHeading();
+    super.onOpen();
+    const contentEl = this.bodyEl;
+    this.titleEl.setText("知识提问");
 
     const textArea = contentEl.createEl("textarea", {
       attr: {
@@ -27,15 +29,16 @@ export class QuestionModal extends Modal {
 
     // 支持 Ctrl/Cmd + Enter 提交
     textArea.addEventListener("keydown", (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") {
+      if (!e.isComposing && (e.ctrlKey || e.metaKey) && e.key === "Enter") {
+        e.preventDefault();
         this.submit();
       }
     });
 
-    new Setting(contentEl)
+    new Setting(this.actionsEl)
       .addButton((btn) =>
         btn
-          .setButtonText("提问 (Ctrl+Enter)")
+          .setButtonText(Platform.isMobile ? "提问" : "提问 (Ctrl+Enter)")
           .setCta()
           .onClick(() => this.submit())
       )
@@ -44,7 +47,7 @@ export class QuestionModal extends Modal {
       );
 
     // 自动聚焦
-    window.setTimeout(() => textArea.focus(), 50);
+    this.focusOnDesktop(textArea);
   }
 
   private submit() {
@@ -55,6 +58,6 @@ export class QuestionModal extends Modal {
   }
 
   onClose() {
-    this.contentEl.empty();
+    super.onClose();
   }
 }

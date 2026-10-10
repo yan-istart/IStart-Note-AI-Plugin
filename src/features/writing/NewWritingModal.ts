@@ -1,5 +1,6 @@
-import { App, Modal, Setting, Notice } from "obsidian";
+import { App, Setting, Notice } from "obsidian";
 import { WritingGenre } from "./types";
+import { ActionModal } from "../../ui/ActionModal";
 
 const GENRE_LABEL: Record<WritingGenre, string> = {
   novel: "网文小说",
@@ -16,7 +17,7 @@ export interface NewWritingInput {
 /**
  * 新建作品弹窗 — 选择体裁,输入标题与一句话简介。
  */
-export class NewWritingModal extends Modal {
+export class NewWritingModal extends ActionModal {
   private genre: WritingGenre = "novel";
   private title = "";
   private premise = "";
@@ -30,7 +31,8 @@ export class NewWritingModal extends Modal {
   }
 
   onOpen() {
-    const { contentEl } = this;
+    super.onOpen();
+    const contentEl = this.bodyEl;
 
     contentEl.createEl("p", {
       text: "AI 会生成：作品首页、大纲（含每章梗概）、章节文件，小说还会生成角色卡与世界观设定。",
@@ -64,7 +66,7 @@ export class NewWritingModal extends Modal {
     });
     premiseArea.addEventListener("input", () => { this.premise = premiseArea.value; });
 
-    new Setting(contentEl)
+    new Setting(this.actionsEl)
       .addButton((btn) =>
         btn.setButtonText("生成项目").setCta().onClick(() => {
           if (!this.premise.trim()) {
@@ -79,6 +81,6 @@ export class NewWritingModal extends Modal {
   }
 
   onClose() {
-    this.contentEl.empty();
+    super.onClose();
   }
 }

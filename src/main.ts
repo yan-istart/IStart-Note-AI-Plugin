@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile, normalizePath, Editor } from "obsidian";
+import { Notice, Plugin, TFile, normalizePath, Platform } from "obsidian";
 import { DeepSeekSettings, DEFAULT_SETTINGS, CompletionDepth } from "./types";
 import { DeepSeekSettingsTab } from "./settings/SettingsTab";
 import { BaiduSyncService } from "./features/sync/BaiduSyncService";
@@ -37,6 +37,10 @@ import { ContinueModal } from "./features/writing/ContinueModal";
 import { WritingPlanPreviewModal } from "./features/writing/WritingPlanPreviewModal";
 import { ImportModal } from "./features/writing/import/ImportModal";
 import { WritingGenre, WritingContext, WritingPlan, ContinueRequest, ChapterOutline } from "./features/writing/types";
+import { registerQuickIcons } from "./ui/icons";
+import { availableQuickActions, QuickActionId } from "./actions/quickActions";
+import { captureEditorTarget, checkEditorTarget, writeEditorResult, EditorTarget } from "./editor/EditorTarget";
+import { SmartCompleter } from "./ai/SmartCompleter";
 
 export default class DeepSeekPlugin extends Plugin {
   settings!: DeepSeekSettings;
@@ -44,6 +48,7 @@ export default class DeepSeekPlugin extends Plugin {
   knowledgeIndex!: KnowledgeIndexService;
   private automaticSyncRunning = false;
   private automaticSyncMessage = "";
+  private aiJobs = new Set<string>();
 
   async onload() {
     await this.loadSettings();
@@ -76,8 +81,9 @@ export default class DeepSeekPlugin extends Plugin {
     this.registerInterval(window.setInterval(() => { void this.runAutomaticGitSync(); }, 60_000));
     this.app.workspace.onLayoutReady(() => { void this.runAutomaticGitSync(); });
     this.addSettingTab(new DeepSeekSettingsTab(this.app, this));
+    registerQuickIcons();
     registerAllActions(this, ALL_ACTIONS);
-    this.registerWritingStatusBar();
+    if (!Platform.isMobile) this.registerWritingStatusBar();
   }
 
   /** 状态栏快捷入口:打开章节文件时显示「续写」与「下一章」按钮 */
@@ -107,10 +113,9 @@ export default class DeepSeekPlugin extends Plugin {
 
   // ── AI 助手（统一入口） ────────────────────────────────────
 
-  openAssistant() {
-    const editor = this.app.workspace.activeEditor?.editor ?? null;
-    const activeFile = this.app.workspace.getActiveFile();
-    const selection = editor?.getSelection().trim() ?? "";
+  openAssistant(target: EditorTarget | null = captureEditorTarget(this.app)) {
+    const activeFile = target?.file ?? this.app.workspace.getActiveFile();
+    const selection = target?.selection.trim() ?? "";
     const fileName = activeFile?.basename ?? "";
 
     // 构建上下文提示
@@ -120,15 +125,18 @@ export default class DeepSeekPlugin extends Plugin {
     const contextHint = hints.join("  |  ");
 
     new AssistantInputModal(this.app, contextHint, (instruction) => {
-      void this.runAssistant(instruction);
+      if (instruction.trim() === "续写") { void this.continueWriting(false, target); }
+      else { void this.runAssistant(instruction, target); }
+    }, {
+      quickActions: target ? availableQuickActions(!!selection) : [],
+      onQuickAction: (id) => { void this.runQuickAction(id, target); },
     }).open();
   }
 
-  private async runAssistant(instruction: string) {
-    const editor = this.app.workspace.activeEditor?.editor ?? null;
-    const activeFile = this.app.workspace.getActiveFile();
-    const selection = editor?.getSelection().trim() ?? "";
-    const fileContent = editor?.getValue() ?? "";
+  private async runAssistant(instruction: string, target: EditorTarget | null, resultMode?: AssistantResult["mode"]) {
+    const activeFile = target?.file ?? null;
+    const selection = target?.selection.trim() ?? "";
+    const fileContent = target?.content ?? "";
     const fileName = activeFile?.basename ?? "";
     const fileMeta = activeFile ? this.app.metadataCache.getFileCache(activeFile) : null;
     const fileType = fmString(frontmatterOf(fileMeta), "type");
@@ -138,9 +146,9 @@ export default class DeepSeekPlugin extends Plugin {
     let sectionName: string | null = null;
     let sectionEmpty = false;
 
-    if (editor) {
-      const cursor = editor.getCursor();
-      cursorLineBefore = editor.getRange({ line: 0, ch: 0 }, cursor);
+    if (target) {
+      const cursor = target.cursor;
+      cursorLineBefore = fileContent.slice(0, target.editor.posToOffset(cursor));
 
       const lines = fileContent.split("\n");
       let sectionStartLine = -1;
@@ -167,59 +175,84 @@ export default class DeepSeekPlugin extends Plugin {
       sectionEmpty,
     };
 
-    const notice = new Notice(" AI 思考中...", 0);
-    try {
+    await this.previewGenerated(target, "AI 思考中...", async () => {
       const knownConcepts = this.getKnownConcepts();
       const style = this.settings.outputStyle ?? "knowledge-base";
       const assistant = new AIAssistant(this.settings, style, knownConcepts);
       const result = await assistant.run(instruction, ctx);
-      notice.hide();
+      return resultMode ? { ...result, mode: resultMode } : result;
+    }, () => { void this.runAssistant(instruction, target, resultMode); }, undefined, true);
+  }
 
-      new AssistantResultModal(
-        this.app,
-        result,
-        () => this.applyResult(result, editor),
-        () => { void this.runAssistant(instruction); },
-        () => { void this.createConceptFromContent(result.content, ctx.selection); }
-      ).open();
-    } catch (err) {
-      notice.hide();
-      new Notice(`失败：${(err as Error).message}`);
+  private applyResult(result: AssistantResult, target: EditorTarget | null): EditorTarget | null {
+    if (!target) { new Notice("无法写入：请先打开文档"); return null; }
+    try {
+      const nextTarget = writeEditorResult(this.app, target, result);
+      new Notice(result.mode === "replace" ? "已替换" : "已插入");
+      if (fmString(frontmatterOf(this.app.metadataCache.getFileCache(target.file)), "type") !== "chapter") {
+        void this.ensureLinkedConcepts(result.content);
+      }
+      return nextTarget;
+    } catch (error) {
+      new Notice((error as Error).message);
+      return null;
     }
   }
 
-  private applyResult(result: AssistantResult, editor: import("obsidian").Editor | null) {
-    if (!editor) { new Notice("无法写入：编辑器不可用"); return; }
-
-    switch (result.mode) {
-      case "replace":
-        editor.replaceSelection(result.content);
-        new Notice(" 已替换");
-        break;
-      case "insert": {
-        const cursor = editor.getCursor();
-        editor.replaceRange("\n" + result.content + "\n", cursor);
-        new Notice(" 已插入");
-        break;
-      }
-      case "append": {
-        const lastLine = editor.lastLine();
-        editor.replaceRange("\n\n" + result.content + "\n", { line: lastLine, ch: editor.getLine(lastLine).length });
-        new Notice(" 已追加");
-        break;
-      }
-      case "show":
-        // 用户选择"插入到文档"时，当作 insert 处理
-        {
-          const cursor = editor.getCursor();
-          editor.replaceRange("\n" + result.content + "\n", cursor);
-          new Notice(" 已插入");
-        }
-        break;
+  private async previewGenerated(
+    target: EditorTarget | null,
+    message: string,
+    generate: () => Promise<AssistantResult>,
+    retry: () => void,
+    continueAfter?: (target: EditorTarget) => void,
+    allowConcept = false
+  ) {
+    const key = target?.path ?? "assistant";
+    if (this.aiJobs.has(key)) { new Notice("当前文档正在生成，请稍候"); return; }
+    this.aiJobs.add(key);
+    const notice = new Notice(message, 0);
+    try {
+      if (target) checkEditorTarget(this.app, target);
+      const result = await generate();
+      if (!result.content.trim()) { new Notice("AI 未能生成有效内容，请重试"); return; }
+      new AssistantResultModal(this.app, result,
+        () => !!this.applyResult(result, target), retry,
+        // Keep the existing concept-page action available for generic assistant output.
+        allowConcept ? () => {
+          if (target) checkEditorTarget(this.app, target);
+          void this.createConceptFromContent(result.content, target?.selection ?? "");
+        } : undefined,
+        continueAfter ? {
+          label: "插入并继续",
+          callback: () => {
+            const nextTarget = this.applyResult(result, target);
+            if (!nextTarget) return false;
+            continueAfter(nextTarget);
+            return true;
+          },
+        } : undefined
+      ).open();
+    } catch (error) {
+      new Notice(`生成失败：${(error as Error).message}`);
+    } finally {
+      notice.hide();
+      this.aiJobs.delete(key);
     }
+  }
 
-    // 所有模式都自动创建概念页
-    void this.ensureLinkedConcepts(result.content);
+  async runQuickAction(id: QuickActionId, target: EditorTarget | null = captureEditorTarget(this.app)) {
+    if (!target) { new Notice("请先打开文档"); return; }
+    if (id === "continue") { await this.continueWriting(false, target); return; }
+    if (id === "polish") { await this.polishWriting(target); return; }
+    if ((id === "expand" || id === "explain") && !target.selection.trim()) { new Notice("请先选中文字"); return; }
+    if (id === "expand") {
+      await this.previewGenerated(target, "扩写中...", async () => {
+        const result = await new SmartCompleter(this.settings).expand(target.selection, target.content);
+        return { mode: "replace", content: result.content, explanation: "扩写选中文字" };
+      }, () => { void this.runQuickAction(id, target); });
+      return;
+    }
+    await this.runAssistant(id === "explain" ? "解释选中的文字" : "总结这篇文档", target, "show");
   }
 
   /** 将 AI 生成的内容创建为新概念页 */
@@ -556,7 +589,7 @@ export default class DeepSeekPlugin extends Plugin {
 
     new AssistantInputModal(this.app, `[知识库问答] ${contextHint}`, (instruction) => {
       void this.runVaultQA(instruction, selection, activeFile);
-    }).open();
+    }, { showSuggestions: false }).open();
   }
 
   private async runVaultQA(question: string, selection: string, activeFile: TFile | null) {
@@ -717,92 +750,63 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
   }
 
   /** 续写:光标处或文末,自动带入大纲与设定 */
-  async continueWriting() {
-    const editor = this.app.workspace.activeEditor?.editor ?? null;
-    const activeFile = this.app.workspace.getActiveFile();
-    if (!editor || !activeFile) { new Notice("请先打开章节文件"); return; }
-
-    const manager = new WritingProjectManager(this.app, this.settings);
-    const ctx = await manager.loadContext(activeFile);
-    if (!ctx) { new Notice("当前文件不是写作章节（需要 type: chapter）"); return; }
-
-    new ContinueModal(this.app, this.settings.continueTargetWords, ctx.chapterTitle, (request) => {
-      void this.runContinue(ctx, activeFile, editor, request);
-    }).open();
-  }
-
-  private async runContinue(ctx: WritingContext, file: TFile, editor: Editor, request: ContinueRequest) {
-    const notice = new Notice("AI 续写中...", 0);
-    try {
-      let preceding = "";
-      if (request.mode === "cursor") {
-        const cursor = editor.getCursor();
-        const fromLine = Math.max(0, cursor.line - 200);
-        preceding = editor.getRange({ line: fromLine, ch: 0 }, cursor);
-      } else {
-        preceding = editor.getValue().slice(-this.settings.continueContextChars).trim();
-      }
-      if (preceding.length > this.settings.continueContextChars) {
-        preceding = preceding.slice(-this.settings.continueContextChars);
-      }
-
-      const continuer = new StoryContinuer(this.settings);
-      const text = await continuer.continueStory(ctx, request, preceding);
-      notice.hide();
-
-      if (!text.trim()) { new Notice("AI 未能生成续写内容"); return; }
-
-      const result: AssistantResult = {
-        mode: request.mode === "cursor" ? "insert" : "append",
-        content: text,
-        explanation: `续写：${ctx.chapterTitle}`,
-      };
-
-      new AssistantResultModal(
-        this.app,
-        result,
-        () => {
-          if (request.mode === "cursor") {
-            const cursor = editor.getCursor();
-            editor.replaceRange("\n" + text + "\n", cursor);
-            new Notice("已插入续写");
-          } else {
-            const lastLine = editor.lastLine();
-            editor.replaceRange("\n\n" + text + "\n", { line: lastLine, ch: editor.getLine(lastLine).length });
-            new Notice("已追加续写");
-          }
-        },
-        () => { void this.runContinue(ctx, file, editor, request); },
-        undefined,
-        {
-          label: "继续续写",
-          callback: () => { void this.runContinue(ctx, file, editor, request); },
-        }
-      ).open();
-    } catch (err) {
-      notice.hide();
-      new Notice(`续写失败：${(err as Error).message}`);
+  async continueWriting(configure = false, target: EditorTarget | null = captureEditorTarget(this.app)) {
+    if (!target) { new Notice("请先打开文档"); return; }
+    const request: ContinueRequest = {
+      mode: this.settings.continueMode ?? "cursor", instruction: "", targetWords: this.settings.continueTargetWords,
+    };
+    if (configure) {
+      new ContinueModal(this.app, request.targetWords, target.file.basename, (configured) => {
+        this.settings.continueTargetWords = configured.targetWords;
+        this.settings.continueMode = configured.mode;
+        void this.saveSettings().catch(() => new Notice("续写偏好保存失败"));
+        void this.runContinue(target, configured);
+      }, request.mode).open();
+    } else {
+      await this.runContinue(target, request);
     }
   }
 
+  private async runContinue(target: EditorTarget, request: ContinueRequest) {
+    await this.previewGenerated(target, "AI 续写中...", async () => {
+      const preceding = (request.mode === "chapter" ? target.content :
+        target.content.slice(0, target.editor.posToOffset(target.cursor))).slice(-this.settings.continueContextChars);
+      const fileType = fmString(frontmatterOf(this.app.metadataCache.getFileCache(target.file)), "type");
+      let text: string;
+      if (fileType === "chapter") {
+        const ctx = await new WritingProjectManager(this.app, this.settings).loadContext(target.file);
+        if (!ctx) throw new Error("无法读取章节的大纲与设定");
+        text = await new StoryContinuer(this.settings).continueStory(ctx, request, preceding);
+      } else {
+        text = await new LLMClient(this.settings).chat({
+          systemPrompt: `你是笔记续写助手。自然承接上文，保持语言、风格和格式一致，不重复已有内容。只输出续写正文，约 ${request.targetWords} 字。`,
+          userPrompt: `上文：\n${preceding}\n\n${request.instruction || "自然接着写下去"}`,
+          temperature: 0.6,
+        });
+      }
+      return { mode: request.mode === "cursor" ? "insert" : "append", content: text, explanation: `续写：${target.file.basename}` };
+    }, () => { void this.runContinue(target, request); },
+    (nextTarget) => { void this.runContinue(nextTarget, request); });
+  }
+
   /** 按大纲生成下一章 */
-  async generateNextChapter() {
-    const activeFile = this.app.workspace.getActiveFile();
+  async generateNextChapter(activeFile: TFile | null = this.app.workspace.getActiveFile()) {
     if (!activeFile) { new Notice("请先打开章节文件"); return; }
-
-    const manager = new WritingProjectManager(this.app, this.settings);
-    const ctx = await manager.loadContext(activeFile);
-    if (!ctx) { new Notice("当前文件不是写作章节（需要 type: chapter）"); return; }
-
-    const folder = activeFile.parent?.path ?? "";
-    const outlineFile = this.app.vault.getAbstractFileByPath(normalizePath(`${folder}/_大纲.md`));
-    if (!(outlineFile instanceof TFile)) { new Notice("未找到大纲文件"); return; }
-    const outlineContent = await this.app.vault.read(outlineFile);
-    const next = manager.getNextChapter(outlineContent, ctx.chapterNumber);
-    if (!next) { new Notice("大纲中已是最后一章"); return; }
-
-    const notice = new Notice(`正在生成第${next.number}章...`, 0);
+    const path = activeFile.path;
+    if (this.aiJobs.has(path)) { new Notice("当前文档正在生成，请稍候"); return; }
+    this.aiJobs.add(path);
+    const target = captureEditorTarget(this.app);
+    const notice = new Notice("正在准备下一章...", 0);
     try {
+      const manager = new WritingProjectManager(this.app, this.settings);
+      const ctx = await manager.loadContext(activeFile);
+      if (!ctx) throw new Error("当前文件不是写作章节（需要 type: chapter）");
+      const folder = activeFile.parent?.path ?? "";
+      const outlineFile = this.app.vault.getAbstractFileByPath(normalizePath(`${folder}/_大纲.md`));
+      if (!(outlineFile instanceof TFile)) throw new Error("未找到大纲文件");
+      const next = manager.getNextChapter(await this.app.vault.read(outlineFile), ctx.chapterNumber);
+      if (!next) { new Notice("大纲中已是最后一章"); return; }
+      notice.setMessage(`正在生成第${next.number}章...`);
       const continuer = new StoryContinuer(this.settings);
       const text = await continuer.generateChapter(ctx, next, this.settings.continueTargetWords * 3);
       notice.hide();
@@ -812,12 +816,20 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
       new AssistantResultModal(
         this.app,
         { mode: "show", content: text, explanation: `新章节：第${next.number}章 ${next.title}` },
-        () => { void this.saveNextChapter(manager, folder, ctx, next, text); },
-        () => { void this.generateNextChapter(); }
+        async () => {
+          if (target?.path === path) checkEditorTarget(this.app, target);
+          await this.saveNextChapter(manager, folder, ctx, next, text);
+        },
+        () => { void this.generateNextChapter(activeFile); },
+        undefined, undefined,
+        { primaryLabel: "创建下一章", modeHint: "将按大纲创建新章节" }
       ).open();
     } catch (err) {
       notice.hide();
       new Notice(`生成失败：${(err as Error).message}`);
+    } finally {
+      notice.hide();
+      this.aiJobs.delete(path);
     }
   }
 
@@ -837,35 +849,18 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
   }
 
   /** 润色选中文字(保持作品文风) */
-  async polishWriting() {
-    const editor = this.app.workspace.activeEditor?.editor ?? null;
-    const activeFile = this.app.workspace.getActiveFile();
-    const selection = editor?.getSelection().trim() ?? "";
-    if (!editor || !selection) { new Notice("请先选中要润色的文字"); return; }
+  async polishWriting(target: EditorTarget | null = captureEditorTarget(this.app)) {
+    const selection = target?.selection.trim() ?? "";
+    if (!target || !selection) { new Notice("请先选中要润色的文字"); return; }
 
-    const manager = new WritingProjectManager(this.app, this.settings);
-    const ctx = activeFile ? await manager.loadContext(activeFile) : null;
-
-    const notice = new Notice("润色中...", 0);
-    try {
+    await this.previewGenerated(target, "润色中...", async () => {
+      const ctx = await new WritingProjectManager(this.app, this.settings).loadContext(target.file);
       const llm = new LLMClient(this.settings);
       const systemPrompt = `你是专业的文字润色助手。在不改变原意的前提下，提升文字的流畅度与表现力，修正语病。直接输出润色后的文字，不要任何解释。`;
       const userPrompt = `${ctx?.styleProfile ? `文风基调：${ctx.styleProfile}\n\n` : ""}原文：\n${selection}\n\n润色后：`;
       const raw = await llm.chat({ systemPrompt, userPrompt, temperature: 0.6 });
-      notice.hide();
-
-      if (!raw.trim()) { new Notice("AI 未能生成润色结果"); return; }
-
-      new AssistantResultModal(
-        this.app,
-        { mode: "replace", content: raw.trim(), explanation: "润色（将替换选中文字）" },
-        () => { editor.replaceSelection(raw.trim()); new Notice("已替换"); },
-        () => { void this.polishWriting(); }
-      ).open();
-    } catch (err) {
-      notice.hide();
-      new Notice(`润色失败：${(err as Error).message}`);
-    }
+      return { mode: "replace", content: raw.trim(), explanation: "润色（将替换选中文字）" };
+    }, () => { void this.polishWriting(target); });
   }
 
   /** 从当前章节提取角色卡 */

@@ -19,6 +19,7 @@ export interface ActionContext {
 export interface ActionWhen {
   always?: boolean;
   hasSelection?: boolean;
+  hasEditor?: boolean;
   noSelection?: boolean;
   fileType?: string[];
   filePath?: string;

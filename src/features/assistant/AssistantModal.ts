@@ -1,6 +1,9 @@
-import { App, Modal, Setting, MarkdownRenderer, Component, Notice, normalizePath } from "obsidian";
+import { App, Setting, MarkdownRenderer, Component, Notice, normalizePath, Platform, setIcon, Menu } from "obsidian";
 import { AssistantResult } from "../../ai/AIAssistant";
 import { todayIso } from "../../core/schema";
+import { ActionModal } from "../../ui/ActionModal";
+import { panelIcon } from "../../ui/icons";
+import type { QuickAction, QuickActionId } from "../../actions/quickActions";
 
 const QUICK_TAGS = [
   { label: "扩写", value: "扩写这段内容" },
@@ -17,24 +20,43 @@ const QUICK_TAGS = [
 /**
  * AI 助手输入弹窗
  */
-export class AssistantInputModal extends Modal {
+export class AssistantInputModal extends ActionModal {
   private instruction = "";
   private inputEl!: HTMLTextAreaElement;
 
   constructor(
     app: App,
     private contextHint: string,
-    private onSubmit: (instruction: string) => void
+    private onSubmit: (instruction: string) => void,
+    private options: {
+      quickActions?: QuickAction[];
+      onQuickAction?: (id: QuickActionId) => void;
+      showSuggestions?: boolean;
+    } = {}
   ) {
     super(app);
     this.titleEl.setText("AI 助手");
   }
 
   onOpen() {
-    const { contentEl } = this;
+    super.onOpen();
+    const contentEl = this.bodyEl;
 
     if (this.contextHint) {
       contentEl.createEl("p", { text: this.contextHint, cls: "istart-assistant-context" });
+    }
+
+    if (this.options.quickActions?.length) {
+      const grid = contentEl.createDiv({ cls: "istart-quick-grid" });
+      for (const action of this.options.quickActions) {
+        const btn = grid.createEl("button", { cls: "istart-quick-action", attr: { type: "button", "aria-label": action.label } });
+        setIcon(btn.createSpan({ cls: "istart-quick-icon" }), panelIcon(action.icon));
+        btn.createSpan({ text: action.label });
+        btn.addEventListener("click", () => {
+          this.close();
+          this.options.onQuickAction?.(action.id);
+        });
+      }
     }
 
     this.inputEl = contentEl.createEl("textarea", {
@@ -43,24 +65,27 @@ export class AssistantInputModal extends Modal {
     });
     this.inputEl.addEventListener("input", () => { this.instruction = this.inputEl.value; });
     this.inputEl.addEventListener("keydown", (e) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === "Enter") { this.submit(); }
+      if (!e.isComposing && (e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); this.submit(); }
     });
 
-    const tagsEl = contentEl.createDiv({ cls: "istart-assistant-tags" });
-    for (const tag of QUICK_TAGS) {
-      const btn = tagsEl.createEl("button", { text: tag.label, cls: "istart-assistant-tag" });
-      btn.addEventListener("click", () => {
-        this.inputEl.value = tag.value;
-        this.instruction = tag.value;
-        this.inputEl.focus();
-      });
+    if (this.options.showSuggestions !== false) {
+      const details = contentEl.createEl("details", { cls: "istart-assistant-more" });
+      details.createEl("summary", { text: "更多操作" });
+      const tagsEl = details.createDiv({ cls: "istart-assistant-tags" });
+      for (const tag of QUICK_TAGS) {
+        const btn = tagsEl.createEl("button", { text: tag.label, cls: "istart-assistant-tag" });
+        btn.addEventListener("click", () => {
+          this.instruction = tag.value;
+          this.submit();
+        });
+      }
     }
 
-    new Setting(contentEl)
-      .addButton((btn) => btn.setButtonText("执行 (Ctrl+Enter)").setCta().onClick(() => this.submit()))
+    new Setting(this.actionsEl)
+      .addButton((btn) => btn.setButtonText(Platform.isMobile ? "执行" : "执行 (Ctrl+Enter)").setCta().onClick(() => this.submit()))
       .addButton((btn) => btn.setButtonText("取消").onClick(() => this.close()));
 
-    window.setTimeout(() => this.inputEl.focus(), 50);
+    this.focusOnDesktop(this.inputEl);
   }
 
   private submit() {
@@ -68,7 +93,7 @@ export class AssistantInputModal extends Modal {
     this.onSubmit(this.instruction.trim());
   }
 
-  onClose() { this.contentEl.empty(); }
+  onClose() { super.onClose(); }
 }
 
 // ── Result Modal helpers ─────────────────────────────────────
@@ -76,7 +101,7 @@ export class AssistantInputModal extends Modal {
 interface ResultAction {
   label: string;
   cta?: boolean;
-  callback: () => void;
+  callback: () => void | boolean | Promise<void | boolean>;
 }
 
 /**
@@ -86,7 +111,7 @@ interface ResultAction {
 function buildSmartActions(
   app: App,
   result: AssistantResult,
-  onWriteToDoc: () => void,
+  onWriteToDoc: ResultAction["callback"],
   onRetry: () => void,
   onCreateConcept?: () => void
 ): { primary: ResultAction; secondary: ResultAction[] } {
@@ -110,7 +135,7 @@ function buildSmartActions(
       return {
         primary: { label: "插入到光标位置", cta: true, callback: onWriteToDoc },
         secondary: [
-          ...(isLong ? [{ label: "保存为新笔记", callback: () => { void saveAsNote(app, result); } }] : []),
+          ...(isLong ? [{ label: "保存为新笔记", callback: () => saveAsNote(app, result) }] : []),
           { label: "复制", callback: () => copyToClipboard(content) },
         ],
       };
@@ -119,7 +144,7 @@ function buildSmartActions(
       return {
         primary: { label: "追加到文档末尾", cta: true, callback: onWriteToDoc },
         secondary: [
-          { label: "保存为新笔记", callback: () => { void saveAsNote(app, result); } },
+          { label: "保存为新笔记", callback: () => saveAsNote(app, result) },
         ],
       };
 
@@ -130,14 +155,14 @@ function buildSmartActions(
         return {
           primary: { label: "创建为概念页", cta: true, callback: onCreateConcept },
           secondary: [
-            { label: "保存为新笔记", callback: () => { void saveAsNote(app, result); } },
+            { label: "保存为新笔记", callback: () => saveAsNote(app, result) },
             { label: "插入到光标位置", callback: onWriteToDoc },
           ],
         };
       }
       // Default show: save as note
       return {
-        primary: { label: "保存为新笔记", cta: true, callback: () => { void saveAsNote(app, result); } },
+        primary: { label: "保存为新笔记", cta: true, callback: () => saveAsNote(app, result) },
         secondary: [
           { label: "插入到光标位置", callback: onWriteToDoc },
           ...(onCreateConcept ? [{ label: "创建为概念页", callback: onCreateConcept }] : []),
@@ -185,24 +210,28 @@ function extractTitle(content: string): string {
  * Smart actions: system recommends the best action based on mode + content.
  * Mobile-safe: flex layout with fixed bottom action bar.
  */
-export class AssistantResultModal extends Modal {
+export class AssistantResultModal extends ActionModal {
   private component: Component;
+  private acting = false;
 
   constructor(
     app: App,
     private result: AssistantResult,
-    private onConfirm: () => void,
+    private onConfirm: ResultAction["callback"],
     private onRetry: () => void,
     private onCreateConcept?: () => void,
-    private extraAction?: { label: string; callback: () => void }
+    private extraAction?: { label: string; callback: () => void | boolean },
+    private options: { primaryLabel?: string; modeHint?: string } = {}
   ) {
     super(app);
     this.component = new Component();
   }
 
   onOpen() {
-    const { contentEl } = this;
-    contentEl.addClass("istart-result-modal");
+    super.onOpen();
+    const contentEl = this.bodyEl;
+    this.modalEl.addClass("istart-result-shell");
+    this.component.load();
     this.titleEl.setText(this.result.explanation ?? "AI 助手结果");
 
     // Preview area (scrollable)
@@ -217,44 +246,67 @@ export class AssistantResultModal extends Modal {
       show: "仅展示",
     };
     contentEl.createEl("p", {
-      text: modeLabels[this.result.mode] || "",
+      text: this.options.modeHint ?? modeLabels[this.result.mode] ?? "",
       cls: "istart-result-mode-hint",
     });
 
     // Action bar (fixed at bottom)
-    const actionBar = contentEl.createDiv({ cls: "istart-result-actions" });
+    const actionBar = this.actionsEl;
+    actionBar.addClass("istart-result-actions");
 
-    const { primary, secondary } = buildSmartActions(
+    let { primary, secondary } = buildSmartActions(
       this.app,
       this.result,
       this.onConfirm,
       this.onRetry,
       this.onCreateConcept
     );
+    if (this.options.primaryLabel) {
+      primary = { label: this.options.primaryLabel, cta: true, callback: this.onConfirm };
+      secondary = [{ label: "复制", callback: () => copyToClipboard(this.result.content) }];
+    } else if (Platform.isMobile && this.result.mode !== "show") {
+      primary.label = { replace: "替换选中", insert: "插入", append: "追加" }[this.result.mode];
+    }
 
     // Primary button
     const primarySetting = new Setting(actionBar);
     primarySetting.addButton((btn) =>
-      btn.setButtonText(primary.label).setCta().onClick(() => { this.close(); primary.callback(); })
+      btn.setButtonText(primary.label).setCta().onClick(() => { void this.perform(primary.callback); })
     );
-
-    // Secondary buttons
-    for (const action of secondary.slice(0, 2)) {
-      primarySetting.addButton((btn) =>
-        btn.setButtonText(action.label).onClick(() => { this.close(); action.callback(); })
-      );
-    }
-
-    // Retry + close row
-    const utilBar = new Setting(actionBar);
     if (this.extraAction) {
-      utilBar.addButton((btn) =>
-        btn.setButtonText(this.extraAction!.label).onClick(() => { this.close(); this.extraAction!.callback(); })
+      primarySetting.addButton((btn) =>
+        btn.setButtonText(this.extraAction!.label).onClick(() => { void this.perform(this.extraAction!.callback); })
       );
     }
-    utilBar.addButton((btn) => btn.setButtonText("重新生成").onClick(() => { this.close(); this.onRetry(); }));
-    utilBar.addButton((btn) => btn.setButtonText("关闭").onClick(() => this.close()));
+
+    const actions = [...secondary];
+    if (!actions.some((action) => action.label === "复制")) actions.push({ label: "复制", callback: () => copyToClipboard(this.result.content) });
+    actions.push({ label: "重新生成", callback: this.onRetry });
+    primarySetting.addButton((btn) => {
+      btn.buttonEl.addClass("istart-overflow-button");
+      btn.setButtonText("更多").onClick((event) => {
+        const menu = new Menu();
+        for (const action of actions) {
+          menu.addItem((item) => item.setTitle(action.label).onClick(() => { void this.perform(action.callback); }));
+        }
+        menu.addSeparator();
+        menu.addItem((item) => item.setTitle("关闭").onClick(() => this.close()));
+        menu.showAtMouseEvent(event);
+      });
+    });
   }
 
-  onClose() { this.component.unload(); this.contentEl.empty(); }
+  private async perform(callback: ResultAction["callback"]) {
+    if (this.acting) return;
+    this.acting = true;
+    try {
+      if (await callback() !== false) this.close();
+    } catch (error) {
+      new Notice(`操作失败：${(error as Error).message}`);
+    } finally {
+      this.acting = false;
+    }
+  }
+
+  onClose() { this.component.unload(); super.onClose(); }
 }

@@ -74,7 +74,7 @@ Sync is disabled by default. New installations default to Git mode; older config
 
 - Vault QA searches titles, tags, headings, links, concepts, and domains using an in-memory metadata index. It sends up to eight matching notes, using the first 600 characters of each, plus any selection. It has no embeddings or full-text semantic search.
 - Reading project creation generates pre-reading questions and note templates. Dedicated commands for resuming a project, generating chapter summaries, and Feynman tests are not registered; use the AI assistant for these tasks.
-- Continue writing and next-chapter generation require an open note with `type: chapter`. Open a chapter before generating the next one, even if the panel shows that action on a project home page. New projects create chapter templates, not complete prose.
+- Ordinary notes support continuation too. Notes with `type: chapter` also use the outline, characters, and settings. Next-chapter generation requires an open chapter note. New projects create chapter templates, not complete prose.
 - Novel setting injection matches names in the preceding text, synopsis, and instruction, including protagonists, with at most three characters and two world settings. It does not recognize aliases automatically.
 - Git sync has automated engine and adapter tests. Actual Baidu authorization/network behavior and Android/iOS device behavior still require installation testing; see the sync documentation.
 
@@ -132,14 +132,17 @@ Settings are organized into three tabs:
 - **Command panel** — ribbon icon; three domain groups (Knowledge / Writing / Auxiliary); the Writing group is pinned first inside chapter files or project home pages
 - **Hotkeys** — the plugin does not register default hotkeys. Assign your preferred shortcuts in Settings → Hotkeys to AI assistant, continue writing, next chapter, or new work.
 - **Status bar** — "Continue" / "Next chapter" buttons appear when a chapter file is open
-- **Editor right-click** — AI assistant, Vault QA, concept completion, practical templates, and document beautification; chapter notes also show continue / polish / extract characters
+- **Editor right-click** — AI assistant, Vault QA, concept completion, practical templates, and document beautification; continuation/settings appear without a selection, while polish/expand/explain appear with a selection. Chapter notes also show character extraction.
 - **File right-click** — AI assistant / beautify; these handlers operate on the active editor, so open the target note first
 - **Cloud ribbon icon** — opens the Baidu sync sidebar with manual sync and version history in Git mode
 
 ### Mobile
 
-- Ribbon icon → command panel, same domain groups.
-- Add frequent commands to the mobile toolbar for one-tap access.
+- Open the command panel from the IStart-Note-AI icon in the navigation menu or the **Open command panel** command. Contextual shortcuts use Phosphor Duotone icons with short labels; other actions are under **All features**.
+- Add commands such as continue, polish, expand, explain, and summarize in **Settings → Interface → Configure mobile toolbar → Add a command**. Toolbar commands use matching Phosphor Bold icons.
+- Continuation generates a preview directly. **Continuation settings** adjusts cursor/end position, word count (300/800/1500 or custom), and optional instructions; position and word count become the saved defaults.
+- **Insert and continue** accepts the current result before generating more. **More → Regenerate** retries without inserting. Writes use the original file, cursor, and selection; switching files or changing the original content blocks insertion while leaving the result available to copy.
+- Assistant, continuation, question, new-work, and result dialogs have a scrolling body and persistent footer sized to the visible keyboard viewport. Mobile dialogs do not explicitly focus text fields.
 - Importing files/folders outside the vault requires desktop Obsidian; mobile can use pasted text or vault sources.
 
 ---

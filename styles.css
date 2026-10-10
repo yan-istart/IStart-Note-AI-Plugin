@@ -397,7 +397,7 @@
 /* ── Command Panel ───────────────────────────────── */
 
 .istart-command-panel {
-  min-width: 360px;
+  min-width: 0;
 }
 
 .istart-panel-group {
@@ -422,6 +422,14 @@
   border-radius: 6px;
   cursor: pointer;
   transition: background 0.1s;
+  width: 100%;
+  height: auto;
+  min-height: 44px;
+  text-align: left;
+  background: transparent;
+  box-shadow: none;
+  border: none;
+  white-space: normal;
 }
 
 .istart-panel-action:hover {
@@ -527,17 +535,10 @@
 
 /* ── Result Modal (mobile-safe flex layout) ──────── */
 
-.istart-result-modal {
-  display: flex;
-  flex-direction: column;
-  max-height: 80vh;
-}
-
 .istart-result-preview {
   flex: 1 1 auto;
   overflow-y: auto;
-  min-height: 80px;
-  max-height: 55vh;
+  min-height: 0;
   border: 1px solid var(--background-modifier-border);
   border-radius: 6px;
   padding: 12px;
@@ -558,35 +559,173 @@
   padding-top: 8px;
 }
 
+/* Shared action dialogs: only the body scrolls; the footer stays in view. */
+.modal.istart-action-modal {
+  display: flex;
+  flex-direction: column;
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 48px);
+  overflow: hidden;
+}
+
+.istart-action-modal .modal-title {
+  flex: 0 0 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 28px;
+}
+.istart-action-modal .modal-header {
+  flex: 0 0 auto;
+  height: auto;
+  min-height: 28px;
+  padding: 0;
+  margin-bottom: 10px;
+}
+
+.istart-action-modal .istart-action-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: hidden;
+  margin-top: 0;
+  padding: 0;
+}
+
+.istart-modal-body {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding: 2px 2px 12px;
+}
+
+.istart-modal-footer {
+  flex: 0 0 auto;
+  border-top: 1px solid var(--background-modifier-border);
+  padding-top: 8px;
+}
+
+.istart-modal-footer[hidden] { display: none; }
+.istart-modal-footer .setting-item { border: none; padding: 4px 0; }
+.istart-modal-footer .setting-item-info { display: none; }
+.istart-modal-footer .setting-item-control {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  width: 100%;
+}
+.istart-modal-footer button { min-height: 40px; white-space: normal; }
+
+.modal.istart-result-shell { height: min(720px, 80vh); }
+.istart-result-shell .istart-modal-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 auto;
+  overflow: hidden;
+}
+.istart-assistant-more summary, .istart-panel-more summary {
+  cursor: pointer;
+  color: var(--text-muted);
+  padding: 10px 0;
+}
+.istart-assistant-more .istart-assistant-tags { margin-top: 8px; }
+.istart-field-label { margin: 12px 0 8px; }
+.istart-word-presets { display: flex; gap: 8px; }
+.istart-word-presets button { flex: 1; min-height: 44px; }
+.istart-word-presets button[aria-pressed="true"] {
+  color: var(--text-on-accent);
+  background: var(--interactive-accent);
+}
+
+.istart-quick-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(64px, 1fr));
+  gap: 8px;
+  margin-bottom: 14px;
+}
+.istart-quick-grid .istart-quick-action {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 72px;
+  height: auto;
+  padding: 10px 6px;
+  background: var(--background-secondary);
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 10px;
+  font-size: 13px;
+  white-space: normal;
+}
+.istart-quick-action:hover, .istart-quick-action:focus-visible { border-color: var(--interactive-accent); }
+.istart-quick-icon { display: flex; color: var(--text-accent); }
+.istart-quick-icon svg { width: 24px; height: 24px; }
+.istart-panel-action-icon svg { width: 22px; height: 22px; }
+
+.modal-container.istart-mobile-modal-container {
+  position: fixed;
+  top: var(--istart-viewport-top, 0px);
+  left: var(--istart-viewport-left, 0px);
+  right: auto;
+  bottom: auto;
+  width: var(--istart-viewport-width, 100vw);
+  height: var(--istart-viewport-height, 100vh);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 8px;
+  box-sizing: border-box;
+}
+.istart-mobile-modal-container .modal.istart-action-modal {
+  width: 100%;
+  min-width: 0;
+  max-width: 560px;
+  height: auto;
+  max-height: calc(var(--istart-viewport-height, 100vh) - 16px);
+  margin: 0;
+  padding: 16px 12px 0;
+  border-radius: 16px;
+  box-sizing: border-box;
+}
+.istart-mobile-modal-container .modal.istart-result-shell {
+  height: calc(var(--istart-viewport-height, 100vh) - 16px);
+}
+.istart-mobile-modal-container .modal-title { margin-bottom: 10px; font-size: 18px; }
+.istart-mobile-modal-container .istart-modal-footer {
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+}
+.istart-mobile-modal-container .modal.istart-action-modal .istart-modal-footer .setting-item-control button {
+  flex: 1 1 0;
+  width: auto;
+  min-width: 0;
+  min-height: 44px;
+}
+.istart-mobile-modal-container .modal.istart-action-modal .istart-modal-footer .setting-item {
+  padding: 4px 0;
+  gap: 6px;
+  border: none;
+}
+.istart-mobile-modal-container .modal.istart-action-modal .istart-modal-footer .setting-item-control button.istart-overflow-button {
+  flex: 0 0 auto;
+  min-width: 54px;
+}
+.istart-mobile-modal-container .istart-modal-body .setting-item { flex-wrap: wrap; gap: 6px; padding: 10px 0; }
+.istart-mobile-modal-container .istart-modal-body .setting-item-info { flex: 1 1 100%; margin: 0; }
+.istart-mobile-modal-container .istart-modal-body .setting-item-control { width: 100%; }
+.istart-mobile-modal-container .istart-modal-body .setting-item-control input,
+.istart-mobile-modal-container .istart-modal-body .setting-item-control select { width: 100%; min-height: 44px; }
+.istart-mobile-modal-container input,
+.istart-mobile-modal-container textarea,
+.istart-mobile-modal-container select { font-size: 16px; }
+.istart-mobile-modal-container textarea { resize: none; }
+.istart-mobile-modal-container .istart-assistant-tag { min-height: 44px; }
+.istart-mobile-modal-container .istart-panel-action-key { display: none; }
+
 .istart-result-actions .setting-item {
   border: none;
   padding: 4px 0;
-}
-
-@media (max-width: 600px) {
-  .istart-result-modal {
-    max-height: 85vh;
-  }
-
-  .istart-result-preview {
-    max-height: 40vh;
-  }
-
-  .istart-result-actions .setting-item {
-    flex-wrap: wrap;
-    gap: 6px;
-  }
-
-  .istart-result-actions .setting-item-control {
-    width: 100%;
-    display: flex;
-    gap: 6px;
-  }
-
-  .istart-result-actions .setting-item-control button {
-    flex: 1;
-    min-width: 0;
-  }
 }
 
 .istart-assistant-preview {
