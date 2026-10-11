@@ -22,7 +22,6 @@ const QUICK_TAGS = [
  * AI 助手输入弹窗
  */
 export class AssistantInputModal extends ActionModal {
-  private instruction = "";
   private inputEl!: HTMLTextAreaElement;
 
   constructor(
@@ -41,6 +40,7 @@ export class AssistantInputModal extends ActionModal {
 
   onOpen() {
     super.onOpen();
+    this.modalEl.addClass("istart-assistant-input-modal");
     const contentEl = this.bodyEl;
 
     if (this.contextHint) {
@@ -64,7 +64,6 @@ export class AssistantInputModal extends ActionModal {
       attr: { placeholder: "输入你的需求...（留空 = AI 智能判断）", rows: "3" },
       cls: "istart-assistant-input",
     });
-    this.inputEl.addEventListener("input", () => { this.instruction = this.inputEl.value; });
     this.inputEl.addEventListener("keydown", (e) => {
       if (!e.isComposing && (e.ctrlKey || e.metaKey) && e.key === "Enter") { e.preventDefault(); this.submit(); }
     });
@@ -76,7 +75,7 @@ export class AssistantInputModal extends ActionModal {
       for (const tag of QUICK_TAGS) {
         const btn = tagsEl.createEl("button", { text: tag.label, cls: "istart-assistant-tag" });
         btn.addEventListener("click", () => {
-          this.instruction = tag.value;
+          this.inputEl.value = tag.value;
           this.submit();
         });
       }
@@ -86,12 +85,15 @@ export class AssistantInputModal extends ActionModal {
       .addButton((btn) => btn.setButtonText(Platform.isMobile ? "执行" : "执行 (Ctrl+Enter)").setCta().onClick(() => this.submit()))
       .addButton((btn) => btn.setButtonText("取消").onClick(() => this.close()));
 
+    this.addMobileHeaderAction("执行", () => this.submit());
+
     this.focusOnDesktop(this.inputEl);
   }
 
   private submit() {
+    const instruction = this.inputEl.value.trim();
     this.close();
-    this.onSubmit(this.instruction.trim());
+    this.onSubmit(instruction);
   }
 
   onClose() { super.onClose(); }

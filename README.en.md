@@ -145,6 +145,7 @@ Settings are organized into three tabs:
 - Insertion generates a short preview directly, defaulting to 200 Chinese characters. **Insertion settings** offers 100/200/300 or custom length, with bridging, explanation, and transition instructions. Its saved length is independent of continuation. Cancel any selection and place the cursor between existing prose; the beginning, end, and YAML metadata are rejected with guidance.
 - Continuation's **Insert and continue** accepts the current result before generating more; insertion only writes the connecting passage. **More → Regenerate** retries without inserting. Writes use the original file, cursor, and selection; switching files or changing the original content blocks insertion while leaving the result available to copy.
 - Assistant, continuation, insertion, question, new-work, and result dialogs have a scrolling body and persistent footer sized to the visible keyboard viewport. Mobile dialogs do not explicitly focus text fields.
+- Keyboard sizing combines Obsidian's native keyboard inset with the browser's visible viewport. While typing, the assistant collapses shortcuts and offers **Execute** and **Hide keyboard** in the title bar. Hiding the keyboard preserves the dialog and entered text.
 - Importing files/folders outside the vault requires desktop Obsidian; mobile can use pasted text or vault sources.
 
 ---

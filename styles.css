@@ -594,6 +594,7 @@
 }
 
 .istart-modal-body {
+  flex: 1 1 auto;
   min-height: 0;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -665,6 +666,7 @@
 .istart-panel-action-icon svg { width: 22px; height: 22px; }
 
 .modal-container.istart-mobile-modal-container {
+  --istart-modal-top-padding: max(8px, calc(var(--safe-area-inset-top, 0px) - var(--istart-viewport-top, 0px)));
   position: fixed;
   top: var(--istart-viewport-top, 0px);
   left: var(--istart-viewport-left, 0px);
@@ -675,7 +677,7 @@
   display: flex;
   align-items: flex-end;
   justify-content: center;
-  padding: 8px;
+  padding: var(--istart-modal-top-padding) 8px 8px;
   box-sizing: border-box;
 }
 .istart-mobile-modal-container .modal.istart-action-modal {
@@ -683,19 +685,59 @@
   min-width: 0;
   max-width: 560px;
   height: auto;
-  max-height: calc(var(--istart-viewport-height, 100vh) - 16px);
+  max-height: calc(var(--istart-viewport-height, 100vh) - var(--istart-modal-top-padding) - 8px);
   margin: 0;
   padding: 16px 12px 0;
   border-radius: 16px;
   box-sizing: border-box;
 }
 .istart-mobile-modal-container .modal.istart-result-shell {
-  height: calc(var(--istart-viewport-height, 100vh) - 16px);
+  height: calc(var(--istart-viewport-height, 100vh) - var(--istart-modal-top-padding) - 8px);
+}
+.istart-mobile-modal-container .modal.istart-action-modal.istart-keyboard-visible {
+  height: calc(var(--istart-viewport-height, 100vh) - var(--istart-modal-top-padding) - 8px);
 }
 .istart-mobile-modal-container .modal-title { margin-bottom: 10px; font-size: 18px; }
+.istart-mobile-modal-container .modal.istart-action-modal .modal-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding-right: 48px;
+  min-height: 44px;
+}
+.istart-mobile-modal-container .modal.istart-action-modal .modal-title {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  padding-right: 0;
+  margin-bottom: 0;
+}
+.istart-modal-header-actions { display: flex; flex: 0 0 auto; gap: 6px; }
+.istart-modal-header-actions button {
+  min-height: 44px;
+  padding: 0 8px;
+  font-size: 13px;
+  white-space: nowrap;
+}
+.istart-modal-header-actions button[hidden] { display: none; }
+.istart-mobile-modal-container .istart-assistant-input-modal.istart-input-active .istart-quick-grid,
+.istart-mobile-modal-container .istart-assistant-input-modal.istart-input-active .istart-assistant-context,
+.istart-mobile-modal-container .istart-assistant-input-modal.istart-input-active .istart-assistant-more { display: none; }
+.istart-mobile-modal-container .istart-assistant-input-modal.istart-input-active .istart-modal-body {
+  display: flex;
+  flex-direction: column;
+  padding-bottom: 8px;
+}
+.istart-mobile-modal-container .istart-assistant-input-modal.istart-input-active textarea {
+  flex: 1 1 auto;
+  min-height: 44px;
+  max-height: 100%;
+  margin-bottom: 0;
+}
 .istart-mobile-modal-container .istart-modal-footer {
   padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
 }
+.istart-mobile-modal-container .istart-keyboard-visible .istart-modal-footer { padding-bottom: 12px; }
 .istart-mobile-modal-container .modal.istart-action-modal .istart-modal-footer .setting-item-control button {
   flex: 1 1 0;
   width: auto;
