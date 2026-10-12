@@ -143,9 +143,17 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
 
     new Setting(el).setName("续写与插写").setHeading();
 
+    new Setting(el).setName("写作上下文范围").setDesc("默认保证带入当前整章；作品章节再带入完整大纲、角色与设定")
+      .addDropdown((dropdown) => dropdown.addOption("full", "完整当前文档＋大纲和设定")
+        .addOption("nearby", "光标附近")
+        .setValue(this.plugin.settings.writingContextScope).onChange(async (value) => {
+          this.plugin.settings.writingContextScope = value as "full" | "nearby";
+          await this.plugin.saveSettings();
+        }));
+
     new Setting(el)
       .setName("上下文长度")
-      .setDesc("续写提供这些字符的上文；插写分别提供这些字符的前文与后文")
+      .setDesc("仅用于「光标附近」模式；续写与插写分别提供这些字符的前文和后文")
       .addText((t) =>
         t.setPlaceholder("2000").setValue(String(this.plugin.settings.continueContextChars)).onChange(async (v) => {
           const n = parseInt(v);
@@ -155,21 +163,21 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("默认续写字数")
-      .setDesc("每次续写目标字数（中文字符）")
+      .setDesc("生成量的近似目标，1–10000 字；实际字数显示在预览中")
       .addText((t) =>
         t.setPlaceholder("800").setValue(String(this.plugin.settings.continueTargetWords)).onChange(async (v) => {
-          const n = parseInt(v);
-          if (!isNaN(n) && n > 0) { this.plugin.settings.continueTargetWords = n; await this.plugin.saveSettings(); }
+          const n = Number(v);
+          if (Number.isInteger(n) && n > 0 && n <= 10000) { this.plugin.settings.continueTargetWords = n; await this.plugin.saveSettings(); }
         })
       );
 
     new Setting(el)
       .setName("默认插写字数")
-      .setDesc("在前后文之间补充内容的目标字数（中文字符），独立于续写")
+      .setDesc("补充内容的近似目标，1–10000 字；独立于续写，实际字数显示在预览中")
       .addText((t) =>
         t.setPlaceholder("200").setValue(String(this.plugin.settings.insertTargetWords)).onChange(async (v) => {
           const n = Number(v);
-          if (Number.isInteger(n) && n > 0) { this.plugin.settings.insertTargetWords = n; await this.plugin.saveSettings(); }
+          if (Number.isInteger(n) && n > 0 && n <= 10000) { this.plugin.settings.insertTargetWords = n; await this.plugin.saveSettings(); }
         })
       );
   }

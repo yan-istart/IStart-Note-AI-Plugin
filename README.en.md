@@ -75,7 +75,8 @@ Sync is disabled by default. New installations default to Git mode; older config
 - Vault QA searches titles, tags, headings, links, concepts, and domains using an in-memory metadata index. It sends up to eight matching notes, using the first 600 characters of each, plus any selection. It has no embeddings or full-text semantic search.
 - Reading project creation generates pre-reading questions and note templates. Dedicated commands for resuming a project, generating chapter summaries, and Feynman tests are not registered; use the AI assistant for these tasks.
 - Ordinary notes support continuation and insertion between existing passages. Insertion reads both sides of the cursor and previews a connecting passage before writing; chapter notes also use the outline, characters, and settings. Next-chapter generation requires an open chapter note. New projects create chapter templates, not complete prose.
-- Novel setting injection matches names in the preceding text (both sides for insertion), synopsis, and instruction, including protagonists, with at most three characters and two world settings. It does not recognize aliases automatically.
+- Full context is the default: the complete current document, complete project outline, and every complete character/setting card. Other chapters' prose is not included automatically. Project sources still use `_作品.md`, `_大纲.md`, `_角色/`, and `_设定/` in the chapter's parent directory. Explicit nearby mode restores context clipping and name matching with three characters/two settings.
+- Generation quantities are approximate prose-length targets. Previews show the actual character count, excluding whitespace and including punctuation.
 - Git sync has automated engine and adapter tests. Actual Baidu authorization/network behavior and Android/iOS device behavior still require installation testing; see the sync documentation.
 
 ---
@@ -120,7 +121,7 @@ Settings are organized into three tabs:
 | Tab | Key settings |
 | --- | --- |
 | **Knowledge** | Q&A path, Concepts path, Questions index path, index status + rebuild |
-| **Writing** | Works path (`Writing`), context (2,000 characters before the cursor for continuation, per side for insertion), continuation target (800 Chinese characters), insertion target (200 Chinese characters) |
+| **Writing** | Works path (`Writing`), full document/project context by default; nearby mode uses 2,000 characters per side, continuation target (800 Chinese characters), insertion target (200 Chinese characters) |
 | **Auxiliary** | API key, Base URL, model, output style, Baidu sync |
 
 ---
@@ -141,8 +142,11 @@ Settings are organized into three tabs:
 - Open the command panel from the IStart-Note-AI icon in the navigation menu or the **Open command panel** command. Contextual shortcuts use Phosphor Duotone icons with short labels; other actions are under **All features**.
 - With prose on both sides of the cursor, the panel and assistant prioritize **插写** (insert between passages); at the end, they prioritize continuation. **All features** retains both writing entries.
 - Add commands such as continue, insert between passages, polish, expand, explain, and summarize in **Settings → Interface → Configure mobile toolbar → Add a command**. Toolbar commands use matching Phosphor Bold icons; insertion uses arrows converging on the gap.
-- Continuation generates a preview directly. **Continuation settings** adjusts cursor/end position, word count (300/800/1500 or custom), and optional instructions; position and word count become the saved defaults.
-- Insertion generates a short preview directly, defaulting to 200 Chinese characters. **Insertion settings** offers 100/200/300 or custom length, with bridging, explanation, and transition instructions. Its saved length is independent of continuation. Cancel any selection and place the cursor between existing prose; the beginning, end, and YAML metadata are rejected with guidance.
+- The panel and assistant show **生成量** (generation quantity) directly on mobile and desktop. Reading mode offers an explicit switch to editing before writing actions become available. Standalone instructions in reading mode still receive the current document and produce a display-only preview.
+- Continuation generates with saved parameters. Quantity/settings offers short (about 300), medium (800), long (1500), or a custom target of 1–10000 Chinese characters, along with cursor/end position, context scope, and instructions.
+- Insertion defaults to 200 characters; quantity/settings offers short (about 100), medium (200), long (300), or custom 1–10000, with bridging, explanation, and transition instructions. Its target is saved separately from continuation; context scope is shared. Cancel any selection and place the cursor between existing prose.
+- Full context preserves the entire current chapter before and after the cursor. Continuation treats existing following prose as a reference. Chapter synopsis prefers the updated outline, falling back to the chapter's `synopsis` property when needed. Clipping only applies to explicit nearby mode.
+- Previews show target and actual counts. **More → Adjust quantity / context** reopens the controls. Writing disables thinking on the official DeepSeek endpoint and separates prose length from the output-token budget. Empty prose gets at most one recovery request; exhausted budget, reasoning-only output, empty responses, and service interruptions are reported separately.
 - Continuation's **Insert and continue** accepts the current result before generating more; insertion only writes the connecting passage. **More → Regenerate** retries without inserting. Writes use the original file, cursor, and selection; switching files or changing the original content blocks insertion while leaving the result available to copy.
 - Assistant, continuation, insertion, question, new-work, and result dialogs have a scrolling body and persistent footer sized to the visible keyboard viewport. Mobile dialogs do not explicitly focus text fields.
 - Keyboard sizing combines Obsidian's native keyboard inset with the browser's visible viewport. While typing, the assistant collapses shortcuts and offers **Execute** and **Hide keyboard** in the title bar. Hiding the keyboard preserves the dialog and entered text.

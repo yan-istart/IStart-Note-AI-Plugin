@@ -633,7 +633,9 @@
 .istart-assistant-more .istart-assistant-tags { margin-top: 8px; }
 .istart-field-label { margin: 12px 0 8px; }
 .istart-word-presets { display: flex; gap: 8px; }
-.istart-word-presets button { flex: 1; min-height: 44px; }
+.istart-word-presets button { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; flex: 1; min-width: 0; min-height: 58px; padding: 8px 4px; white-space: normal; }
+.istart-amount-size { font-size: 12px; }
+.istart-enable-writing { min-height: 44px; margin-bottom: 12px; }
 .istart-word-presets button[aria-pressed="true"] {
   color: var(--text-on-accent);
   background: var(--interactive-accent);
@@ -722,6 +724,7 @@
 .istart-modal-header-actions button[hidden] { display: none; }
 .istart-mobile-modal-container .istart-assistant-input-modal.istart-input-active .istart-quick-grid,
 .istart-mobile-modal-container .istart-assistant-input-modal.istart-input-active .istart-assistant-context,
+.istart-mobile-modal-container .istart-assistant-input-modal.istart-input-active .istart-enable-writing,
 .istart-mobile-modal-container .istart-assistant-input-modal.istart-input-active .istart-assistant-more { display: none; }
 .istart-mobile-modal-container .istart-assistant-input-modal.istart-input-active .istart-modal-body {
   display: flex;

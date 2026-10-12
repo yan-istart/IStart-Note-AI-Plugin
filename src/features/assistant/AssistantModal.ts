@@ -32,6 +32,7 @@ export class AssistantInputModal extends ActionModal {
       quickActions?: QuickAction[];
       onQuickAction?: (id: QuickActionId) => void;
       showSuggestions?: boolean;
+      onEnableWriting?: () => void;
     } = {}
   ) {
     super(app);
@@ -45,6 +46,12 @@ export class AssistantInputModal extends ActionModal {
 
     if (this.contextHint) {
       contentEl.createEl("p", { text: this.contextHint, cls: "istart-assistant-context" });
+    }
+
+    if (this.options.onEnableWriting) {
+      contentEl.createEl("p", { text: "当前为阅读模式。切换到编辑模式后，可使用续写、插写和生成量设置。", cls: "istart-assistant-context" });
+      const button = contentEl.createEl("button", { text: "切换到编辑模式", cls: "istart-enable-writing", attr: { type: "button" } });
+      button.addEventListener("click", () => { this.close(); this.options.onEnableWriting?.(); });
     }
 
     if (this.options.quickActions?.length) {
@@ -224,7 +231,7 @@ export class AssistantResultModal extends ActionModal {
     private onRetry: () => void,
     private onCreateConcept?: () => void,
     private extraAction?: { label: string; callback: () => void | boolean },
-    private options: { primaryLabel?: string; modeHint?: string } = {}
+    private options: { primaryLabel?: string; modeHint?: string; moreActions?: ResultAction[] } = {}
   ) {
     super(app);
     this.component = new Component();
@@ -282,7 +289,7 @@ export class AssistantResultModal extends ActionModal {
       );
     }
 
-    const actions = [...secondary];
+    const actions = [...(this.options.moreActions ?? []), ...secondary];
     if (!actions.some((action) => action.label === "复制")) actions.push({ label: "复制", callback: () => copyToClipboard(this.result.content) });
     actions.push({ label: "重新生成", callback: this.onRetry });
     primarySetting.addButton((btn) => {

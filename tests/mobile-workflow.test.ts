@@ -15,6 +15,7 @@ vi.mock("obsidian", async (original) => ({
   ...await original(),
   Plugin: class { constructor(public app: App) {} },
   Modal: class {}, ItemView: class {}, PluginSettingTab: class {}, AbstractInputSuggest: class {},
+  MarkdownView: class {},
   normalizePath: (path: string) => path,
 }));
 vi.mock("../src/features/assistant/AssistantModal", () => ({
@@ -65,6 +66,56 @@ beforeEach(() => {
 });
 
 describe("insertion between existing passages", () => {
+  it.each(["insert", "continue"] as const)("keeps the entire current chapter on both sides for %s", async (action) => {
+    const before = "开头事实：他已经失去左手。\n" + "前半章的细节。".repeat(400);
+    const after = "后半章的细节。".repeat(400) + "\n章末事实：妹妹仍留在家中。";
+    const metadata = "---\ntype: chapter\n---\n";
+    const doc = setup(undefined, metadata + before + after, metadata.length + before.length);
+    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("符合上下文的正文");
+    await doc.plugin.runQuickAction(action);
+    const prompt = chat.mock.calls[0][0];
+    expect(prompt.userPrompt).toContain(before.trimEnd());
+    expect(prompt.userPrompt).toContain(after.trimStart());
+    expect(prompt.userPrompt).not.toContain("type: chapter");
+    expect(prompt.thinking).toBe("disabled");
+    expect(ui.results[0][6].modeHint).toContain("完整当前文档");
+    expect(ui.results[0][6].modeHint).toContain("实际生成 8 字");
+  });
+
+  it("includes the whole chapter when continuing from the document end", async () => {
+    const text = "章节开头的关键事实\n" + "正文情节。".repeat(600);
+    const doc = setup(undefined, text);
+    doc.plugin.settings.continueMode = "chapter";
+    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("承接全文的正文");
+    await doc.plugin.continueWriting();
+    expect(chat.mock.calls[0][0].userPrompt).toContain(text);
+    expect(ui.results[0][1].mode).toBe("append");
+  });
+
+  it("exposes quantity controls directly in the assistant and preserves the original writing position", async () => {
+    const doc = setup(undefined, "上文\n\n下文", 2);
+    doc.plugin.openAssistant();
+    const controls = ui.inputs[0][3];
+    expect(controls.quickActions.map((action: any) => action.id)).toContain("insert-settings");
+    doc.editor.setCursor({ line: 2, ch: 2 });
+    controls.onQuickAction("insert-settings");
+    await vi.waitFor(() => expect(ui.insertSettings).toHaveLength(1));
+    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("新连接段");
+    ui.insertSettings[0][3]({ instruction: "转场", targetWords: 300, contextScope: "full" });
+    await vi.waitFor(() => expect(ui.results).toHaveLength(1));
+    expect(chat.mock.calls[0][0].userPrompt).toContain("【下文（插入位置之后）】\n下文");
+    expect(doc.plugin.settings.insertTargetWords).toBe(300);
+  });
+
+  it("preserves a preview when quantity adjustment is blocked by document edits", async () => {
+    const doc = setup(undefined, "上文\n\n下文", 2);
+    vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("连接段");
+    await doc.plugin.insertWriting();
+    doc.edit();
+    expect(ui.results[0][6].moreActions[0].callback()).toBe(false);
+    expect(ui.insertSettings).toHaveLength(0);
+  });
+
   it("reads both sides and inserts at the captured cursor, preserving the original prose", async () => {
     const doc = setup(undefined, "上文\n\n下文", 2);
     doc.plugin.settings.continueMode = "chapter";
@@ -94,6 +145,7 @@ describe("insertion between existing passages", () => {
     const after = "下文开头" + "远处的后文".repeat(20);
     const doc = setup(undefined, metadata + before + "\n\n" + after, metadata.length + before.length);
     doc.plugin.settings.continueContextChars = 4;
+    doc.plugin.settings.writingContextScope = "nearby";
     const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("连接段");
     await doc.plugin.insertWriting();
     expect(chat.mock.calls[0][0].userPrompt).toContain("【上文（插入位置之前）】\n上文末尾");
@@ -195,6 +247,7 @@ describe("insertion between existing passages", () => {
     openPanel();
     const panel = ui.panels[0];
     expect(panel[2][0].id).toBe("insert-writing");
+    expect(panel[2].find((action: any) => action.id === "insert-writing-settings").label).toBe("生成量");
     expect(panel[1].flatMap((group: any) => group.actions).map((action: any) => action.id)).toEqual(
       expect.arrayContaining(["continue-writing", "insert-writing"]));
     doc.editor.setCursor({ line: 2, ch: 2 });
@@ -213,6 +266,36 @@ describe("insertion between existing passages", () => {
     expect(chat.mock.calls[0][0].userPrompt).toContain("【下文（插入位置之后）】\n下文");
     expect(ui.results[0][2]()).toBe(true);
     expect(doc.text()).toBe("上文\n连接段\n\n\n下文");
+  });
+});
+
+describe("reading-mode assistant", () => {
+  it("offers an explicit switch to editing, then shows the generation controls", async () => {
+    const doc = setup();
+    doc.app.workspace.activeEditor = null;
+    const setViewState = vi.fn().mockImplementation(async () => { doc.app.workspace.activeEditor = { editor: doc.editor } as any; });
+    Object.assign(doc.app.workspace, { getActiveViewOfType: () => ({ leaf: { setViewState } }) });
+    doc.plugin.openAssistant();
+    expect(ui.inputs[0][3].onEnableWriting).toBeTypeOf("function");
+    ui.inputs[0][3].onEnableWriting();
+    await vi.waitFor(() => expect(ui.inputs).toHaveLength(2));
+    expect(setViewState).toHaveBeenCalledWith({ type: "markdown", state: { file: "note.md", mode: "source" }, active: true });
+    expect(ui.inputs[1][3].quickActions.map((action: any) => action.id)).toContain("continue-settings");
+  });
+
+  it("reads the open document for standalone instructions and keeps that context on retry", async () => {
+    const doc = setup(undefined, "当前阅读文档的重要内容");
+    doc.app.workspace.activeEditor = null;
+    Object.assign(doc.app.vault, { cachedRead: vi.fn().mockResolvedValue(doc.text()) });
+    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("<!-- mode:append -->\n总结正文");
+    doc.plugin.openAssistant();
+    ui.inputs[0][2]("总结当前文档");
+    await vi.waitFor(() => expect(ui.results).toHaveLength(1));
+    expect(chat.mock.calls[0][0].userPrompt).toContain(doc.text());
+    expect(ui.results[0][1].mode).toBe("show");
+    ui.results[0][3]();
+    await vi.waitFor(() => expect(ui.results).toHaveLength(2));
+    expect(chat.mock.calls[1][0].userPrompt).toEqual(chat.mock.calls[0][0].userPrompt);
   });
 });
 
@@ -272,7 +355,7 @@ describe("mobile quick-action workflow", () => {
     const story = vi.spyOn(StoryContinuer.prototype, "continueStory").mockResolvedValue("故事续文");
     const chat = vi.spyOn(LLMClient.prototype, "chat");
     await doc.plugin.continueWriting();
-    expect(story).toHaveBeenCalledWith(context, { mode: "cursor", instruction: "", targetWords: 800 }, "上文");
+    expect(story).toHaveBeenCalledWith(context, { mode: "cursor", instruction: "", targetWords: 800, contextScope: "full" }, "上文", "");
     expect(chat).not.toHaveBeenCalled();
   });
 

@@ -1,5 +1,5 @@
 import { App, Setting } from "obsidian";
-import { ContinueMode, ContinueRequest } from "./types";
+import { ContinueMode, ContinueRequest, WritingContextScope } from "./types";
 import { ActionModal } from "../../ui/ActionModal";
 import { addWritingFields } from "./WritingFields";
 
@@ -12,7 +12,8 @@ export class ContinueModal extends ActionModal {
     private defaultWords: number,
     private chapterTitle: string,
     private onSubmit: (request: ContinueRequest) => void,
-    private mode: ContinueMode = "cursor"
+    private mode: ContinueMode = "cursor",
+    private contextScope: WritingContextScope = "full"
   ) {
     super(app);
     this.titleEl.setText(`续写：${chapterTitle}`);
@@ -32,18 +33,20 @@ export class ContinueModal extends ActionModal {
           .onChange((v) => { this.mode = v as ContinueMode; })
       );
 
-    const readRequest = addWritingFields(contentEl, this.defaultWords, [300, 800, 1500], "如：推进感情线 / 收束本章悬念");
+    const readRequest = addWritingFields(contentEl, this.defaultWords, [300, 800, 1500], "如：推进感情线 / 收束本章悬念", [], this.contextScope);
+    const submit = () => {
+      const request = readRequest();
+      if (!request) return;
+      this.close();
+      this.onSubmit({ ...request, mode: this.mode });
+    };
 
     new Setting(this.actionsEl)
       .addButton((btn) =>
-        btn.setButtonText("开始续写").setCta().onClick(() => {
-          const request = readRequest();
-          if (!request) return;
-          this.close();
-          this.onSubmit({ ...request, mode: this.mode });
-        })
+        btn.setButtonText("开始续写").setCta().onClick(submit)
       )
       .addButton((btn) => btn.setButtonText("取消").onClick(() => this.close()));
+    this.addMobileHeaderAction("生成", submit);
   }
 
   onClose() {

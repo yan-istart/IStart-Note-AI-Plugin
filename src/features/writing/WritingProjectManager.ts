@@ -2,7 +2,7 @@ import { App, TFile, normalizePath } from "obsidian";
 import { DeepSeekSettings } from "../../types";
 import { SCHEMA_VERSION, todayIso } from "../../core/schema";
 import { frontmatterOf, fmString, fmNumber } from "../../util/frontmatter";
-import { WritingPlan, WritingGenre, WritingContext, ChapterOutline, CharacterCard, WorldSetting } from "./types";
+import { WritingPlan, WritingGenre, WritingContext, ChapterOutline, CharacterCard, WorldSetting, WritingContextScope } from "./types";
 
 const GENRE_LABEL: Record<WritingGenre, string> = {
   novel: "网文小说",
@@ -253,7 +253,7 @@ ${novelSections}
    * 读取章节文件所属作品的完整写作上下文。
    * 章节必须位于作品目录下(父目录含 _作品.md)。
    */
-  async loadContext(chapterFile: TFile): Promise<WritingContext | null> {
+  async loadContext(chapterFile: TFile, scope: WritingContextScope = this.settings.writingContextScope ?? "full"): Promise<WritingContext | null> {
     const folder = chapterFile.parent?.path ?? "";
     const meta = this.app.metadataCache.getFileCache(chapterFile);
     const fm = frontmatterOf(meta);
@@ -266,19 +266,18 @@ ${novelSections}
 
     // 大纲中的前后章梗概
     const outlineFile = this.app.vault.getAbstractFileByPath(normalizePath(`${folder}/_大纲.md`));
-    const synopses = outlineFile instanceof TFile
-      ? this.parseOutlineSynopses(await this.app.vault.read(outlineFile))
-      : [];
+    const outlineContent = outlineFile instanceof TFile ? await this.app.vault.read(outlineFile) : "";
+    const synopses = this.parseOutlineSynopses(outlineContent);
 
     const chapterNumber = fmNumber(fm, "number") || 0;
     const current = synopses.find((s) => s.number === chapterNumber);
     const prev = synopses.filter((s) => s.number < chapterNumber).pop();
     const next = synopses.find((s) => s.number > chapterNumber);
 
-    const characters = await this.readCards<CharacterCard>(normalizePath(`${folder}/_角色`));
-    const worldSettings = await this.readCards<WorldSetting>(normalizePath(`${folder}/_设定`));
+    const characters = await this.readCards<CharacterCard>(normalizePath(`${folder}/_角色`), scope);
+    const worldSettings = await this.readCards<WorldSetting>(normalizePath(`${folder}/_设定`), scope);
 
-    const genreValue = fmString(fm, "genre");
+    const genreValue = fmString(fm, "genre") || fmString(projectFm, "genre");
     return {
       projectTitle: fmString(projectFm, "title") || fmString(fm, "project") || chapterFile.basename,
       oneLiner: fmString(projectFm, "one_liner") || "",
@@ -286,11 +285,15 @@ ${novelSections}
       genre: (genreValue as WritingGenre) || "article",
       chapterNumber,
       chapterTitle: fmString(fm, "title") || chapterFile.basename,
-      chapterSynopsis: fmString(fm, "synopsis") || current?.synopsis || "",
+      chapterSynopsis: current?.synopsis || fmString(fm, "synopsis") || "",
       prevSynopsis: prev?.synopsis ?? "",
       nextSynopsis: next?.synopsis ?? "",
       characters,
       worldSettings,
+      contextScope: scope,
+      outlineContent: scope === "full" ? outlineContent : undefined,
+      projectContent: scope === "full" && projectIndex instanceof TFile
+        ? this.stripFrontmatter(await this.app.vault.read(projectIndex)) : undefined,
     };
   }
 
@@ -402,22 +405,26 @@ ${card.summary}
     return result;
   }
 
-  private async readCards<T>(folder: string): Promise<T[]> {
+  private async readCards<T>(folder: string, scope: WritingContextScope): Promise<T[]> {
     const cards: T[] = [];
     const files = this.app.vault.getMarkdownFiles().filter((f) => f.path.startsWith(folder + "/"));
     for (const f of files) {
       const m = frontmatterOf(this.app.metadataCache.getFileCache(f));
       const body = await this.app.vault.cachedRead(f);
-      const bodyText = body.replace(/^---\n[\s\S]*?\n---\n?/, "").trim();
+      const bodyText = this.stripFrontmatter(body);
       cards.push({
         name: fmString(m, "name") ?? f.basename,
         role: fmString(m, "role") ?? "support",
         category: fmString(m, "category") ?? "",
-        summary: bodyText.slice(0, 600),
-        content: bodyText.slice(0, 600),
+        summary: scope === "full" ? bodyText : bodyText.slice(0, 600),
+        content: scope === "full" ? bodyText : bodyText.slice(0, 600),
       } as unknown as T);
     }
     return cards;
+  }
+
+  private stripFrontmatter(content: string): string {
+    return content.replace(/^---\r?\n(?:[\s\S]*?\r?\n)?---(?:\r?\n|$)/, "").trim();
   }
 
   private listCardFiles(folder: string): { path: string; name: string }[] {

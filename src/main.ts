@@ -1,4 +1,4 @@
-import { Notice, Plugin, TFile, normalizePath, Platform } from "obsidian";
+import { Notice, Plugin, TFile, normalizePath, Platform, MarkdownView } from "obsidian";
 import { DeepSeekSettings, DEFAULT_SETTINGS, CompletionDepth } from "./types";
 import { DeepSeekSettingsTab } from "./settings/SettingsTab";
 import { BaiduSyncService } from "./features/sync/BaiduSyncService";
@@ -35,8 +35,9 @@ import { WritingProjectManager } from "./features/writing/WritingProjectManager"
 import { NewWritingModal, NewWritingInput } from "./features/writing/NewWritingModal";
 import { ContinueModal } from "./features/writing/ContinueModal";
 import { InsertModal } from "./features/writing/InsertModal";
-import { getInsertionContext } from "./editor/InsertionContext";
+import { getInsertionContext, getWritingPassages } from "./editor/InsertionContext";
 import { buildInsertionPrompt } from "./ai/InsertionPrompt";
+import { generateWritingText, writingLengthInstruction, countWritingCharacters } from "./ai/WritingGeneration";
 import { WritingPlanPreviewModal } from "./features/writing/WritingPlanPreviewModal";
 import { ImportModal } from "./features/writing/import/ImportModal";
 import { WritingGenre, WritingContext, WritingPlan, ContinueRequest, InsertRequest, ChapterOutline } from "./features/writing/types";
@@ -130,18 +131,34 @@ export default class DeepSeekPlugin extends Plugin {
     new AssistantInputModal(this.app, contextHint, (instruction) => {
       if (instruction.trim() === "续写") { void this.continueWriting(false, target); }
       else if (instruction.trim() === "插写") { void this.insertWriting(false, target); }
-      else { void this.runAssistant(instruction, target); }
+      else { void this.runAssistant(instruction, target, target ? undefined : "show", activeFile); }
     }, {
       quickActions: target ? availableQuickActions(!!selection,
         !!getInsertionContext(target.content, target.editor.posToOffset(target.cursor))) : [],
       onQuickAction: (id) => { void this.runQuickAction(id, target); },
+      onEnableWriting: !target && activeFile ? () => { void this.openAssistantInEditor(activeFile); } : undefined,
     }).open();
   }
 
-  private async runAssistant(instruction: string, target: EditorTarget | null, resultMode?: AssistantResult["mode"]) {
-    const activeFile = target?.file ?? null;
+  private async openAssistantInEditor(file: TFile) {
+    try {
+      const view = this.app.workspace.getActiveViewOfType(MarkdownView);
+      if (!view || this.app.workspace.getActiveFile()?.path !== file.path) throw new Error("请回到原文档，再切换到编辑模式");
+      await view.leaf.setViewState({ type: "markdown", state: { file: file.path, mode: "source" }, active: true });
+      const target = captureEditorTarget(this.app);
+      if (!target || target.path !== file.path) throw new Error("无法取得当前编辑器，请手动切换到编辑模式后打开助手");
+      this.openAssistant(target);
+    } catch (error) { new Notice((error as Error).message); }
+  }
+
+  private async runAssistant(instruction: string, target: EditorTarget | null, resultMode?: AssistantResult["mode"], sourceFile?: TFile | null) {
+    const activeFile = target?.file ?? sourceFile ?? null;
     const selection = target?.selection.trim() ?? "";
-    const fileContent = target?.content ?? "";
+    let fileContent = target?.content ?? "";
+    if (!target && activeFile) {
+      try { fileContent = await this.app.vault.cachedRead(activeFile); }
+      catch (error) { new Notice(`无法读取当前文档：${(error as Error).message}`); return; }
+    }
     const fileName = activeFile?.basename ?? "";
     const fileMeta = activeFile ? this.app.metadataCache.getFileCache(activeFile) : null;
     const fileType = fmString(frontmatterOf(fileMeta), "type");
@@ -186,7 +203,7 @@ export default class DeepSeekPlugin extends Plugin {
       const assistant = new AIAssistant(this.settings, style, knownConcepts);
       const result = await assistant.run(instruction, ctx);
       return resultMode ? { ...result, mode: resultMode } : result;
-    }, () => { void this.runAssistant(instruction, target, resultMode); }, undefined, true);
+    }, () => { void this.runAssistant(instruction, target, resultMode, sourceFile); }, undefined, !!target);
   }
 
   private applyResult(result: AssistantResult, target: EditorTarget | null): EditorTarget | null {
@@ -210,7 +227,8 @@ export default class DeepSeekPlugin extends Plugin {
     generate: () => Promise<AssistantResult>,
     retry: () => void,
     continueAfter?: (target: EditorTarget) => void,
-    allowConcept = false
+    allowConcept = false,
+    options: { modeHint?: string; moreActions?: { label: string; callback: () => void }[] } = {}
   ) {
     const key = target?.path ?? "assistant";
     if (this.aiJobs.has(key)) { new Notice("当前文档正在生成，请稍候"); return; }
@@ -235,7 +253,7 @@ export default class DeepSeekPlugin extends Plugin {
             continueAfter(nextTarget);
             return true;
           },
-        } : undefined
+        } : undefined, options
       ).open();
     } catch (error) {
       new Notice(`生成失败：${(error as Error).message}`);
@@ -249,6 +267,8 @@ export default class DeepSeekPlugin extends Plugin {
     if (!target) { new Notice("请先打开文档"); return; }
     if (id === "continue") { await this.continueWriting(false, target); return; }
     if (id === "insert") { await this.insertWriting(false, target); return; }
+    if (id === "continue-settings") { await this.continueWriting(true, target); return; }
+    if (id === "insert-settings") { await this.insertWriting(true, target); return; }
     if (id === "polish") { await this.polishWriting(target); return; }
     if ((id === "expand" || id === "explain") && !target.selection.trim()) { new Notice("请先选中文字"); return; }
     if (id === "expand") {
@@ -760,39 +780,48 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
     if (!target) { new Notice("请先打开文档"); return; }
     const request: ContinueRequest = {
       mode: this.settings.continueMode ?? "cursor", instruction: "", targetWords: this.settings.continueTargetWords,
+      contextScope: this.settings.writingContextScope ?? "full",
     };
     if (configure) {
       new ContinueModal(this.app, request.targetWords, target.file.basename, (configured) => {
         this.settings.continueTargetWords = configured.targetWords;
         this.settings.continueMode = configured.mode;
+        this.settings.writingContextScope = configured.contextScope ?? request.contextScope ?? "full";
         void this.saveSettings().catch(() => new Notice("续写偏好保存失败"));
         void this.runContinue(target, configured);
-      }, request.mode).open();
+      }, request.mode, request.contextScope).open();
     } else {
       await this.runContinue(target, request);
     }
   }
 
   private async runContinue(target: EditorTarget, request: ContinueRequest) {
+    const options = {
+      modeHint: "",
+      moreActions: [{ label: "调整生成量 / 上下文", callback: () => this.configureWritingFromResult(target, "continue") }],
+    };
     await this.previewGenerated(target, "AI 续写中...", async () => {
-      const preceding = (request.mode === "chapter" ? target.content :
-        target.content.slice(0, target.editor.posToOffset(target.cursor))).slice(-this.settings.continueContextChars);
+      const scope = request.contextScope ?? this.settings.writingContextScope ?? "full";
+      const passages = getWritingPassages(target.content, request.mode === "chapter" ? target.content.length :
+        target.editor.posToOffset(target.cursor), this.settings.continueContextChars, scope);
+      if (!passages) throw new Error("请将光标移到文档正文中，再发起续写");
       const fileType = fmString(frontmatterOf(this.app.metadataCache.getFileCache(target.file)), "type");
       let text: string;
       if (fileType === "chapter") {
-        const ctx = await new WritingProjectManager(this.app, this.settings).loadContext(target.file);
+        const ctx = await new WritingProjectManager(this.app, this.settings).loadContext(target.file, scope);
         if (!ctx) throw new Error("无法读取章节的大纲与设定");
-        text = await new StoryContinuer(this.settings).continueStory(ctx, request, preceding);
+        text = await new StoryContinuer(this.settings).continueStory(ctx, request, passages.before, passages.after);
       } else {
-        text = await new LLMClient(this.settings).chat({
-          systemPrompt: `你是笔记续写助手。自然承接上文，保持语言、风格和格式一致，不重复已有内容。只输出续写正文，约 ${request.targetWords} 字。`,
-          userPrompt: `上文：\n${preceding}\n\n${request.instruction || "自然接着写下去"}`,
+        text = await generateWritingText(new LLMClient(this.settings), {
+          systemPrompt: `你是笔记续写助手。自然承接上文，保持语言、风格和格式一致，不重复已有内容。已有后文仅作事实与衔接参考，不要重写或重复后文。只输出新增正文，${writingLengthInstruction(request.targetWords)}。`,
+          userPrompt: `上文：\n${passages.before}\n\n${passages.after ? `已有后文（仅作参考，不要重复）：\n${passages.after}\n\n` : ""}${request.instruction || "自然接着写下去"}`,
           temperature: 0.6,
-        });
+        }, request.targetWords);
       }
+      options.modeHint = `目标约 ${request.targetWords} 字 · 实际生成 ${countWritingCharacters(text)} 字（不计空白） · ${scope === "full" ? "完整当前文档" : "光标附近"} · ${request.mode === "cursor" ? "插入原光标处" : "追加到文末"}`;
       return { mode: request.mode === "cursor" ? "insert" : "append", content: text, explanation: `续写：${target.file.basename}` };
     }, () => { void this.runContinue(target, request); },
-    (nextTarget) => { void this.runContinue(nextTarget, request); });
+    (nextTarget) => { void this.runContinue(nextTarget, request); }, false, options);
   }
 
   /** 插写:同时参考光标前后文,在预览确认后插入原位置 */
@@ -808,36 +837,51 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
       new Notice((error as Error).message);
       return;
     }
-    const request: InsertRequest = { instruction: "", targetWords: this.settings.insertTargetWords ?? 200 };
+    const request: InsertRequest = { instruction: "", targetWords: this.settings.insertTargetWords ?? 200,
+      contextScope: this.settings.writingContextScope ?? "full" };
     if (configure) {
       new InsertModal(this.app, request.targetWords, target.file.basename, (configured) => {
         this.settings.insertTargetWords = configured.targetWords;
+        this.settings.writingContextScope = configured.contextScope ?? request.contextScope ?? "full";
         void this.saveSettings().catch(() => new Notice("插写偏好保存失败"));
         void this.runInsertion(target, configured);
-      }).open();
+      }, request.contextScope).open();
     } else {
       await this.runInsertion(target, request);
     }
   }
 
   private async runInsertion(target: EditorTarget, request: InsertRequest) {
+    const options = {
+      modeHint: "",
+      moreActions: [{ label: "调整生成量 / 上下文", callback: () => this.configureWritingFromResult(target, "insert") }],
+    };
     await this.previewGenerated(target, "AI 插写中...", async () => {
-      const context = getInsertionContext(target.content, target.editor.posToOffset(target.cursor), this.settings.continueContextChars);
+      const scope = request.contextScope ?? this.settings.writingContextScope ?? "full";
+      const context = getInsertionContext(target.content, target.editor.posToOffset(target.cursor), this.settings.continueContextChars, scope);
       if (!context) throw new Error("插写需要光标前后都有正文");
       const fileType = fmString(frontmatterOf(this.app.metadataCache.getFileCache(target.file)), "type");
       let text: string;
       if (fileType === "chapter") {
-        const ctx = await new WritingProjectManager(this.app, this.settings).loadContext(target.file);
+        const ctx = await new WritingProjectManager(this.app, this.settings).loadContext(target.file, scope);
         if (!ctx) throw new Error("无法读取章节的大纲与设定");
         text = await new StoryContinuer(this.settings).insertStory(ctx, request, context);
       } else {
-        text = await new LLMClient(this.settings).chat({
+        text = await generateWritingText(new LLMClient(this.settings), {
           ...buildInsertionPrompt(request, context), temperature: 0.6,
-          maxTokens: Math.max(256, Math.round(request.targetWords * 1.6)),
-        });
+        }, request.targetWords);
       }
+      options.modeHint = `目标约 ${request.targetWords} 字 · 实际生成 ${countWritingCharacters(text)} 字（不计空白） · ${scope === "full" ? "完整当前文档" : "光标附近"} · 插入原光标处，保留前后文`;
       return { mode: "insert", content: text, explanation: `插写：${target.file.basename}` };
-    }, () => { void this.runInsertion(target, request); });
+    }, () => { void this.runInsertion(target, request); }, undefined, false, options);
+  }
+
+  private configureWritingFromResult(target: EditorTarget, action: "continue" | "insert"): boolean {
+    try { checkEditorTarget(this.app, target); }
+    catch (error) { new Notice((error as Error).message); return false; }
+    if (action === "continue") { void this.continueWriting(true, target); }
+    else { void this.insertWriting(true, target); }
+    return true;
   }
 
   /** 按大纲生成下一章 */

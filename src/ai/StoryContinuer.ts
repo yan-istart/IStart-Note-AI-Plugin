@@ -3,15 +3,17 @@ import { LLMClient } from "../core/llm";
 import { WritingContext, ContinueRequest, ChapterOutline, InsertRequest } from "../features/writing/types";
 import type { InsertionContext } from "../editor/InsertionContext";
 import { buildInsertionPrompt } from "./InsertionPrompt";
+import { generateWritingText, writingLengthInstruction } from "./WritingGeneration";
 
 const CONTINUE_SYSTEM = `你是一位专业的续写助手，为用户的现有作品续写正文。
 
 规则：
 1. 严格承接给定的上文，保持人称、时态、文风一致。
+   已有后文仅作事实与衔接参考，不要重写或重复。以当前章节已写正文中的事实为基础，大纲用于写作方向。
 2. 遵循「本章梗概」推进情节/论述，不要偏离大纲。
 3. 若提供角色卡与世界观设定，出场角色必须符合设定，禁止新增未设定的人物或规则。
 4. 直接输出续写正文，不要写任何标题、解释、标注或"以下为续写"之类的文字。
-5. 输出长度约 {{targetWords}} 字。
+5. 输出长度{{lengthInstruction}}。
 6. 小说：输出纯叙事正文，不用 Markdown 语法。论文/长文：允许使用段落结构与必要的小标题。{{genreRules}}`;
 
 const CHAPTER_SYSTEM = `你是一位专业的章节写作助手，为用户的写作项目生成完整章节。
@@ -20,7 +22,7 @@ const CHAPTER_SYSTEM = `你是一位专业的章节写作助手，为用户的�
 1. 按「本章梗概」完整写出本章内容。
 2. 遵循作品文风基调，人物行为符合角色卡设定，世界观一致。
 3. 直接输出章节正文（不含章节标题），不要写任何解释或标注。
-4. 输出长度约 {{targetWords}} 字。
+4. 输出长度{{lengthInstruction}}。
 5. 小说：纯叙事正文，不用 Markdown 语法。论文：允许段落结构与小标题。{{genreRules}}`;
 
 const NOVEL_RULES = `7. 网文节奏要求：段落宜短，多用对话与行动推进；避免大段描写拖慢节奏；情绪起伏清晰。{{hookRule}}`;
@@ -40,18 +42,18 @@ export class StoryContinuer {
   async continueStory(
     ctx: WritingContext,
     request: ContinueRequest,
-    precedingText: string
+    precedingText: string,
+    followingText = ""
   ): Promise<string> {
-    const parts = this.buildCommonParts(ctx, request.targetWords, precedingText, request.instruction);
+    const parts = this.buildCommonParts(ctx, request.targetWords, precedingText + "\n" + followingText, request.instruction);
 
-    const userPrompt = `【上文】\n${precedingText || "（本章开头，无上文）"}\n\n【本次任务】\n${request.instruction || "自然地接着写下去"}\n\n请续写：`;
+    const userPrompt = `【上文】\n${precedingText || "（本章开头，无上文）"}\n\n${followingText ? `【已有后文（仅作参考，不要重复）】\n${followingText}\n\n` : ""}【本次任务】\n${request.instruction || "自然地接着写下去"}\n\n请续写：`;
 
-    const raw = await this.llm.chat({
+    const raw = await generateWritingText(this.llm, {
       systemPrompt: this.buildSystem(CONTINUE_SYSTEM, ctx, request.targetWords, request.mode),
       userPrompt: parts + "\n\n" + userPrompt,
       temperature: 0.8,
-      maxTokens: this.tokenBudget(request.targetWords),
-    });
+    }, request.targetWords);
     return this.trimIncompleteSentence(raw.trim());
   }
 
@@ -60,13 +62,12 @@ export class StoryContinuer {
     const prompt = buildInsertionPrompt(request, context);
     // Match characters and settings mentioned on either side of the gap.
     const parts = this.buildCommonParts(ctx, request.targetWords, context.before + "\n" + context.after, request.instruction);
-    const raw = await this.llm.chat({
+    const raw = await generateWritingText(this.llm, {
       systemPrompt: this.buildSystem(prompt.systemPrompt + "\n遵守作品文风、大纲、角色卡与世界观设定。小说输出纯叙事正文。{{genreRules}}",
         ctx, request.targetWords, "cursor"),
       userPrompt: parts + "\n\n" + prompt.userPrompt,
       temperature: 0.6,
-      maxTokens: this.tokenBudget(request.targetWords),
-    });
+    }, request.targetWords);
     return raw.trim();
   }
 
@@ -76,12 +77,11 @@ export class StoryContinuer {
 
     const userPrompt = `【新章节】第${chapter.number}章：${chapter.title}\n本章梗概：${chapter.synopsis}\n\n请写出本章完整正文：`;
 
-    const raw = await this.llm.chat({
+    const raw = await generateWritingText(this.llm, {
       systemPrompt: this.buildSystem(CHAPTER_SYSTEM, ctx, targetWords, "chapter"),
       userPrompt: parts + "\n\n" + userPrompt,
       temperature: 0.8,
-      maxTokens: this.tokenBudget(targetWords),
-    });
+    }, targetWords);
     return this.trimIncompleteSentence(raw.trim());
   }
 
@@ -96,6 +96,8 @@ export class StoryContinuer {
     if (ctx.chapterSynopsis) lines.push(`本章梗概：${ctx.chapterSynopsis}`);
     if (ctx.prevSynopsis) lines.push(`上一章梗概：${ctx.prevSynopsis}`);
     if (ctx.nextSynopsis) lines.push(`下一章梗概：${ctx.nextSynopsis}`);
+    if (ctx.projectContent) lines.push(`【作品首页】\n${ctx.projectContent}`);
+    if (ctx.outlineContent) lines.push(`【完整作品大纲】\n${ctx.outlineContent}`);
 
     const injected = this.selectSettings(ctx, precedingText + "\n" + ctx.chapterSynopsis + "\n" + instruction);
     if (injected.length > 0) {
@@ -119,13 +121,8 @@ export class StoryContinuer {
     }
 
     return template
-      .replace("{{targetWords}}", String(targetWords))
+      .replace("{{lengthInstruction}}", writingLengthInstruction(targetWords))
       .replace("{{genreRules}}", genreRules.replace("{{hookRule}}", hookRule));
-  }
-
-  /** 中文 1 字约 1 token,预留 60% 余量防止截断 */
-  private tokenBudget(targetWords: number): number {
-    return Math.max(256, Math.round(targetWords * 1.6));
   }
 
   /** 截掉结尾不完整的半句(仅当尾部残句很短) */
@@ -149,6 +146,12 @@ export class StoryContinuer {
    * 小说主角始终注入;其余按名字出现才注入(最多 3 角色 + 2 设定)。
    */
   private selectSettings(ctx: WritingContext, searchText: string): string[] {
+    if (ctx.contextScope !== "nearby") {
+      return [
+        ...ctx.characters.map((character) => `角色卡 ${character.name}（${character.role}）：${character.summary}`),
+        ...ctx.worldSettings.map((setting) => `世界观设定 ${setting.name}（${setting.category}）：${setting.content}`),
+      ];
+    }
     if (ctx.genre !== "novel") return [];
 
     const parts: string[] = [];

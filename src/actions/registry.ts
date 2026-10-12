@@ -107,7 +107,7 @@ function openPanel(plugin: DeepSeekPlugin, actions: ActionDef[]) {
     ? ["polish-writing", "expand-selection", "explain-selection", "ai-assistant"]
     : ctx.fileType === "chapter"
     ? [writingId, "generate-next-chapter", settingsId, "ai-assistant"]
-    : [writingId, "summarize-note", "ai-assistant"];
+    : [writingId, settingsId, "summarize-note", "ai-assistant"];
   const quickActions = quickIds.map((id) => actions.find((action) => action.id === id))
     .filter((action): action is ActionDef => !!action && evaluateWhen(action.when, ctx));
   const run = (action: ActionDef) => {
@@ -160,7 +160,7 @@ function openPanel(plugin: DeepSeekPlugin, actions: ActionDef[]) {
   }
 
   const shortLabels: Record<string, string> = {
-    "polish-writing": "润色", "generate-next-chapter": "下一章", "continue-writing-settings": "设置", "insert-writing-settings": "设置",
+    "polish-writing": "润色", "generate-next-chapter": "下一章", "continue-writing-settings": "生成量", "insert-writing-settings": "生成量",
   };
   new CommandPanelModal(plugin.app, groups, quickActions.map((action) => ({
     id: action.id, icon: action.icon, label: shortLabels[action.id] ?? action.label,

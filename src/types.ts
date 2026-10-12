@@ -9,6 +9,7 @@ export interface DeepSeekSettings {
   questionsIndexPath: string;
   writingPath: string;
   continueContextChars: number;
+  writingContextScope: "full" | "nearby";
   continueTargetWords: number;
   insertTargetWords: number;
   continueMode: "cursor" | "chapter";
@@ -71,6 +72,7 @@ export const DEFAULT_SETTINGS: DeepSeekSettings = {
   questionsIndexPath: "Knowledge/Questions",
   writingPath: "Writing",
   continueContextChars: 2000,
+  writingContextScope: "full",
   continueTargetWords: 800,
   insertTargetWords: 200,
   continueMode: "cursor",

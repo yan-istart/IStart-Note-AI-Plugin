@@ -1,6 +1,6 @@
 import { App, Setting } from "obsidian";
 import { ActionModal } from "../../ui/ActionModal";
-import type { InsertRequest } from "./types";
+import type { InsertRequest, WritingContextScope } from "./types";
 import { addWritingFields } from "./WritingFields";
 
 export class InsertModal extends ActionModal {
@@ -8,7 +8,8 @@ export class InsertModal extends ActionModal {
     app: App,
     private defaultWords: number,
     fileName: string,
-    private onSubmit: (request: InsertRequest) => void
+    private onSubmit: (request: InsertRequest) => void,
+    private contextScope: WritingContextScope = "full"
   ) {
     super(app);
     this.titleEl.setText(`插写：${fileName}`);
@@ -21,14 +22,16 @@ export class InsertModal extends ActionModal {
       cls: "istart-assistant-context",
     });
     const readRequest = addWritingFields(this.bodyEl, this.defaultWords, [100, 200, 300],
-      "如：补一段时间过渡 / 解释前后观点的关系", ["承上启下", "补充解释", "转场"]);
+      "如：补一段时间过渡 / 解释前后观点的关系", ["承上启下", "补充解释", "转场"], this.contextScope);
+    const submit = () => {
+      const request = readRequest();
+      if (!request) return;
+      this.close();
+      this.onSubmit(request);
+    };
     new Setting(this.actionsEl)
-      .addButton((button) => button.setButtonText("开始插写").setCta().onClick(() => {
-        const request = readRequest();
-        if (!request) return;
-        this.close();
-        this.onSubmit(request);
-      }))
+      .addButton((button) => button.setButtonText("开始插写").setCta().onClick(submit))
       .addButton((button) => button.setButtonText("取消").onClick(() => this.close()));
+    this.addMobileHeaderAction("生成", submit);
   }
 }

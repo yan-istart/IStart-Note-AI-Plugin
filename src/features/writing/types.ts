@@ -46,12 +46,15 @@ export interface WritingPlan {
 
 /** 续写模式 */
 export type ContinueMode = "cursor" | "chapter";
+export type WritingContextScope = "full" | "nearby";
 
 export interface InsertRequest {
   /** 用户附加指令(可选) */
   instruction: string;
   /** 目标字数(中文字符) */
   targetWords: number;
+  /** Full current document by default; nearby is an explicit compact option. */
+  contextScope?: WritingContextScope;
 }
 
 export interface ContinueRequest extends InsertRequest {
@@ -71,4 +74,7 @@ export interface WritingContext {
   nextSynopsis: string;
   characters: CharacterCard[];
   worldSettings: WorldSetting[];
+  contextScope?: WritingContextScope;
+  outlineContent?: string;
+  projectContent?: string;
 }

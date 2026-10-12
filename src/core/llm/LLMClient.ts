@@ -31,12 +31,24 @@ export interface LLMChatOptions {
    * Useful for tasks that always need a specific model.
    */
   model?: string;
-  /** Maximum generated tokens. Prevents overlong/cut-off output. */
+  /** Upper bound on generated tokens; separate from a prose-length target. */
   maxTokens?: number;
+  /** Applied to the official DeepSeek endpoint only; compatible providers keep their existing payload. */
+  thinking?: "enabled" | "disabled";
 }
 
 interface ChatCompletionResponse {
-  choices?: { message?: { content?: string } }[];
+  choices?: { finish_reason?: string; message?: { content?: unknown; reasoning_content?: unknown } }[];
+}
+
+export type LLMResponseErrorCode = "output_limit" | "reasoning_only" | "empty_content" | "invalid_response" | "content_filter" | "interrupted";
+
+/** Keep response diagnostics without exposing reasoning text or request contents. */
+export class LLMResponseError extends Error {
+  constructor(public code: LLMResponseErrorCode, message: string, public finishReason?: string) {
+    super(message);
+    this.name = "LLMResponseError";
+  }
 }
 
 export class LLMError extends Error {
@@ -58,7 +70,7 @@ export class LLMClient {
 
   /**
    * Run a single chat-completion request.
-   * @returns The raw assistant message content (string, possibly empty).
+   * @returns The raw assistant message content. Empty or malformed responses have specific errors.
    */
   async chat(options: LLMChatOptions): Promise<string> {
     this.ensureApiKey();
@@ -68,6 +80,9 @@ export class LLMClient {
       messages.push({ role: "system", content: options.systemPrompt });
     }
     messages.push({ role: "user", content: options.userPrompt });
+
+    let isOfficialDeepSeek = false;
+    try { isOfficialDeepSeek = new URL(this.settings.baseUrl).hostname === "api.deepseek.com"; } catch { /* Request validation handles invalid URLs. */ }
 
     const res = await requestUrl({
       url: `${this.settings.baseUrl}/v1/chat/completions`,
@@ -81,6 +96,7 @@ export class LLMClient {
         messages,
         temperature: options.temperature ?? 0.5,
         ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
+        ...(isOfficialDeepSeek && options.thinking ? { thinking: { type: options.thinking } } : {}),
       }),
       throw: false,
     });
@@ -90,6 +106,26 @@ export class LLMClient {
     }
 
     const data = res.json as ChatCompletionResponse | undefined;
-    return data?.choices?.[0]?.message?.content ?? "";
+    const choice = data?.choices?.[0];
+    if (!choice?.message) throw new LLMResponseError("invalid_response", "模型服务返回格式异常，未找到生成结果");
+    const content = choice.message.content;
+    if (content != null && typeof content !== "string") {
+      throw new LLMResponseError("invalid_response", "模型服务返回的正文格式无法识别", choice.finish_reason);
+    }
+    if (typeof content === "string" && content.trim()) return content;
+    const reason = choice.finish_reason;
+    if (reason === "content_filter") {
+      throw new LLMResponseError("content_filter", "模型服务因内容过滤未返回正文", reason);
+    }
+    if (reason === "length") {
+      throw new LLMResponseError("output_limit", "模型已用完生成预算，但尚未输出正文；请调整生成量后重试", reason);
+    }
+    if (reason === "insufficient_system_resource" || reason === "aborted") {
+      throw new LLMResponseError("interrupted", "模型服务中断了生成，请稍后重试", reason);
+    }
+    if (typeof choice.message.reasoning_content === "string" && choice.message.reasoning_content.trim()) {
+      throw new LLMResponseError("reasoning_only", "模型只返回了思考内容，没有输出正文；请检查服务的思考模式配置", reason);
+    }
+    throw new LLMResponseError("empty_content", "模型服务返回空正文，请调整生成要求或稍后重试", reason);
   }
 }
