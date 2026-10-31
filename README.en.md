@@ -59,10 +59,14 @@ Writing projects live under the configurable `Writing/` root. Vault QA excludes 
 ### 3. Auxiliary
 
 - **AI assistant** — process a selection, current note, or cursor context with natural-language instructions; preview before replacing a selection, inserting, or appending, with options to copy results or create a concept page
+- **Sidebar annotations** — turn a selection into `==highlight==` with an inline or footnote comment, then browse the current note or whole vault from the right sidebar. Click to jump back, search/filter, copy, or remove. Existing `<mark>` highlights and `%%Obsidian comments%%` are recognized too
+- **AI annotation** — let the configured AI draft a comment from the selection and nearby context; review or edit before writing
 - **AI service** — DeepSeek by default. API key and Base URL are configurable; requests use `POST {baseUrl}/v1/chat/completions`. The model dropdown only offers `deepseek-v4-flash` (default) and `deepseek-v4-pro`; another endpoint must accept the selected model name. There is no custom-model input or provider manager
 - **Beautify current document** — preview AI restructuring, Callouts, links, and optional Mermaid diagrams before replacing the full document
 - **Configurable output styles** — knowledge-base, technical, minimal, product, academic, story, dashboard
 - **Optional Baidu Pan sync** — Git history, incremental bidirectional sync, text merging, and per-file version restore; the original file-backup mode remains available
+
+Annotations use plain Markdown: `==text==` for highlights, `^[comment]` for inline comments, and `[^1]` with a `[^1]: comment` definition for footnote comments. The sidebar parses notes directly, so annotations remain readable without the plugin. Clicking a result opens its note and selects the source text; reading mode scrolls to the matching line.
 
 Enable Baidu Pan sync, enter your Baidu App ID and App Secret, authorize your account, choose **Git version sync**, then use **Open sync** or **Manual sync** in the sidebar. Automatic sync and startup configuration pull are off by default. Desktop and mobile use the same JavaScript Git engine; optional automatic sync runs only while the app is in the foreground.
 
@@ -78,6 +82,7 @@ Sync is disabled by default. New installations default to Git mode; older config
 - Full context is the default: the complete current document, complete project outline, and every complete character/setting card. Other chapters' prose is not included automatically. Project sources still use `_作品.md`, `_大纲.md`, `_角色/`, and `_设定/` in the chapter's parent directory. Explicit nearby mode restores context clipping and name matching with three characters/two settings.
 - Generation quantities are approximate prose-length targets. Previews show the actual character count, excluding whitespace and including punctuation.
 - Git sync has automated engine and adapter tests. Actual Baidu authorization/network behavior and Android/iOS device behavior still require installation testing; see the sync documentation.
+- Creating an annotation requires a text selection in editing mode. Text selection in reading mode is not supported for creation, though sidebar navigation works in both modes. There is no custom highlight-color picker; existing `<mark>` colors are displayed. The vault tab reads every Markdown note on first scan and lists at most 300 results, so use search and filters in large vaults. Selections crossing blank lines, heading/list blocks, or code blocks must be annotated in smaller parts.
 
 ---
 
@@ -87,6 +92,7 @@ Sync is disabled by default. New installations default to Git mode; older config
 2. Go to **Settings → IStart-Note-AI → Auxiliary → AI Service** and enter your API key.
 3. Click the brain ribbon icon → **AI 助手**, or open Obsidian’s command palette and select an IStart-Note-AI command.
 4. Type a request in natural language — or create a work and continue writing in the **Writing** group.
+5. To take reading notes, select text and run **Add annotation** or **AI annotation**; the highlighter ribbon icon opens the annotation sidebar.
 
 ---
 
@@ -116,12 +122,13 @@ npm run build
 
 Default AI settings: Base URL `https://api.deepseek.com`, model `deepseek-v4-flash`, output style `knowledge-base`. Enter the root URL without a trailing slash or `/v1/chat/completions`, since the client appends that suffix.
 
-Settings are organized into three tabs:
+Settings are organized into four tabs:
 
 | Tab | Key settings |
 | --- | --- |
 | **Knowledge** | Q&A path, Concepts path, Questions index path, index status + rebuild |
 | **Writing** | Works path (`Writing`), full document/project context by default; nearby mode uses 2,000 characters per side, continuation target (800 Chinese characters), insertion target (200 Chinese characters) |
+| **Annotations** | Default inline/footnote comment style, collapse sidebar after mobile navigation, open annotation sidebar |
 | **Auxiliary** | API key, Base URL, model, output style, Baidu sync |
 
 ---
@@ -131,17 +138,19 @@ Settings are organized into three tabs:
 ### Desktop
 
 - **Command panel** — ribbon icon; three domain groups (Knowledge / Writing / Auxiliary); the Writing group is pinned first inside chapter files or project home pages
-- **Hotkeys** — the plugin does not register default hotkeys. Assign your preferred shortcuts in Settings → Hotkeys to AI assistant, continue writing, insert between passages, next chapter, or new work.
+- **Hotkeys** — the plugin does not register default hotkeys. Assign your preferred shortcuts in Settings → Hotkeys to AI assistant, continue writing, insert between passages, next chapter, new work, add annotation, or AI annotation.
 - **Status bar** — "Continue" / "Next chapter" buttons appear when a chapter file is open
-- **Editor right-click** — AI assistant, Vault QA, concept completion, practical templates, and document beautification; continuation, insertion, and their settings appear without a selection, while polish/expand/explain appear with a selection. Chapter notes also show character extraction.
+- **Annotations** — select text and run **Add annotation** or **AI annotation** from the command palette, editor menu, or command panel. The highlighter ribbon icon opens the annotation sidebar; click a card to jump back, or use its menu to copy or remove it.
+- **Editor right-click** — AI assistant, Vault QA, concept completion, practical templates, document beautification, add annotation, and AI annotation; continuation, insertion, and their settings appear without a selection, while polish/expand/explain appear with a selection. Chapter notes also show character extraction.
 - **File right-click** — AI assistant / beautify; these handlers operate on the active editor, so open the target note first
 - **Cloud ribbon icon** — opens the Baidu sync sidebar with manual sync and version history in Git mode
 
 ### Mobile
 
 - Open the command panel from the IStart-Note-AI icon in the navigation menu or the **Open command panel** command. Contextual shortcuts use Phosphor Duotone icons with short labels; other actions are under **All features**.
+- The annotation sidebar opens as a right drawer and starts on the current note. Controls meet mobile touch-target guidance, cards always expose a **More** button, and long-press also opens the action menu. Jumping to the source collapses the drawer by default (disable it in Settings → Annotations). The annotation dialog keeps submit reachable above the keyboard, and an AI draft does not automatically focus the textarea.
 - With prose on both sides of the cursor, the panel and assistant prioritize **插写** (insert between passages); at the end, they prioritize continuation. **All features** retains both writing entries.
-- Add commands such as continue, insert between passages, polish, expand, explain, and summarize in **Settings → Interface → Configure mobile toolbar → Add a command**. Toolbar commands use matching Phosphor Bold icons; insertion uses arrows converging on the gap.
+- Add commands such as continue, insert between passages, polish, expand, explain, summarize, and add annotation in **Settings → Interface → Configure mobile toolbar → Add a command**. Writing commands use matching Phosphor Bold icons; insertion uses arrows converging on the gap, while annotations use a highlighter icon.
 - The panel and assistant show **生成量** (generation quantity) directly on mobile and desktop. Reading mode offers an explicit switch to editing before writing actions become available. Standalone instructions in reading mode still receive the current document and produce a display-only preview.
 - Continuation generates with saved parameters. Quantity/settings offers short (about 300), medium (800), long (1500), or a custom target of 1–10000 Chinese characters, along with cursor/end position, context scope, and instructions.
 - Insertion defaults to 200 characters; quantity/settings offers short (about 100), medium (200), long (300), or custom 1–10000, with bridging, explanation, and transition instructions. Its target is saved separately from continuation; context scope is shared. Cancel any selection and place the cursor between existing prose.
@@ -179,6 +188,8 @@ Writing/                   # writing domain (write out)
 
 Frontmatter types: `concept` / `question` / `reading-project` / `reading-note` / `writing-project` / `chapter` / `outline` / `character` / `setting` / `reference`; practical templates use `execution-artifact-*` types.
 
+Annotations do not create a separate folder or index. They live inside the source note as standard Markdown and are parsed live by the sidebar. Removing an annotation deletes its markers and comment text while keeping the annotated prose.
+
 ---
 
 ## Architecture
@@ -190,10 +201,12 @@ src/
     knowledge/        Metadata knowledge index
     artifact/         Practical template types, prompt, validation, rendering
     sync/             JavaScript Git engine, bundle exchange, merge and recovery
+    annotations/      Annotation parsing, deletion ranges and navigation lookup
     schema.ts         SCHEMA_VERSION + helpers
-  ai/                 AI feature modules (assistant, classifier, reading planner, writing planner, continuer, ...)
+  ai/                 AI feature modules (assistant, annotation drafting, classifier, reading planner, writing planner, continuer, ...)
   features/
     assistant/        AI assistant modals
+    annotation/       Add/delete dialogs and annotation sidebar view
     writing/          New work, plan preview, continue, import, project/context management
     reading/          Reading project manager
     concept/          Concept completion
@@ -212,7 +225,7 @@ src/
 
 ## Privacy
 
-AI features send your selection and partial note context to the configured chat-completions endpoint. Sync features upload to your own Baidu Pan. Git sync excludes hidden paths, the Obsidian config directory, credentials, and Git metadata. History retains past content after deletion and has no additional encryption. Separate configuration sync excludes API keys and Baidu credentials. In file mode, enabling plugin backup uploads the plugin `data.json` (including credentials) and selected Obsidian configuration files. No telemetry. No plugin-operated servers. Full details in [PRIVACY.md](./PRIVACY.md).
+AI features send your selection and partial note context to the configured chat-completions endpoint. AI annotations only use the network when you explicitly click **AI draft** or run **AI annotation**; ordinary highlights and comments are parsed locally. Sync features upload to your own Baidu Pan. Git sync excludes hidden paths, the Obsidian config directory, credentials, and Git metadata. History retains past content after deletion and has no additional encryption. Separate configuration sync excludes API keys and Baidu credentials. In file mode, enabling plugin backup uploads the plugin `data.json` (including credentials) and selected Obsidian configuration files. No telemetry. No plugin-operated servers. Full details in [PRIVACY.md](./PRIVACY.md).
 
 ---
 
@@ -222,7 +235,7 @@ File mode retains backup, restore, status scanning, bidirectional sync, per-file
 
 Git mode syncs ordinary vault files, including attachments and deletions, with configured ignore rules and size limits (100 MB per file by default). It saves commits, exchanges incremental Git bundles, merges text, allows conflict resolution, and restores individual file versions. It needs no system Git. Automatic sync is off by default; when enabled it runs at startup and every minute while the app is visible.
 
-Configuration push/pull transfers Base URL, model, the three knowledge paths, automatic graph opening, remote path, ignore rules, and file size limit. Writing settings, output style, credentials, sync mode, and automatic behavior stay local. Startup configuration pull is off by default. See [Git sync documentation](./docs/git-sync.md) (Chinese) for migration, history storage, and recovery details.
+Configuration push/pull transfers Base URL, model, the three knowledge paths, automatic graph opening, remote path, ignore rules, and file size limit. Writing settings, output style, annotation settings, credentials, sync mode, and automatic behavior stay local. Startup configuration pull is off by default. See [Git sync documentation](./docs/git-sync.md) (Chinese) for migration, history storage, and recovery details.
 
 ---
 

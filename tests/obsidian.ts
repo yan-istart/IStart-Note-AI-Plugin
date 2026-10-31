@@ -10,4 +10,6 @@ export class Notice {
   hide() {}
 }
 
+export class MarkdownView {}
+
 export async function requestUrl(): Promise<never> { throw new Error("Unexpected real network request in tests"); }

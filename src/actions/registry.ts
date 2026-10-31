@@ -104,7 +104,7 @@ function openPanel(plugin: DeepSeekPlugin, actions: ActionDef[]) {
   const writingId = canInsert ? "insert-writing" : "continue-writing";
   const settingsId = canInsert ? "insert-writing-settings" : "continue-writing-settings";
   const quickIds = ctx.selection
-    ? ["polish-writing", "expand-selection", "explain-selection", "ai-assistant"]
+    ? ["polish-writing", "expand-selection", "explain-selection", "add-annotation", "ai-assistant"]
     : ctx.fileType === "chapter"
     ? [writingId, "generate-next-chapter", settingsId, "ai-assistant"]
     : [writingId, settingsId, "summarize-note", "ai-assistant"];
@@ -115,6 +115,8 @@ function openPanel(plugin: DeepSeekPlugin, actions: ActionDef[]) {
     const id = quick[action.id as keyof typeof quick];
     if (id) { void plugin.runQuickAction(id, target); }
     else if (action.id === "ai-assistant") plugin.openAssistant(target);
+    else if (action.id === "add-annotation") plugin.addAnnotation(false, target);
+    else if (action.id === "ai-annotation") plugin.addAnnotation(true, target);
     else if (action.id === "continue-writing-settings") { void plugin.continueWriting(true, target); }
     else if (action.id === "insert-writing-settings") { void plugin.insertWriting(true, target); }
     else if (action.id === "generate-next-chapter") { void plugin.generateNextChapter(ctx.activeFile); }

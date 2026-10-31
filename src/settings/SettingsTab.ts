@@ -3,7 +3,7 @@ import type DeepSeekPlugin from "../main";
 import type { DeepSeekSettings } from "../types";
 import { BaiduAuthModal } from "../features/sync/BaiduAuthModal";
 
-type SettingsSection = "knowledge" | "writing" | "auxiliary";
+type SettingsSection = "knowledge" | "writing" | "annotation" | "auxiliary";
 
 export class DeepSeekSettingsTab extends PluginSettingTab {
   private activeSection: SettingsSection = "auxiliary"; // start with AI setup
@@ -36,6 +36,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
     const sections: { id: SettingsSection; label: string }[] = [
       { id: "knowledge", label: "知识" },
       { id: "writing", label: "写作" },
+      { id: "annotation", label: "批注" },
       { id: "auxiliary", label: "辅助" },
     ];
 
@@ -58,6 +59,9 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         break;
       case "writing":
         this.renderWriting(container);
+        break;
+      case "annotation":
+        this.renderAnnotation(container);
         break;
       case "auxiliary":
         this.renderAuxiliary(container);
@@ -180,6 +184,57 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
           if (Number.isInteger(n) && n > 0 && n <= 10000) { this.plugin.settings.insertTargetWords = n; await this.plugin.saveSettings(); }
         })
       );
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  批注
+  // ══════════════════════════════════════════════════════════════
+
+  private renderAnnotation(el: HTMLElement): void {
+    new Setting(el).setName("侧边栏批注").setHeading();
+    el.createEl("p", {
+      text: "批注使用 Obsidian 原生 Markdown：==高亮==、^[行内批注]、[^1]: 脚注批注。即使停用插件，笔记内容和批注仍可正常阅读。",
+      attr: { style: "color: var(--text-muted); font-size: 13px; line-height: 1.5;" },
+    });
+
+    new Setting(el)
+      .setName("默认批注形式")
+      .setDesc("行内批注紧跟在文字后；脚注批注集中到文末。只影响新建批注，已有批注不会改变。")
+      .addDropdown((dropdown) => dropdown
+        .addOption("inline", "行内批注（推荐，移动端更易读）")
+        .addOption("footnote", "脚注批注（文末集中）")
+        .setValue(this.plugin.settings.annotationCommentStyle)
+        .onChange(async (value) => {
+          this.plugin.settings.annotationCommentStyle = value as "inline" | "footnote";
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(el)
+      .setName("移动端跳转后收起侧栏")
+      .setDesc("在手机或平板上点击批注并跳转到原文后，自动收起右侧边栏，方便继续阅读。")
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.annotationCollapseSidebarOnMobile)
+        .onChange(async (value) => {
+          this.plugin.settings.annotationCollapseSidebarOnMobile = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(el)
+      .setName("打开批注侧边栏")
+      .setDesc("查看当前笔记或整个知识库中的高亮与批注。")
+      .addButton((button) => button.setButtonText("打开").onClick(() => {
+        void this.plugin.activateAnnotationView();
+      }));
+
+    new Setting(el).setName("使用方式").setHeading();
+    el.createEl("p", {
+      text: "在编辑模式选中文字后，运行命令「添加批注」，或在编辑器右键菜单、功能面板中选择。也可以使用「AI 批注」先让 AI 草拟，再修改确认。",
+      attr: { style: "color: var(--text-muted); font-size: 13px; line-height: 1.5;" },
+    });
+    el.createEl("p", {
+      text: "AI 草拟只在你主动点击时发送选中文字和少量上下文到已配置的 AI 服务；普通批注不会联网。",
+      attr: { style: "color: var(--text-muted); font-size: 13px; line-height: 1.5;" },
+    });
   }
 
   // ══════════════════════════════════════════════════════════════

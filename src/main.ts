@@ -45,6 +45,12 @@ import { registerQuickIcons } from "./ui/icons";
 import { availableQuickActions, QuickActionId } from "./actions/quickActions";
 import { captureEditorTarget, checkEditorTarget, writeEditorResult, EditorTarget } from "./editor/EditorTarget";
 import { SmartCompleter } from "./ai/SmartCompleter";
+import { AnnotationView, ANNOTATION_VIEW_TYPE } from "./features/annotation/AnnotationView";
+import { AnnotationModal } from "./features/annotation/AnnotationModal";
+import { AnnotationService, inspectAnnotationSelection } from "./features/annotation/AnnotationService";
+import { draftAnnotation } from "./ai/AnnotationAssistant";
+import { headingAtOffset } from "./core/annotations/AnnotationParser";
+import type { AnnotationCommentStyle } from "./core/annotations/AnnotationParser";
 
 export default class DeepSeekPlugin extends Plugin {
   settings!: DeepSeekSettings;
@@ -81,7 +87,9 @@ export default class DeepSeekPlugin extends Plugin {
     );
 
     this.registerView(SYNC_VIEW_TYPE, (leaf) => new BaiduSyncView(leaf, this));
+    this.registerView(ANNOTATION_VIEW_TYPE, (leaf) => new AnnotationView(leaf, this));
     this.addRibbonIcon("cloud", "Baidu cloud sync", () => { void this.activateSyncView(); });
+    this.addRibbonIcon("highlighter", "IStart 批注", () => { void this.activateAnnotationView(); });
     this.registerInterval(window.setInterval(() => { void this.runAutomaticGitSync(); }, 60_000));
     this.app.workspace.onLayoutReady(() => { void this.runAutomaticGitSync(); });
     this.addSettingTab(new DeepSeekSettingsTab(this.app, this));
@@ -279,6 +287,73 @@ export default class DeepSeekPlugin extends Plugin {
       return;
     }
     await this.runAssistant(id === "explain" ? "解释选中的文字" : "总结这篇文档", target, "show");
+  }
+
+  // ── 侧边栏批注 ─────────────────────────────────────────────
+
+  async activateAnnotationView() {
+    const { workspace } = this.app;
+    let leaf = workspace.getLeavesOfType(ANNOTATION_VIEW_TYPE)[0];
+    if (!leaf) {
+      leaf = await workspace.ensureSideLeaf(ANNOTATION_VIEW_TYPE, "right", {
+        active: true,
+        reveal: true,
+        split: false,
+      });
+      if (!(leaf.view instanceof AnnotationView)) {
+        await leaf.setViewState({ type: ANNOTATION_VIEW_TYPE, active: true });
+      }
+    }
+    await workspace.revealLeaf(leaf);
+    if (leaf.view instanceof AnnotationView) leaf.view.refresh();
+  }
+
+  /** 为选中文字添加高亮与批注；AI 批注会先草拟一段可编辑的批注。 */
+  addAnnotation(aiDraft = false, target: EditorTarget | null = captureEditorTarget(this.app)) {
+    if (!target) {
+      new Notice("请先打开文档并切换到编辑模式");
+      return;
+    }
+    if (!target.selection.trim()) {
+      new Notice("请先选中要批注的文字");
+      return;
+    }
+
+    const fromOffset = target.editor.posToOffset(target.from);
+    const toOffset = target.editor.posToOffset(target.to);
+    const inspection = inspectAnnotationSelection(target.content, fromOffset, toOffset);
+    if (inspection.error) {
+      new Notice(inspection.error);
+      return;
+    }
+    const heading = headingAtOffset(target.content, fromOffset);
+
+    new AnnotationModal(this.app, {
+      selection: inspection.selected,
+      fileName: target.file.basename,
+      heading,
+      defaultStyle: this.settings.annotationCommentStyle,
+      autoDraft: aiDraft,
+      draft: () => draftAnnotation(this.settings, {
+        fileName: target.file.basename,
+        heading,
+        selection: inspection.selected,
+        before: target.content.slice(Math.max(0, fromOffset - 600), fromOffset),
+        after: target.content.slice(toOffset, toOffset + 600),
+      }),
+      onSubmit: (comment: string, style: AnnotationCommentStyle) => {
+        new AnnotationService(this.app).add({ target, comment, style });
+        this.settings.annotationCommentStyle = style;
+        void this.saveSettings().catch(() => new Notice("批注偏好保存失败"));
+        this.refreshAnnotationViews();
+      },
+    }).open();
+  }
+
+  refreshAnnotationViews() {
+    for (const leaf of this.app.workspace.getLeavesOfType(ANNOTATION_VIEW_TYPE)) {
+      if (leaf.view instanceof AnnotationView) leaf.view.refresh();
+    }
   }
 
   /** 将 AI 生成的内容创建为新概念页 */

@@ -13,6 +13,8 @@ export interface DeepSeekSettings {
   continueTargetWords: number;
   insertTargetWords: number;
   continueMode: "cursor" | "chapter";
+  annotationCommentStyle: "inline" | "footnote";
+  annotationCollapseSidebarOnMobile: boolean;
   baiduSync: BaiduSyncConfig;
 }
 
@@ -76,6 +78,8 @@ export const DEFAULT_SETTINGS: DeepSeekSettings = {
   continueTargetWords: 800,
   insertTargetWords: 200,
   continueMode: "cursor",
+  annotationCommentStyle: "inline",
+  annotationCollapseSidebarOnMobile: true,
   baiduSync: { ...DEFAULT_BAIDU_SYNC_CONFIG },
 };
 
