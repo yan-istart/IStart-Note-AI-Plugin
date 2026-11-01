@@ -25,6 +25,23 @@ export interface FootnoteDefinitionRef {
   range: TextRange;
 }
 
+export type AnnotationCommentSource = "inline-comment" | "footnote" | "obsidian-comment";
+
+/** A single comment marker attached to an annotation, used to edit it in place. */
+export interface AnnotationCommentPart {
+  source: AnnotationCommentSource;
+  /** The inline comment, footnote reference, or Obsidian comment marker. */
+  markerRange: TextRange;
+  /** Body range for inline/Obsidian comments. */
+  bodyRange?: TextRange;
+  text: string;
+  /** Uncollapsed source text, used when editing. */
+  rawText: string;
+  footnoteId?: string;
+  /** Entire footnote definition line(s), including its trailing newline when present. */
+  definitionRange?: TextRange;
+}
+
 export interface AnnotationRecord {
   id: string;
   kind: AnnotationKind;
@@ -34,6 +51,7 @@ export interface AnnotationRecord {
   /** Exact source text used to relocate an annotation after edits. */
   rawText: string;
   comment: string;
+  commentParts: AnnotationCommentPart[];
   color?: string;
   heading: string;
   line: number;
@@ -70,6 +88,7 @@ interface CommentCandidate {
   innerStart: number;
   innerEnd: number;
   text: string;
+  rawText?: string;
   footnoteId?: string;
   footnoteRange?: TextRange;
 }
@@ -172,7 +191,15 @@ export function parseAnnotations(content: string): AnnotationRecord[] {  const l
     const innerEnd = end - 2;
     const text = cleanAnnotationText(content.slice(innerStart, innerEnd), 500);
     if (!text) continue;
-    comments.push({ source: "obsidian-comment", start, end, innerStart, innerEnd, text });
+    comments.push({
+      source: "obsidian-comment",
+      start,
+      end,
+      innerStart,
+      innerEnd,
+      text,
+      rawText: content.slice(innerStart, innerEnd).trim(),
+    });
     markRange(mask, start, end);
   }
 
@@ -236,6 +263,7 @@ export function parseAnnotations(content: string): AnnotationRecord[] {  const l
       text: cleanAnnotationText(highlight.raw, 500),
       rawText: highlight.raw,
       comment: commentText,
+      commentParts: attached.map(commentPartFromCandidate),
       color: highlight.color,
       contentStart: highlight.innerStart,
       contentEnd: highlight.innerEnd,
@@ -264,6 +292,7 @@ export function parseAnnotations(content: string): AnnotationRecord[] {  const l
       text,
       rawText: content.slice(candidate.start, candidate.end),
       comment: candidate.text,
+      commentParts: [commentPartFromCandidate(candidate)],
       contentStart: candidate.start,
       contentEnd: candidate.end,
       deleteRanges: [{ start: candidate.start, end: candidate.end }],
@@ -281,6 +310,7 @@ export function parseAnnotations(content: string): AnnotationRecord[] {  const l
       text: candidate.text,
       rawText: content.slice(candidate.start, candidate.end),
       comment: "",
+      commentParts: [commentPartFromCandidate(candidate)],
       contentStart: candidate.innerStart,
       contentEnd: candidate.innerEnd,
       deleteRanges: [{ start: candidate.start, end: candidate.end }],
@@ -306,6 +336,7 @@ interface BuildRecordInput {
   contentEnd: number;
   deleteRanges: TextRange[];
   footnoteDefinitions: FootnoteDefinitionRef[];
+  commentParts?: AnnotationCommentPart[];
 }
 
 function buildRecord(input: BuildRecordInput): AnnotationRecord {
@@ -318,6 +349,7 @@ function buildRecord(input: BuildRecordInput): AnnotationRecord {
     text: input.text,
     rawText: input.rawText,
     comment: input.comment,
+    commentParts: input.commentParts ?? [],
     color: input.color,
     heading: headingFor(input.lines, input.lineStarts, input.mask, input.contentStart),
     line: start.line,
@@ -328,6 +360,20 @@ function buildRecord(input: BuildRecordInput): AnnotationRecord {
     contentEnd: input.contentEnd,
     deleteRanges: input.deleteRanges,
     footnoteDefinitions: input.footnoteDefinitions,
+  };
+}
+
+function commentPartFromCandidate(candidate: CommentCandidate): AnnotationCommentPart {
+  return {
+    source: candidate.source,
+    markerRange: { start: candidate.start, end: candidate.end },
+    bodyRange: candidate.source === "footnote"
+      ? undefined
+      : { start: candidate.innerStart, end: candidate.innerEnd },
+    text: candidate.text,
+    rawText: candidate.rawText ?? candidate.text,
+    footnoteId: candidate.footnoteId,
+    definitionRange: candidate.footnoteRange,
   };
 }
 

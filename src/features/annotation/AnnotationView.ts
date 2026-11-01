@@ -10,10 +10,12 @@ import {
   setIcon,
 } from "obsidian";
 import type DeepSeekPlugin from "../../main";
-import type { AnnotationRecord } from "../../core/annotations/AnnotationParser";
+import type { AnnotationCommentStyle, AnnotationRecord } from "../../core/annotations/AnnotationParser";
 import { parseAnnotations } from "../../core/annotations/AnnotationParser";
 import { locateSourceRange } from "../../core/annotations/AnnotationNavigation";
-import { AnnotationDeleteModal } from "./AnnotationModal";
+import { draftAnnotation, suggestFromAnnotation } from "../../ai/AnnotationAssistant";
+import { AssistantResultModal } from "../assistant/AssistantModal";
+import { AnnotationDeleteModal, AnnotationModal } from "./AnnotationModal";
 import { AnnotationService } from "./AnnotationService";
 
 export const ANNOTATION_VIEW_TYPE = "istart-annotations-view";
@@ -35,7 +37,7 @@ const LIST_LIMIT = 300;
 
 /**
  * Right-sidebar reading notes: highlights and comments for the current note or the whole vault.
- * Selection creation lives in main.ts; this view is read/navigate/delete oriented.
+ * Supports navigation, editing, AI suggestions, copying and deletion; creation lives in main.ts.
  */
 export class AnnotationView extends ItemView {
   private viewScope: AnnotationScope = "current";
@@ -53,6 +55,7 @@ export class AnnotationView extends ItemView {
   private statusEl: HTMLElement | null = null;
   private countEl: HTMLElement | null = null;
   private opened = false;
+  private suggestionJobs = new Set<string>();
 
   constructor(leaf: WorkspaceLeaf, private plugin: DeepSeekPlugin) {
     super(leaf);
@@ -239,7 +242,7 @@ export class AnnotationView extends ItemView {
     if (!(file instanceof TFile) || file.extension !== "md") return;
     let fresh: AnnotationItem[] = [];
     try {
-      fresh = this.parseContent(file, await this.readFile(file));
+      fresh = this.parseContent(file, await this.readFreshFile(file));
     } catch {
       return;
     }
@@ -262,6 +265,18 @@ export class AnnotationView extends ItemView {
     const active = this.app.workspace.activeEditor;
     if (active?.editor && active.file?.path === file.path) return active.editor.getValue();
     return this.app.vault.cachedRead(file);
+  }
+
+  /** Read the latest editor buffer (including unsaved background tabs) or the file on disk. */
+  private async readFreshFile(file: TFile): Promise<string> {
+    const active = this.app.workspace.activeEditor;
+    if (active?.editor && active.file?.path === file.path) return active.editor.getValue();
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      if (leaf.view instanceof MarkdownView && leaf.view.file?.path === file.path) {
+        return leaf.view.editor.getValue();
+      }
+    }
+    return this.app.vault.read(file);
   }
 
   // ── Rendering ─────────────────────────────────────────────
@@ -551,6 +566,12 @@ export class AnnotationView extends ItemView {
     menu.addItem((item) => item.setTitle("跳转到批注").setIcon("corner-down-right").onClick(() => {
       void this.navigate(annotation);
     }));
+    menu.addItem((item) => item.setTitle("编辑批注").setIcon("pencil").onClick(() => {
+      this.editAnnotation(annotation);
+    }));
+    menu.addItem((item) => item.setTitle("获取 AI 建议").setIcon("istart-assistant").onClick(() => {
+      void this.requestSuggestion(annotation);
+    }));
     menu.addItem((item) => item.setTitle("复制文字与批注").setIcon("copy").onClick(() => {
       void this.copy(annotation);
     }));
@@ -622,14 +643,168 @@ export class AnnotationView extends ItemView {
     if (!Platform.isMobile) editor.focus();
   }
 
+  private editAnnotation(annotation: AnnotationItem): void {
+    const hasComment = annotation.commentParts.length > 0;
+    const part = annotation.commentParts[0];
+    const existingStyle: AnnotationCommentStyle = part?.source === "footnote" ? "footnote" : "inline";
+    const initialComment = hasComment ? this.commentText(annotation) : "";
+
+    new AnnotationModal(this.app, {
+      selection: annotation.text,
+      fileName: annotation.title,
+      heading: annotation.heading,
+      defaultStyle: hasComment ? existingStyle : this.plugin.settings.annotationCommentStyle,
+      autoDraft: false,
+      mode: hasComment ? "edit" : "create",
+      initialComment,
+      allowStyle: !hasComment,
+      allowEmptyComment: hasComment,
+      draft: (currentComment) => this.draftForAnnotation(annotation, currentComment || initialComment),
+      onSubmit: async (comment, chosenStyle) => {
+        if (!hasComment && !comment) throw new Error("请输入批注内容");
+        const changed = await new AnnotationService(this.app).updateComment(
+          annotation.path,
+          annotation,
+          comment,
+          hasComment ? existingStyle : chosenStyle
+        );
+        if (!changed) throw new Error("没有可保存的批注修改");
+        this.refreshAfterWrite(annotation.path);
+      },
+    }).open();
+  }
+
+  private async draftForAnnotation(annotation: AnnotationItem, existingComment: string): Promise<string> {
+    const context = await this.readAnnotationContext(annotation);
+    return draftAnnotation(this.plugin.settings, {
+      fileName: annotation.title,
+      heading: annotation.heading,
+      selection: annotation.text,
+      before: context.before,
+      after: context.after,
+      existingComment: existingComment || undefined,
+    });
+  }
+
+  private async requestSuggestion(annotation: AnnotationItem): Promise<void> {
+    if (this.suggestionJobs.has(annotation.id)) {
+      new Notice("正在分析这条批注，请稍候");
+      return;
+    }
+    this.suggestionJobs.add(annotation.id);
+    const notice = new Notice("AI 正在分析这条批注…", 0);
+    try {
+      const context = await this.readAnnotationContext(annotation);
+      const suggestion = await suggestFromAnnotation(this.plugin.settings, {
+        fileName: annotation.title,
+        heading: annotation.heading,
+        selection: annotation.text,
+        comment: this.commentText(annotation),
+        before: context.before,
+        after: context.after,
+      });
+      notice.hide();
+      if (!this.opened) return;
+      new AssistantResultModal(
+        this.app,
+        { mode: "show", content: suggestion, explanation: "AI 批注建议" },
+        () => this.appendSuggestion(annotation, suggestion),
+        () => { void this.requestSuggestion(annotation); },
+        undefined,
+        undefined,
+        {
+          primaryLabel: "追加到批注",
+          modeHint: `根据「${annotation.title}」中的高亮文字、现有批注和上下文生成`,
+        }
+      ).open();
+    } catch (error) {
+      notice.hide();
+      if (this.opened) new Notice(`AI 建议失败：${(error as Error).message}`);
+    } finally {
+      this.suggestionJobs.delete(annotation.id);
+    }
+  }
+
+  private async appendSuggestion(annotation: AnnotationItem, suggestion: string): Promise<void> {
+    const addition = suggestion.trim();
+    if (!addition) throw new Error("AI 没有返回可追加的内容");
+    const existing = this.commentText(annotation).trim();
+    const part = annotation.commentParts[0];
+    let style = this.plugin.settings.annotationCommentStyle;
+    let inlineOutput = style === "inline";
+    if (part) {
+      if (part.source === "footnote") {
+        style = "footnote";
+        inlineOutput = false;
+      } else if (part.source === "obsidian-comment") {
+        style = "inline";
+        inlineOutput = false;
+      } else {
+        style = "inline";
+        inlineOutput = true;
+      }
+    } else if (addition.includes("\n")) {
+      style = "footnote";
+      inlineOutput = false;
+    }
+    const normalized = inlineOutput ? compactInlineSuggestion(addition) : addition;
+    const comment = existing
+      ? inlineOutput ? `${existing}；${normalized}` : `${existing}\n\n${normalized}`
+      : normalized;
+    const changed = await new AnnotationService(this.app).updateComment(
+      annotation.path,
+      annotation,
+      comment,
+      style
+    );
+    if (!changed) throw new Error("没有可写入的批注");
+    new Notice("已追加到批注");
+    this.refreshAfterWrite(annotation.path);
+  }
+
+  private async readAnnotationContext(annotation: AnnotationItem): Promise<{ before: string; after: string }> {
+    const file = this.app.vault.getAbstractFileByPath(annotation.path);
+    if (!(file instanceof TFile)) throw new Error("找不到原文件");
+    const content = await this.readFreshFile(file);
+    const range = locateSourceRange(content, annotation);
+    const start = range?.start ?? annotation.contentStart;
+    const end = range?.end ?? annotation.contentEnd;
+    return {
+      before: content.slice(Math.max(0, start - 600), start),
+      after: content.slice(end, end + 600),
+    };
+  }
+
+  private refreshAfterWrite(path: string): void {
+    if (!this.opened) return;
+    if (this.viewScope !== "vault") {
+      this.scheduleReload(0);
+      return;
+    }
+    if (this.loading) {
+      this.pendingVaultReload = true;
+      return;
+    }
+    void this.refreshFile(path);
+  }
+
   private async copy(annotation: AnnotationItem): Promise<void> {
-    const text = annotation.comment ? `${annotation.text}\n\n${annotation.comment}` : annotation.text;
+    const comment = this.commentText(annotation).trim();
+    const text = annotation.source === "obsidian-comment"
+      ? comment || annotation.text
+      : comment ? `${annotation.text}\n\n${comment}` : annotation.text;
     try {
       await navigator.clipboard.writeText(text);
       new Notice("已复制批注");
     } catch {
       new Notice("复制失败");
     }
+  }
+
+  private commentText(annotation: AnnotationItem): string {
+    const part = annotation.commentParts[0];
+    if (part?.source === "obsidian-comment") return part.rawText || annotation.text;
+    return annotation.comment;
   }
 
   private confirmDelete(annotation: AnnotationItem): void {
@@ -697,4 +872,13 @@ function safeCssColor(value?: string): string | undefined {
   if (!/^(#[0-9a-f]{3,8}|(?:rgb|hsl)a?\([^)]*\)|[a-z]{3,20})$/i.test(color)) return undefined;
   if (/url|var|expression|javascript/i.test(color)) return undefined;
   return color;
+}
+
+function compactInlineSuggestion(text: string): string {
+  return text
+    .split(/\r?\n+/)
+    .map((line) => line.replace(/^\s*[-*+]\s+/, "").replace(/^\s*\d+[.)]\s+/, "").replace(/^\s*#{1,6}\s+/, "").trim())
+    .filter(Boolean)
+    .join("；")
+    .replace(/；{2,}/g, "；");
 }

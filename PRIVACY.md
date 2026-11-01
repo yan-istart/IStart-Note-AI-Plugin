@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: 2026-10-09. [简体中文版本 →](./PRIVACY.zh-CN.md)_
+_Last updated: 2026-11-01. [简体中文版本 →](./PRIVACY.zh-CN.md)_
 
 This document describes what data IStart-Note-AI handles, where it goes, and how to control it. The plugin runs entirely inside your Obsidian client — there are no plugin-operated servers, no analytics, and no telemetry.
 
@@ -20,6 +20,7 @@ The request body may include:
 | Source | Data | When |
 | --- | --- | --- |
 | Selection | The currently selected text | Whenever you trigger the AI assistant with a non-empty selection |
+| Annotation context | The highlighted text, current annotation comment, and up to ~600 characters before/after | Annotation drafting, rewriting, or requesting AI suggestions |
 | Active file | The active document content (truncated, typically up to ~2,000 characters) | When the assistant needs context (most actions) |
 | Active file metadata | File name, frontmatter `type` field | Most actions |
 | Cursor context | Up to ~500 characters before the cursor | Continue / fill-empty-section actions |

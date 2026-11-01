@@ -106,6 +106,20 @@ describe("annotation parser", () => {
     expect(annotation.comment).toBe("第一行\n第二行");
   });
 
+  it("exposes editable comment parts for inline, footnote and Obsidian comments", () => {
+    const inline = parseAnnotations("==重点==^[行内]")[0];
+    expect(inline.commentParts[0]).toMatchObject({ source: "inline-comment", text: "行内" });
+
+    const footnote = parseAnnotations("==重点==[^1]\n\n[^1]: 脚注")[0];
+    expect(footnote.commentParts[0].source).toBe("footnote");
+    expect(footnote.commentParts[0].footnoteId).toBe("1");
+    expect(footnote.commentParts[0].definitionRange).toBeTruthy();
+
+    const obsidian = parseAnnotations("正文 %%注释%%")[0];
+    expect(obsidian.commentParts[0].source).toBe("obsidian-comment");
+    expect(obsidian.commentParts[0].rawText).toBe("注释");
+  });
+
   it("rejects selections that sit entirely inside code or hidden comments", () => {
     const inline = "正文 `code` 结束";
     const codeStart = inline.indexOf("code");

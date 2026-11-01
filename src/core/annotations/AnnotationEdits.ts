@@ -38,17 +38,17 @@ export function applyTextRanges(content: string, ranges: TextRange[]): string {
   return result;
 }
 
-function countFootnoteReferences(
+export function countFootnoteReferences(
   content: string,
   definition: { id: string; range: TextRange },
-  deleteRanges: TextRange[]
+  excludeRanges: TextRange[] = []
 ): number {
   const pattern = new RegExp(`\\[\\^${escapeRegExp(definition.id)}\\]`, "g");
   let count = 0;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(content)) !== null) {
     if (match.index >= definition.range.start && match.index < definition.range.end) continue;
-    if (deleteRanges.some((range) => match!.index >= range.start && match!.index < range.end)) continue;
+    if (excludeRanges.some((range) => match!.index >= range.start && match!.index < range.end)) continue;
     count++;
   }
   return count;

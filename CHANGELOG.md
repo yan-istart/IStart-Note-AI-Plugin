@@ -7,8 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
-- Sidebar annotations: turn selections into `==highlights==` with inline `^[...]` or footnote `[^n]` comments, browse current-note or whole-vault highlights, comments and `%%Obsidian comments%%` from a right-sidebar view, click to jump back to the source, and search/filter/copy/remove entries. Annotations use plain Markdown and remain readable without the plugin.
+- Sidebar annotations: turn selections into `==highlights==` with inline `^[...]` or footnote `[^n]` comments, browse current-note or whole-vault highlights, comments and `%%Obsidian comments%%` from a right-sidebar view, click to jump back to the source, and search/filter/edit/copy/remove entries. Annotations use plain Markdown and remain readable without the plugin.
 - AI annotation drafting from a selection plus nearby context, with an editable preview before anything is written.
+- AI suggestions for an existing annotation: analyze the highlighted text, current comment and nearby context, preview Markdown suggestions, and optionally append them to the annotation. Editing preserves the original highlight and inline/footnote/Obsidian-comment format, including shared footnote handling.
 - Mobile annotation layout with larger touch targets, always-visible card menus, long-press actions, keyboard-safe dialog, and optional automatic sidebar collapse after jumping to the source. New settings tab for default comment style and mobile behavior.
 - Baidu Pan Git synchronization with a shared desktop/mobile JavaScript engine, immutable full/incremental Git bundles, three-way text merging, conflict resolution, commit history, and per-file restore.
 - Whole-vault version browsing with complete file lists, change summaries, scope counts, and project-wide restore previews. Restores preserve current changes in history, create a forward commit, and recover through the existing journal after interruption.

@@ -59,8 +59,8 @@ Writing projects live under the configurable `Writing/` root. Vault QA excludes 
 ### 3. Auxiliary
 
 - **AI assistant** — process a selection, current note, or cursor context with natural-language instructions; preview before replacing a selection, inserting, or appending, with options to copy results or create a concept page
-- **Sidebar annotations** — turn a selection into `==highlight==` with an inline or footnote comment, then browse the current note or whole vault from the right sidebar. Click to jump back, search/filter, copy, or remove. Existing `<mark>` highlights and `%%Obsidian comments%%` are recognized too
-- **AI annotation** — let the configured AI draft a comment from the selection and nearby context; review or edit before writing
+- **Sidebar annotations** — turn a selection into `==highlight==` with an inline or footnote comment, then browse the current note or whole vault from the right sidebar. Click to jump back, search/filter, edit, copy, or remove. Existing `<mark>` highlights and `%%Obsidian comments%%` are recognized too
+- **AI annotation** — let the configured AI draft a comment from the selection and nearby context; review or edit before writing. You can also request AI suggestions for an existing annotation and choose whether to append them
 - **AI service** — DeepSeek by default. API key and Base URL are configurable; requests use `POST {baseUrl}/v1/chat/completions`. The model dropdown only offers `deepseek-v4-flash` (default) and `deepseek-v4-pro`; another endpoint must accept the selected model name. There is no custom-model input or provider manager
 - **Beautify current document** — preview AI restructuring, Callouts, links, and optional Mermaid diagrams before replacing the full document
 - **Configurable output styles** — knowledge-base, technical, minimal, product, academic, story, dashboard
@@ -140,7 +140,7 @@ Settings are organized into four tabs:
 - **Command panel** — ribbon icon; three domain groups (Knowledge / Writing / Auxiliary); the Writing group is pinned first inside chapter files or project home pages
 - **Hotkeys** — the plugin does not register default hotkeys. Assign your preferred shortcuts in Settings → Hotkeys to AI assistant, continue writing, insert between passages, next chapter, new work, add annotation, or AI annotation.
 - **Status bar** — "Continue" / "Next chapter" buttons appear when a chapter file is open
-- **Annotations** — select text and run **Add annotation** or **AI annotation** from the command palette, editor menu, or command panel. The highlighter ribbon icon opens the annotation sidebar; click a card to jump back, or use its menu to copy or remove it.
+- **Annotations** — select text and run **Add annotation** or **AI annotation** from the command palette, editor menu, or command panel. The highlighter ribbon icon opens the annotation sidebar; click a card to jump back, or use its menu to edit it, request AI suggestions, copy, or remove it.
 - **Editor right-click** — AI assistant, Vault QA, concept completion, practical templates, document beautification, add annotation, and AI annotation; continuation, insertion, and their settings appear without a selection, while polish/expand/explain appear with a selection. Chapter notes also show character extraction.
 - **File right-click** — AI assistant / beautify; these handlers operate on the active editor, so open the target note first
 - **Cloud ribbon icon** — opens the Baidu sync sidebar with manual sync and version history in Git mode
@@ -148,7 +148,7 @@ Settings are organized into four tabs:
 ### Mobile
 
 - Open the command panel from the IStart-Note-AI icon in the navigation menu or the **Open command panel** command. Contextual shortcuts use Phosphor Duotone icons with short labels; other actions are under **All features**.
-- The annotation sidebar opens as a right drawer and starts on the current note. Controls meet mobile touch-target guidance, cards always expose a **More** button, and long-press also opens the action menu. Jumping to the source collapses the drawer by default (disable it in Settings → Annotations). The annotation dialog keeps submit reachable above the keyboard, and an AI draft does not automatically focus the textarea.
+- The annotation sidebar opens as a right drawer and starts on the current note. Controls meet mobile touch-target guidance, cards always expose a **More** button, and long-press also opens the action menu. Jumping to the source collapses the drawer by default (disable it in Settings → Annotations). The add/edit dialog keeps submit reachable above the keyboard, an AI draft does not automatically focus the textarea, and AI suggestions use the same mobile-safe result preview.
 - With prose on both sides of the cursor, the panel and assistant prioritize **插写** (insert between passages); at the end, they prioritize continuation. **All features** retains both writing entries.
 - Add commands such as continue, insert between passages, polish, expand, explain, summarize, and add annotation in **Settings → Interface → Configure mobile toolbar → Add a command**. Writing commands use matching Phosphor Bold icons; insertion uses arrows converging on the gap, while annotations use a highlighter icon.
 - The panel and assistant show **生成量** (generation quantity) directly on mobile and desktop. Reading mode offers an explicit switch to editing before writing actions become available. Standalone instructions in reading mode still receive the current document and produce a display-only preview.
@@ -225,7 +225,7 @@ src/
 
 ## Privacy
 
-AI features send your selection and partial note context to the configured chat-completions endpoint. AI annotations only use the network when you explicitly click **AI draft** or run **AI annotation**; ordinary highlights and comments are parsed locally. Sync features upload to your own Baidu Pan. Git sync excludes hidden paths, the Obsidian config directory, credentials, and Git metadata. History retains past content after deletion and has no additional encryption. Separate configuration sync excludes API keys and Baidu credentials. In file mode, enabling plugin backup uploads the plugin `data.json` (including credentials) and selected Obsidian configuration files. No telemetry. No plugin-operated servers. Full details in [PRIVACY.md](./PRIVACY.md).
+AI features send your selection and partial note context to the configured chat-completions endpoint. AI annotations only use the network when you explicitly click **AI draft**, **AI rewrite**, run **AI annotation**, or request **AI suggestions**; ordinary highlights, annotation editing, and sidebar parsing are local. Sync features upload to your own Baidu Pan. Git sync excludes hidden paths, the Obsidian config directory, credentials, and Git metadata. History retains past content after deletion and has no additional encryption. Separate configuration sync excludes API keys and Baidu credentials. In file mode, enabling plugin backup uploads the plugin `data.json` (including credentials) and selected Obsidian configuration files. No telemetry. No plugin-operated servers. Full details in [PRIVACY.md](./PRIVACY.md).
 
 ---
 

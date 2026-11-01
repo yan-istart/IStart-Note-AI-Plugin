@@ -2,19 +2,26 @@ import { App, ButtonComponent, Notice, Platform, Setting } from "obsidian";
 import { ActionModal } from "../../ui/ActionModal";
 import type { AnnotationCommentStyle, AnnotationRecord } from "../../core/annotations/AnnotationParser";
 
+export type AnnotationModalMode = "create" | "edit";
+
 export interface AnnotationModalOptions {
   selection: string;
   fileName: string;
   heading: string;
   defaultStyle: AnnotationCommentStyle;
   autoDraft: boolean;
-  draft: () => Promise<string>;
-  onSubmit: (comment: string, style: AnnotationCommentStyle) => void;
+  mode?: AnnotationModalMode;
+  initialComment?: string;
+  allowStyle?: boolean;
+  /** When false, an empty textarea cannot be submitted (used when adding a comment to an existing highlight). */
+  allowEmptyComment?: boolean;
+  draft: (currentComment: string) => Promise<string>;
+  onSubmit: (comment: string, style: AnnotationCommentStyle) => void | Promise<void>;
 }
 
 /**
- * Create a highlight or comment on the current selection.
- * The selection was captured before the modal opened, so changing focus cannot redirect the write.
+ * Create or edit a highlight/comment. Creation captures the selection before the modal opens,
+ * so changing focus cannot redirect the write; editing targets the annotation snapshot.
  */
 export class AnnotationModal extends ActionModal {
   private textareaEl!: HTMLTextAreaElement;
@@ -22,11 +29,14 @@ export class AnnotationModal extends ActionModal {
   private draftButton: HTMLButtonElement | null = null;
   private saveButton: ButtonComponent | null = null;
   private drafting = false;
+  private submitting = false;
 
   constructor(app: App, private options: AnnotationModalOptions) {
     super(app);
     this.style = options.defaultStyle;
-    this.titleEl.setText(options.autoDraft ? "AI 批注" : "添加批注");
+    this.titleEl.setText(options.mode === "edit"
+      ? "编辑批注"
+      : options.autoDraft ? "AI 批注" : "添加批注");
   }
 
   onOpen() {
@@ -43,7 +53,7 @@ export class AnnotationModal extends ActionModal {
       cls: "istart-annotation-draft-button",
       attr: { type: "button" },
     });
-    this.draftButton.setText("AI 草拟批注");
+    this.draftButton.setText(this.options.mode === "edit" ? "AI 重写批注" : "AI 草拟批注");
     this.draftButton.addEventListener("click", () => { void this.generateDraft(false); });
     draftRow.createSpan({
       text: "会发送选中文字和少量上下文",
@@ -53,37 +63,45 @@ export class AnnotationModal extends ActionModal {
     this.textareaEl = contentEl.createEl("textarea", {
       cls: "istart-annotation-textarea",
       attr: {
-        placeholder: "写下你的理解、疑问或联想…（留空则只添加高亮）",
+        placeholder: this.options.mode === "edit"
+          ? "修改这条批注…（留空则移除批注文字）"
+          : "写下你的理解、疑问或联想…（留空则只添加高亮）",
         rows: "4",
         "aria-label": "批注内容",
       },
     });
+    this.textareaEl.value = this.options.initialComment ?? "";
+    if (this.textareaEl.value) {
+      this.textareaEl.setSelectionRange(this.textareaEl.value.length, this.textareaEl.value.length);
+    }
     this.textareaEl.addEventListener("keydown", (event) => {
       if (!event.isComposing && (event.ctrlKey || event.metaKey) && event.key === "Enter") {
         event.preventDefault();
-        this.submit();
+        void this.submit();
       }
     });
     this.textareaEl.addEventListener("input", () => this.updateSaveLabel());
 
-    new Setting(contentEl)
-      .setName("批注形式")
-      .setDesc("行内批注紧跟在文字后；脚注批注集中到文末，适合长批注。")
-      .addDropdown((dropdown) => dropdown
-        .addOption("inline", "行内批注（推荐）")
-        .addOption("footnote", "脚注批注（文末集中）")
-        .setValue(this.style)
-        .onChange((value) => { this.style = value as AnnotationCommentStyle; }));
+    if (this.options.allowStyle !== false) {
+      new Setting(contentEl)
+        .setName("批注形式")
+        .setDesc("行内批注紧跟在文字后；脚注批注集中到文末，适合长批注。")
+        .addDropdown((dropdown) => dropdown
+          .addOption("inline", "行内批注（推荐）")
+          .addOption("footnote", "脚注批注（文末集中）")
+          .setValue(this.style)
+          .onChange((value) => { this.style = value as AnnotationCommentStyle; }));
+    }
 
     new Setting(this.actionsEl)
       .addButton((button) => {
         this.saveButton = button;
-        button.setButtonText("添加批注").setCta().onClick(() => this.submit());
+        button.setButtonText("添加批注").setCta().onClick(() => { void this.submit(); });
         return button;
       })
       .addButton((button) => button.setButtonText("取消").onClick(() => this.close()));
 
-    this.addMobileHeaderAction("添加", () => this.submit());
+    this.addMobileHeaderAction(this.options.mode === "edit" ? "保存" : "添加", () => { void this.submit(); });
     this.updateSaveLabel();
     this.focusOnDesktop(this.textareaEl);
 
@@ -92,7 +110,13 @@ export class AnnotationModal extends ActionModal {
 
   private updateSaveLabel(): void {
     if (!this.saveButton) return;
-    this.saveButton.setButtonText(this.textareaEl.value.trim() ? "添加批注" : "仅添加高亮");
+    if (this.options.allowEmptyComment === false) {
+      this.saveButton.setButtonText("添加批注");
+      return;
+    }
+    this.saveButton.setButtonText(this.options.mode === "edit"
+      ? "保存修改"
+      : this.textareaEl.value.trim() ? "添加批注" : "仅添加高亮");
   }
 
   private async generateDraft(onlyWhenEmpty: boolean): Promise<void> {
@@ -104,7 +128,7 @@ export class AnnotationModal extends ActionModal {
       this.draftButton.setText("AI 正在草拟…");
     }
     try {
-      const draft = await this.options.draft();
+      const draft = await this.options.draft(this.textareaEl.value.trim());
       if (!this.textareaEl.value.trim() || !onlyWhenEmpty) {
         this.textareaEl.value = draft;
         this.updateSaveLabel();
@@ -122,14 +146,25 @@ export class AnnotationModal extends ActionModal {
     }
   }
 
-  private submit(): void {
+  private async submit(): Promise<void> {
+    if (this.submitting) return;
     const comment = this.textareaEl.value.trim();
+    if (this.options.allowEmptyComment === false && !comment) {
+      new Notice("请输入批注内容");
+      return;
+    }
+    this.submitting = true;
+    this.saveButton?.setDisabled(true);
     try {
-      this.options.onSubmit(comment, this.style);
+      await this.options.onSubmit(comment, this.style);
       this.close();
-      new Notice(comment ? "已添加批注" : "已添加高亮");
+      if (this.options.mode === "edit") new Notice(comment ? "已保存批注" : "已移除批注文字");
+      else new Notice(comment ? "已添加批注" : "已添加高亮");
     } catch (error) {
-      new Notice(`添加失败：${(error as Error).message}`);
+      new Notice(`${this.options.mode === "edit" ? "保存" : "添加"}失败：${(error as Error).message}`);
+    } finally {
+      this.submitting = false;
+      this.saveButton?.setDisabled(false);
     }
   }
 

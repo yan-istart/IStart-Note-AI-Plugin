@@ -1,7 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
-import type { App, Editor, EditorPosition, TFile } from "obsidian";
+import type { App, Editor, EditorPosition } from "obsidian";
+import { TFile } from "obsidian";
 import type { EditorTarget } from "../../editor/EditorTarget";
-import { AnnotationService, escapeInlineComment, findCurrentAnnotation, nextFootnoteId } from "./AnnotationService";
+import { AnnotationService, applyTextEdits, escapeInlineComment, findCurrentAnnotation, nextFootnoteId } from "./AnnotationService";
 import { parseAnnotations } from "../../core/annotations/AnnotationParser";
 import { locateSourceRange } from "../../core/annotations/AnnotationNavigation";
 
@@ -31,12 +32,18 @@ function fixture(content: string, from: EditorPosition, to: EditorPosition) {
       }
     },
   } as unknown as Editor;
-  const file = { path: "note.md" } as TFile;
+  const file = new TFile();
+  file.path = "note.md";
   const app = {
     workspace: {
       activeEditor: { editor, file },
       getActiveFile: () => file,
       getLeavesOfType: () => [],
+    },
+    vault: {
+      getAbstractFileByPath: () => file,
+      read: async () => text,
+      modify: async (_file: TFile, value: string) => { text = value; },
     },
   } as unknown as App;
   const target: EditorTarget = {
@@ -113,7 +120,104 @@ describe("annotation writing", () => {
   });
 });
 
+describe("annotation editing", () => {
+  it("updates an inline comment in place", async () => {
+    const content = "前 ==重点==^[旧批注] 后";
+    const doc = fixture(content, { line: 0, ch: 2 }, { line: 0, ch: 4 });
+    const annotation = parseAnnotations(content)[0];
+    await new AnnotationService(doc.app).updateComment("note.md", annotation, "新批注", "inline");
+    expect(doc.text()).toBe("前 ==重点==^[新批注] 后");
+  });
+
+  it("adds a comment to a highlight that has none", async () => {
+    const content = "前 ==重点== 后";
+    const doc = fixture(content, { line: 0, ch: 2 }, { line: 0, ch: 4 });
+    const annotation = parseAnnotations(content)[0];
+    await new AnnotationService(doc.app).updateComment("note.md", annotation, "新批注", "inline");
+    expect(doc.text()).toBe("前 ==重点==^[新批注] 后");
+  });
+
+  it("normalizes multiple attached comments into one when editing", async () => {
+    const content = "==重点==^[第一条]^[第二条]";
+    const doc = fixture(content, { line: 0, ch: 2 }, { line: 0, ch: 4 });
+    const annotation = parseAnnotations(content)[0];
+    expect(annotation.commentParts).toHaveLength(2);
+    await new AnnotationService(doc.app).updateComment("note.md", annotation, "合并批注", "inline");
+    expect(doc.text()).toBe("==重点==^[合并批注]");
+  });
+
+  it("updates a footnote comment without changing its reference", async () => {
+    const content = "前 ==重点==[^1] 后\n\n[^1]: 旧批注\n";
+    const doc = fixture(content, { line: 0, ch: 2 }, { line: 0, ch: 4 });
+    const annotation = parseAnnotations(content).find((item) => item.source === "highlight")!;
+    await new AnnotationService(doc.app).updateComment("note.md", annotation, "新批注", "footnote");
+    expect(doc.text()).toBe("前 ==重点==[^1] 后\n\n[^1]: 新批注\n");
+  });
+
+  it("adds a footnote comment to a bare highlight", async () => {
+    const content = "前 ==重点== 后";
+    const doc = fixture(content, { line: 0, ch: 2 }, { line: 0, ch: 4 });
+    const annotation = parseAnnotations(content)[0];
+    await new AnnotationService(doc.app).updateComment("note.md", annotation, "脚注批注", "footnote");
+    expect(doc.text()).toBe("前 ==重点==[^1] 后\n\n[^1]: 脚注批注\n");
+  });
+
+  it("clears a footnote comment and its orphaned definition", async () => {
+    const content = "前 ==重点==[^1] 后\n\n[^1]: 旧批注\n";
+    const doc = fixture(content, { line: 0, ch: 2 }, { line: 0, ch: 4 });
+    const annotation = parseAnnotations(content).find((item) => item.source === "highlight")!;
+    await new AnnotationService(doc.app).updateComment("note.md", annotation, "", "footnote");
+    expect(doc.text()).toBe("前 ==重点== 后\n\n");
+  });
+
+  it("keeps a shared footnote definition when only this reference is removed", async () => {
+    const content = "==重点==[^1]\n\n另见[^1]\n\n[^1]: 共享批注\n";
+    const doc = fixture(content, { line: 0, ch: 2 }, { line: 0, ch: 4 });
+    const annotation = parseAnnotations(content).find((item) => item.source === "highlight")!;
+    await new AnnotationService(doc.app).updateComment("note.md", annotation, "", "footnote");
+    const result = doc.text();
+    expect(result).toContain("==重点==\n\n");
+    expect(result).toContain("另见[^1]");
+    expect(result).toContain("[^1]: 共享批注");
+  });
+
+  it("clears a comment while keeping the highlight", async () => {
+    const content = "前 ==重点==^[旧批注] 后";
+    const doc = fixture(content, { line: 0, ch: 2 }, { line: 0, ch: 4 });
+    const annotation = parseAnnotations(content)[0];
+    await new AnnotationService(doc.app).updateComment("note.md", annotation, "   ", "inline");
+    expect(doc.text()).toBe("前 ==重点== 后");
+  });
+
+  it("edits Obsidian comments", async () => {
+    const content = "正文 %%旧注释%% 结束";
+    const doc = fixture(content, { line: 0, ch: 0 }, { line: 0, ch: 1 });
+    const annotation = parseAnnotations(content)[0];
+    await new AnnotationService(doc.app).updateComment("note.md", annotation, "新注释", "inline");
+    expect(doc.text()).toBe("正文 %%新注释%% 结束");
+  });
+
+  it("detaches a footnote that is shared with another reference", async () => {
+    const content = "==重点==[^1]\n\n另见[^1]\n\n[^1]: 共享批注\n";
+    const doc = fixture(content, { line: 0, ch: 2 }, { line: 0, ch: 4 });
+    const annotation = parseAnnotations(content).find((item) => item.source === "highlight")!;
+    await new AnnotationService(doc.app).updateComment("note.md", annotation, "独立批注", "footnote");
+    const result = doc.text();
+    expect(result).toContain("==重点==[^2]");
+    expect(result).toContain("另见[^1]");
+    expect(result).toContain("[^1]: 共享批注");
+    expect(result).toContain("[^2]: 独立批注");
+  });
+});
+
 describe("annotation lookup helpers", () => {
+  it("applies an insertion at the same end boundary as a deletion", () => {
+    expect(applyTextEdits("abc", [
+      { start: 1, end: 3, text: "" },
+      { start: 3, end: 3, text: "X" },
+    ])).toBe("aX");
+  });
+
   it("chooses the next unused numeric footnote id", () => {
     expect(nextFootnoteId("a[^1] b[^3]")).toBe("2");
     expect(nextFootnoteId("a[^1] b[^2]")).toBe("3");

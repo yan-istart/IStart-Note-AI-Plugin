@@ -3,7 +3,7 @@ import type { EditorTarget } from "../../editor/EditorTarget";
 import { checkEditorTarget } from "../../editor/EditorTarget";
 import type { AnnotationCommentStyle, AnnotationRecord, TextRange } from "../../core/annotations/AnnotationParser";
 import { isUnsupportedAnnotationRange, parseAnnotations } from "../../core/annotations/AnnotationParser";
-import { applyTextRanges, buildDeletionRanges } from "../../core/annotations/AnnotationEdits";
+import { applyTextRanges, buildDeletionRanges, countFootnoteReferences } from "../../core/annotations/AnnotationEdits";
 
 export interface AddAnnotationOptions {
   target: EditorTarget;
@@ -14,6 +14,10 @@ export interface AddAnnotationOptions {
 export interface AddAnnotationResult {
   addedHighlight: boolean;
   addedComment: boolean;
+}
+
+interface TextEdit extends TextRange {
+  text: string;
 }
 
 export interface AnnotationSelectionInspection {
@@ -92,7 +96,7 @@ export function inspectAnnotationSelection(content: string, rawFrom: number, raw
   return { start, end, selected, alreadyHighlighted: false };
 }
 
-/** Write annotations in plain Obsidian Markdown and remove them safely. */
+/** Write, edit and remove annotations in plain Obsidian Markdown. */
 export class AnnotationService {
   constructor(private app: App) {}
 
@@ -163,6 +167,132 @@ export class AnnotationService {
     return { addedHighlight: !alreadyHighlighted, addedComment: !!comment };
   }
 
+  /** Edit the comment on an existing annotation while preserving its highlight and syntax. */
+  async updateComment(
+    path: string,
+    annotation: AnnotationRecord,
+    rawComment: string,
+    style: AnnotationCommentStyle
+  ): Promise<boolean> {
+    const file = this.app.vault.getAbstractFileByPath(path);
+    if (!(file instanceof TFile)) throw new Error("找不到原文件");
+
+    const editor = this.editorFor(file);
+    const content = editor ? editor.getValue() : await this.app.vault.read(file);
+    const current = findCurrentAnnotation(content, annotation);
+    if (!current) throw new Error("批注位置已变化，请刷新侧边栏后重试");
+
+    const comment = rawComment.trim();
+    const parts = current.commentParts;
+
+    const edits: TextEdit[] = [];
+
+    if (parts.length === 0) {
+      if (!comment) return false;
+      if (current.source !== "highlight" && current.source !== "mark") {
+        throw new Error("无法定位可编辑的批注");
+      }
+      const insertAt = closingSyntaxEnd(content, current);
+      if (insertAt === null) throw new Error("无法定位原高亮的结束位置");
+      let suffix = "";
+      let footnoteBlock = "";
+      if (style === "footnote") {
+        const id = nextFootnoteId(content);
+        suffix = `[^${id}]`;
+        footnoteBlock = buildFootnoteBlock(content, id, comment);
+      } else {
+        suffix = formatInlineComment(comment);
+      }
+      if (footnoteBlock && insertAt === content.length) {
+        suffix += footnoteBlock;
+        footnoteBlock = "";
+      }
+      edits.push({ start: insertAt, end: insertAt, text: suffix });
+      if (footnoteBlock) edits.push({ start: content.length, end: content.length, text: footnoteBlock });
+    } else if (!comment) {
+      // Clear all comments, keeping the highlight and removing orphaned definitions.
+      const removedMarkers = parts.map((part) => part.markerRange);
+      for (const part of parts) {
+        edits.push({ ...part.markerRange, text: "" });
+        if (part.source === "footnote" && part.footnoteId && part.definitionRange) {
+          const remaining = countFootnoteReferences(
+            content,
+            { id: part.footnoteId, range: part.definitionRange },
+            removedMarkers
+          );
+          if (remaining === 0) edits.push({ ...part.definitionRange, text: "" });
+        }
+      }
+    } else if (parts.length > 1) {
+      // Normalize multiple manually-attached comments into one editable comment.
+      const removedMarkers = parts.map((part) => part.markerRange);
+      let suffix = "";
+      let footnoteBlock = "";
+      if (style === "footnote") {
+        const id = nextFootnoteId(content);
+        suffix = `[^${id}]`;
+        footnoteBlock = buildFootnoteBlock(content, id, comment);
+      } else {
+        suffix = formatInlineComment(comment);
+      }
+      edits.push({ ...parts[0].markerRange, text: suffix });
+      for (let index = 1; index < parts.length; index++) {
+        edits.push({ ...parts[index].markerRange, text: "" });
+      }
+      const seenDefinitions = new Set<string>();
+      for (const part of parts) {
+        if (part.source !== "footnote" || !part.footnoteId || !part.definitionRange) continue;
+        const key = `${part.definitionRange.start}:${part.definitionRange.end}`;
+        if (seenDefinitions.has(key)) continue;
+        seenDefinitions.add(key);
+        const remaining = countFootnoteReferences(
+          content,
+          { id: part.footnoteId, range: part.definitionRange },
+          removedMarkers
+        );
+        if (remaining === 0) edits.push({ ...part.definitionRange, text: "" });
+      }
+      if (footnoteBlock) edits.push({ start: content.length, end: content.length, text: footnoteBlock });
+    } else {
+      const part = parts[0];
+      if (part.source === "inline-comment") {
+        edits.push({ ...part.markerRange, text: formatInlineComment(comment) });
+      } else if (part.source === "obsidian-comment") {
+        edits.push({ ...part.markerRange, text: formatObsidianComment(comment) });
+      } else if (part.footnoteId && part.definitionRange) {
+        const shared = countFootnoteReferences(
+          content,
+          { id: part.footnoteId, range: part.definitionRange },
+          [part.markerRange]
+        ) > 0;
+        if (shared) {
+          // Another reference owns this footnote: detach a new footnote for this annotation.
+          const id = nextFootnoteId(content);
+          edits.push({ ...part.markerRange, text: `[^${id}]` });
+          edits.push({ start: content.length, end: content.length, text: buildFootnoteBlock(content, id, comment) });
+        } else {
+          const original = content.slice(part.definitionRange.start, part.definitionRange.end);
+          const trailingNewline = original.endsWith("\n");
+          edits.push({
+            ...part.definitionRange,
+            text: `${formatFootnoteDefinition(part.footnoteId, comment)}${trailingNewline ? "\n" : ""}`,
+          });
+        }
+      } else {
+        // Broken footnote data: fall back to an inline comment rather than losing the edit.
+        edits.push({ ...part.markerRange, text: formatInlineComment(comment) });
+      }
+    }
+
+    if (edits.length === 0) return false;
+    if (editor) {
+      editor.transaction({ changes: textEditsToChanges(editor, edits) });
+    } else {
+      await this.app.vault.modify(file, applyTextEdits(content, edits));
+    }
+    return true;
+  }
+
   /** Remove syntax and comments for one annotation. Annotated text is preserved. */
   async remove(path: string, annotation: AnnotationRecord): Promise<boolean> {
     const file = this.app.vault.getAbstractFileByPath(path);
@@ -229,11 +359,76 @@ export function escapeInlineComment(comment: string): string {
     .trim();
 }
 
+function formatInlineComment(comment: string): string {
+  return `^[${escapeInlineComment(comment)}]`;
+}
+
+function formatObsidianComment(comment: string): string {
+  return `%%${comment.replace(/%%/g, "% %")}%%`;
+}
+
+function footnoteBody(comment: string): string {
+  return comment
+    .split(/\r?\n/)
+    .map((line, index) => (index === 0 ? line : `    ${line}`))
+    .join("\n");
+}
+
+function formatFootnoteDefinition(id: string, comment: string): string {
+  return `[^${id}]: ${footnoteBody(comment)}`;
+}
+
 function buildFootnoteBlock(content: string, id: string, comment: string): string {
-  const lines = comment.split(/\r?\n/);
-  const body = lines.map((line, index) => (index === 0 ? line : `    ${line}`)).join("\n");
   const prefix = content.endsWith("\n\n") ? "" : content.endsWith("\n") ? "\n" : "\n\n";
-  return `${prefix}[^${id}]: ${body}\n`;
+  return `${prefix}${formatFootnoteDefinition(id, comment)}\n`;
+}
+
+/** End offset just after the highlight's closing marker/tag. */
+export function closingSyntaxEnd(content: string, annotation: AnnotationRecord): number | null {
+  if (annotation.source === "highlight") return annotation.contentEnd + 2;
+  if (annotation.source === "mark") {
+    const closing = content.indexOf("</mark>", annotation.contentEnd);
+    return closing === -1 ? null : closing + "</mark>".length;
+  }
+  return null;
+}
+
+export function applyTextEdits(content: string, edits: TextEdit[]): string {
+  const sorted = normalizeTextEdits(edits);
+  let cursor = 0;
+  let result = "";
+  for (const edit of sorted) {
+    result += content.slice(cursor, edit.start) + edit.text;
+    cursor = edit.end;
+  }
+  return result + content.slice(cursor);
+}
+
+function textEditsToChanges(editor: Editor, edits: TextEdit[]): EditorChange[] {
+  return normalizeTextEdits(edits)
+    .sort((a, b) => b.start - a.start)
+    .map((edit) => ({
+      from: editor.offsetToPos(edit.start),
+      to: editor.offsetToPos(edit.end),
+      text: edit.text,
+    }));
+}
+
+function normalizeTextEdits(edits: TextEdit[]): TextEdit[] {
+  const sorted = edits
+    .filter((edit) => Number.isFinite(edit.start) && Number.isFinite(edit.end) && edit.end >= edit.start)
+    .slice()
+    .sort((a, b) => a.start - b.start || a.end - b.end || a.text.localeCompare(b.text));
+  const unique: TextEdit[] = [];
+  for (const edit of sorted) {
+    const previous = unique[unique.length - 1];
+    if (previous && previous.start === edit.start && previous.end === edit.end && previous.text === edit.text) continue;
+    unique.push(edit);
+  }
+  for (let index = 1; index < unique.length; index++) {
+    if (unique[index].start < unique[index - 1].end) throw new Error("批注编辑范围重叠，请刷新后重试");
+  }
+  return unique;
 }
 
 function startsBlockMarkdown(line: string): boolean {
