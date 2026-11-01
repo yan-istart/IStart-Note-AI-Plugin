@@ -29,6 +29,7 @@ export class DeepSeekClient {
       systemPrompt: SYSTEM_PROMPT,
       userPrompt: question,
       temperature: 0.7,
+      skillFeature: "knowledge",
     });
 
     if (!content) {

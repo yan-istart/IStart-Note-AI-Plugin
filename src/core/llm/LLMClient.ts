@@ -1,5 +1,8 @@
 import { requestUrl } from "obsidian";
 import { DeepSeekSettings } from "../../types";
+import type { SkillDefinition, SkillFeature } from "../skills/types";
+import { resolveActiveSkills } from "../skills/SkillRuntime";
+import { renderSkillInstructions } from "../skills/SkillPrompt";
 
 /**
  * Unified LLM chat-completion client.
@@ -35,6 +38,16 @@ export interface LLMChatOptions {
   maxTokens?: number;
   /** Applied to the official DeepSeek endpoint only; compatible providers keep their existing payload. */
   thinking?: "enabled" | "disabled";
+  /** Identifies the calling feature for writing-skill selection. */
+  skillFeature?: SkillFeature;
+  /** Optional writing scope for calls made before a file is active (for example, planning a new work). */
+  skillContext?: {
+    genre?: string;
+    projectTitle?: string;
+    projectPath?: string;
+    /** Set false when the active note is unrelated (for example, new-project planning). */
+    useActiveFile?: boolean;
+  };
 }
 
 interface ChatCompletionResponse {
@@ -75,9 +88,28 @@ export class LLMClient {
   async chat(options: LLMChatOptions): Promise<string> {
     this.ensureApiKey();
 
+    let activeSkills: SkillDefinition[] = [];
+    try {
+      activeSkills = await resolveActiveSkills({
+        systemPrompt: options.systemPrompt,
+        userPrompt: options.userPrompt,
+        feature: options.skillFeature ?? "other",
+        genre: options.skillContext?.genre,
+        projectTitle: options.skillContext?.projectTitle,
+        projectPath: options.skillContext?.projectPath,
+        useActiveFile: options.skillContext?.useActiveFile,
+      });
+    } catch {
+      // A malformed skill or unreadable vault must never block the AI request.
+      activeSkills = [];
+    }
+    const systemPrompt = [options.systemPrompt, renderSkillInstructions(activeSkills)]
+      .filter((part): part is string => !!part)
+      .join("\n\n");
+
     const messages: { role: "system" | "user"; content: string }[] = [];
-    if (options.systemPrompt) {
-      messages.push({ role: "system", content: options.systemPrompt });
+    if (systemPrompt) {
+      messages.push({ role: "system", content: systemPrompt });
     }
     messages.push({ role: "user", content: options.userPrompt });
 

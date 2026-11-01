@@ -13,6 +13,7 @@ import type DeepSeekPlugin from "../../main";
 import type { AnnotationCommentStyle, AnnotationRecord } from "../../core/annotations/AnnotationParser";
 import { parseAnnotations } from "../../core/annotations/AnnotationParser";
 import { locateSourceRange } from "../../core/annotations/AnnotationNavigation";
+import { resolveWritingScope } from "../../core/skills/WritingScope";
 import { draftAnnotation, suggestFromAnnotation } from "../../ai/AnnotationAssistant";
 import { AssistantResultModal } from "../assistant/AssistantModal";
 import { AnnotationDeleteModal, AnnotationModal } from "./AnnotationModal";
@@ -683,6 +684,7 @@ export class AnnotationView extends ItemView {
       before: context.before,
       after: context.after,
       existingComment: existingComment || undefined,
+      skillContext: await this.skillContextFor(annotation),
     });
   }
 
@@ -702,6 +704,7 @@ export class AnnotationView extends ItemView {
         comment: this.commentText(annotation),
         before: context.before,
         after: context.after,
+        skillContext: await this.skillContextFor(annotation),
       });
       notice.hide();
       if (!this.opened) return;
@@ -773,6 +776,21 @@ export class AnnotationView extends ItemView {
       before: content.slice(Math.max(0, start - 600), start),
       after: content.slice(end, end + 600),
     };
+  }
+
+  private async skillContextFor(annotation: AnnotationItem): Promise<{
+    genre: string;
+    projectTitle: string;
+    projectPath: string;
+  } | undefined> {
+    const file = this.app.vault.getAbstractFileByPath(annotation.path);
+    if (!(file instanceof TFile)) return undefined;
+    const scope = await resolveWritingScope(this.app, file);
+    return scope ? {
+      genre: scope.genre,
+      projectTitle: scope.projectTitle,
+      projectPath: scope.projectPath,
+    } : undefined;
   }
 
   private refreshAfterWrite(path: string): void {

@@ -64,6 +64,7 @@ export interface ContinueRequest extends InsertRequest {
 /** 续写/生成章节时的作品级上下文 */
 export interface WritingContext {
   projectTitle: string;
+  projectPath?: string;
   oneLiner: string;
   styleProfile: string;
   genre: WritingGenre;

@@ -20,7 +20,12 @@ export async function generateWritingText(llm: LLMClient, options: LLMChatOption
     throw new Error(`生成目标超出范围，请在生成量设置中调整目标字数`);
   }
   const maxTokens = Math.max(2048, Math.ceil(targetWords * 3) + 512);
-  const request: LLMChatOptions = { ...options, maxTokens, thinking: "disabled" };
+  const request: LLMChatOptions = {
+    ...options,
+    maxTokens,
+    thinking: "disabled",
+    skillFeature: options.skillFeature ?? "writing",
+  };
   try {
     return await llm.chat(request);
   } catch (error) {

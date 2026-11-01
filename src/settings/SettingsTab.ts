@@ -1,12 +1,14 @@
 import { App, Notice, PluginSettingTab, Setting } from "obsidian";
 import type DeepSeekPlugin from "../main";
 import type { DeepSeekSettings } from "../types";
+import type { SkillDefinition } from "../core/skills/types";
 import { BaiduAuthModal } from "../features/sync/BaiduAuthModal";
 
-type SettingsSection = "knowledge" | "writing" | "annotation" | "auxiliary";
+type SettingsSection = "knowledge" | "writing" | "skill" | "annotation" | "interface" | "auxiliary";
 
 export class DeepSeekSettingsTab extends PluginSettingTab {
   private activeSection: SettingsSection = "auxiliary"; // start with AI setup
+  private skillListGeneration = 0;
 
   constructor(app: App, private plugin: DeepSeekPlugin) {
     super(app, plugin);
@@ -36,7 +38,9 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
     const sections: { id: SettingsSection; label: string }[] = [
       { id: "knowledge", label: "知识" },
       { id: "writing", label: "写作" },
+      { id: "skill", label: "Skill" },
       { id: "annotation", label: "批注" },
+      { id: "interface", label: "界面" },
       { id: "auxiliary", label: "辅助" },
     ];
 
@@ -60,8 +64,14 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
       case "writing":
         this.renderWriting(container);
         break;
+      case "skill":
+        this.renderSkill(container);
+        break;
       case "annotation":
         this.renderAnnotation(container);
+        break;
+      case "interface":
+        this.renderInterface(container);
         break;
       case "auxiliary":
         this.renderAuxiliary(container);
@@ -187,6 +197,135 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
   }
 
   // ══════════════════════════════════════════════════════════════
+  //  写作 Skill
+  // ══════════════════════════════════════════════════════════════
+
+  private renderSkill(el: HTMLElement): void {
+    new Setting(el).setName("写作 Skill").setHeading();
+    el.createEl("p", {
+      text: "读取标准 Agent Skills：<skill-id>/SKILL.md。公共写作技巧建议标为 global，体裁规范标为 genre，单个作品的规则标为 project。Codex 与 OpenCode 可直接从 .agents/skills 发现同一份文件。",
+      attr: { style: "color: var(--text-muted); font-size: 13px; line-height: 1.5;" },
+    });
+
+    new Setting(el)
+      .setName("启用自动附带")
+      .setDesc("开启后，符合条件的 Skill 会注入所有写作类 AI 请求。")
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.skills.enabled)
+        .onChange(async (value) => {
+          this.plugin.settings.skills.enabled = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(el)
+      .setName("仅在写作场景注入")
+      .setDesc("关闭后，标记为 apply: all 的全局 Skill 也会进入知识问答等其他 AI 请求。")
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.skills.writingOnly)
+        .onChange(async (value) => {
+          this.plugin.settings.skills.writingOnly = value;
+          await this.plugin.saveSettings();
+        }));
+
+    let listEl: HTMLElement | null = null;
+    let refreshTimer: number | undefined;
+    new Setting(el)
+      .setName("Skill 根目录")
+      .setDesc("每行一个 Vault 相对路径。默认 Skills 与 .agents/skills；不读取 Vault 外路径。")
+      .addTextArea((text) => {
+        text.setValue(this.plugin.settings.skills.roots.join("\n"));
+        text.inputEl.rows = 3;
+        text.inputEl.addClass("istart-skill-roots");
+        text.onChange(async (value) => {
+          this.plugin.settings.skills.roots = value
+            .split(/\r?\n/)
+            .map((root) => root.trim())
+            .filter(Boolean);
+          await this.plugin.saveSettings();
+          this.plugin.skillRegistry.invalidate();
+          if (refreshTimer !== undefined) window.clearTimeout(refreshTimer);
+          refreshTimer = window.setTimeout(() => {
+            this.plugin.knowledgeIndex.rebuild();
+            void this.plugin.skillRegistry.refresh().then(() => {
+              if (listEl) void this.renderSkillList(listEl);
+            });
+          }, 400);
+        });
+      });
+
+    new Setting(el)
+      .setName("最大注入字符")
+      .setDesc("作品级 Skill 优先占用预算，其次是体裁级和通用 Skill。")
+      .addText((text) => text
+        .setPlaceholder("6000")
+        .setValue(String(this.plugin.settings.skills.maxChars))
+        .onChange(async (value) => {
+          const parsed = Number(value);
+          if (!Number.isFinite(parsed) || parsed <= 0) return;
+          this.plugin.settings.skills.maxChars = Math.min(20000, Math.round(parsed));
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(el)
+      .setName("已发现 Skill")
+      .setDesc("关闭某个 Skill 只会影响插件自动注入，不影响 Codex / OpenCode 的发现。")
+      .addButton((button) => button.setButtonText("重新扫描").onClick(async () => {
+        await this.plugin.skillRegistry.refresh();
+        this.display();
+      }));
+
+    listEl = el.createDiv({ cls: "istart-skill-list" });
+    void this.renderSkillList(listEl);
+  }
+
+  private async renderSkillList(container: HTMLElement): Promise<void> {
+    const generation = ++this.skillListGeneration;
+    container.empty();
+    container.createEl("p", {
+      text: "扫描中…",
+      attr: { style: "color: var(--text-muted); font-size: 13px;" },
+    });
+    const skills = await this.plugin.skillRegistry.ensureLoaded();
+    if (generation !== this.skillListGeneration) return;
+    container.empty();
+
+    if (skills.length === 0) {
+      container.createEl("p", {
+        text: "还没有发现 Skill。新建 Skills/writing-craft/SKILL.md，或把 Skill 放到 .agents/skills。",
+        attr: { style: "color: var(--text-muted); font-size: 13px; line-height: 1.5;" },
+      });
+      return;
+    }
+
+    const disabled = new Set(this.plugin.settings.skills.disabledSkillIds);
+    for (const skill of skills) {
+      const setting = new Setting(container)
+        .setName(skill.name)
+        .setDesc(`${this.skillScopeLabel(skill)} · ${skill.description || "无描述"}`)
+        .addToggle((toggle) => toggle
+          .setValue(!disabled.has(skill.id))
+          .onChange(async (value) => {
+            const next = new Set(this.plugin.settings.skills.disabledSkillIds);
+            if (value) next.delete(skill.id);
+            else next.add(skill.id);
+            this.plugin.settings.skills.disabledSkillIds = [...next];
+            await this.plugin.saveSettings();
+          }));
+      setting.descEl.createEl("div", { text: skill.path, cls: "istart-skill-path" });
+    }
+  }
+
+  private skillScopeLabel(skill: SkillDefinition): string {
+    if (skill.scope === "project") {
+      return `作品：${skill.project || skill.projectPath || skill.id}`;
+    }
+    if (skill.scope === "genre") {
+      return `体裁：${skill.genre || "全部"}`;
+    }
+    return "通用";
+  }
+
+  // ══════════════════════════════════════════════════════════════
   //  批注
   // ══════════════════════════════════════════════════════════════
 
@@ -233,6 +372,62 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
     });
     el.createEl("p", {
       text: "AI 草拟只在你主动点击时发送选中文字和少量上下文到已配置的 AI 服务；普通批注不会联网。",
+      attr: { style: "color: var(--text-muted); font-size: 13px; line-height: 1.5;" },
+    });
+  }
+
+  // ══════════════════════════════════════════════════════════════
+  //  界面
+  // ══════════════════════════════════════════════════════════════
+
+  private renderInterface(el: HTMLElement): void {
+    new Setting(el).setName("悬浮工具栏").setHeading();
+    el.createEl("p", {
+      text: "在编辑器选中文字后显示快捷操作栏，按钮会根据当前选区、文件类型和可用功能自动过滤。末尾「更多」打开完整功能面板。",
+      attr: { style: "color: var(--text-muted); font-size: 13px; line-height: 1.5;" },
+    });
+
+    new Setting(el)
+      .setName("启用悬浮工具栏")
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.floatingToolbar.enabled)
+        .onChange(async (value) => {
+          this.plugin.settings.floatingToolbar.enabled = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(el)
+      .setName("选中文字时显示")
+      .setDesc("选中文字后短暂停顿再显示，避免拖动选择时闪烁。")
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.floatingToolbar.showOnSelection)
+        .onChange(async (value) => {
+          this.plugin.settings.floatingToolbar.showOnSelection = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(el)
+      .setName("光标空闲时显示入口")
+      .setDesc("无选区时，在光标旁显示一个小按钮；点击后展开续写、插写、总结等操作。默认关闭。")
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.floatingToolbar.showAtCursor)
+        .onChange(async (value) => {
+          this.plugin.settings.floatingToolbar.showAtCursor = value;
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(el)
+      .setName("移动端启用")
+      .setDesc("移动端已有原生选区菜单，默认关闭，避免与选区手柄和键盘工具栏重叠。")
+      .addToggle((toggle) => toggle
+        .setValue(this.plugin.settings.floatingToolbar.mobile)
+        .onChange(async (value) => {
+          this.plugin.settings.floatingToolbar.mobile = value;
+          await this.plugin.saveSettings();
+        }));
+
+    el.createEl("p", {
+      text: "当前工具栏只覆盖编辑模式；阅读模式的悬浮操作仍使用 Obsidian 原生菜单和插件命令面板。",
       attr: { style: "color: var(--text-muted); font-size: 13px; line-height: 1.5;" },
     });
   }

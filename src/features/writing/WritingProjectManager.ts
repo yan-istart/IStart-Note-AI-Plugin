@@ -280,6 +280,7 @@ ${novelSections}
     const genreValue = fmString(fm, "genre") || fmString(projectFm, "genre");
     return {
       projectTitle: fmString(projectFm, "title") || fmString(fm, "project") || chapterFile.basename,
+      projectPath: folder,
       oneLiner: fmString(projectFm, "one_liner") || "",
       styleProfile: fmString(projectFm, "style_profile") || "",
       genre: (genreValue as WritingGenre) || "article",

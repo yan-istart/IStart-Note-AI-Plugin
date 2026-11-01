@@ -23,10 +23,10 @@
 IStart-Note-AI is an Obsidian plugin built around three business scenarios: **Knowledge** (read in), **Writing** (write out), and **Auxiliary** (cross-device support).
 
 - Knowledge: turn scattered notes into a searchable, interlinked knowledge system
-- Writing: turn ideas into works — web novels, papers, long-form articles
-- Auxiliary: AI assistant, document beautification, model settings, Baidu Pan sync
+- Writing: turn ideas into works — web novels, papers, long-form articles — with shared and work-specific writing skills
+- Auxiliary: AI assistant, sidebar annotations, document beautification, model settings, Baidu Pan sync
 
-> Documentation reflects the current source tree. `package.json` and `manifest.json` declare version **2.2.6**; minimum Obsidian version: **1.7.2**. The UI currently uses Chinese labels; English names below describe those controls.
+> Documentation reflects the current source tree. `package.json` and `manifest.json` declare version **2.4.1**; minimum Obsidian version: **1.7.2**. The UI currently uses Chinese labels; English names below describe those controls.
 
 ---
 
@@ -53,8 +53,57 @@ Create and grow your works. Three genres: **web novel / paper / article**.
 - **Generate next chapter** — from the outline synopsis, preview before writing
 - **Polish** — rewrite a selection while keeping the work's voice
 - **Extract characters** — for novels, analyze up to the first 6,000 characters of the current chapter and write character cards into `_角色/`
+- **Writing skills** — read standard Agent Skills `SKILL.md` files and automatically attach global craft rules, genre guidance, and the current work's rules. Codex and OpenCode can discover the same files. See [Writing skills](./docs/skills.md)
 
 Writing projects live under the configurable `Writing/` root. Vault QA excludes `chapter`, `writing-project`, `character`, `setting`, `outline`, and `snippet` frontmatter types. This filter has no settings toggle and does not exclude an entire directory; untyped notes and imported `reference` notes may still be retrieved.
+
+#### Writing skills quick setup
+
+Writing skills use the standard Agent Skills `SKILL.md` format and are matched in three layers:
+
+| Scope | Use | Auto-attached when |
+| --- | --- | --- |
+| `global` | Shared craft rules, revision checklists, general conventions | A writing AI request runs |
+| `genre` | Web-novel, paper, or article-specific rules | The current work's genre matches |
+| `project` | One work's voice, taboos, pacing, and continuity checklist | The current file belongs to that work |
+
+Recommended layout:
+
+```text
+Skills/
+  writing-craft/SKILL.md       # shared craft rules
+  writing-webnovel/SKILL.md    # genre guidance
+  work-<work>/SKILL.md         # work-specific rules
+.agents/skills/                # Codex/OpenCode bridge
+```
+
+Work-skill frontmatter example:
+
+```yaml
+---
+name: Example Work · Writing Rules
+description: Use only when writing or editing the work "Example Work".
+metadata:
+  istart/scope: project
+  istart/project: Example Work
+  istart/project-path: Writing/Novels/Example Work
+  istart/genre: novel
+  istart/priority: 30
+---
+```
+
+The plugin walks up from the chapter file to `_作品.md`, then infers the work title, folder, and genre. Injection order is global → genre → project, with the most specific rules taking precedence. Keep plot, characters, and worldbuilding in `_作品.md`, `_大纲.md`, `_角色/`, and `_设定/`; put only procedural writing guidance in the skill. Skill files are excluded from the Vault QA index.
+
+Codex/OpenCode can read the same files:
+
+```bash
+cd <vault>
+mkdir -p .agents/skills
+ln -s ../../Skills/writing-craft .agents/skills/writing-craft
+ln -s ../../Skills/work-example .agents/skills/work-example
+```
+
+OpenCode can also use `"skills": ["./Skills"]`. Then open **Settings → Skill → Rescan** to review and toggle skills. See [Writing skills](./docs/skills.md) for the full guide and examples.
 
 ### 3. Auxiliary
 
@@ -62,6 +111,7 @@ Writing projects live under the configurable `Writing/` root. Vault QA excludes 
 - **Sidebar annotations** — turn a selection into `==highlight==` with an inline or footnote comment, then browse the current note or whole vault from the right sidebar. Click to jump back, search/filter, edit, copy, or remove. Existing `<mark>` highlights and `%%Obsidian comments%%` are recognized too
 - **AI annotation** — let the configured AI draft a comment from the selection and nearby context; review or edit before writing. You can also request AI suggestions for an existing annotation and choose whether to append them
 - **AI service** — DeepSeek by default. API key and Base URL are configurable; requests use `POST {baseUrl}/v1/chat/completions`. The model dropdown only offers `deepseek-v4-flash` (default) and `deepseek-v4-pro`; another endpoint must accept the selected model name. There is no custom-model input or provider manager
+- **Floating toolbar** — select text in the editor to see the currently applicable actions. An optional cursor-idle trigger expands continue, insert, summarize, and other actions next to the cursor. Disabled on mobile by default to avoid overlapping native selection menus
 - **Beautify current document** — preview AI restructuring, Callouts, links, and optional Mermaid diagrams before replacing the full document
 - **Configurable output styles** — knowledge-base, technical, minimal, product, academic, story, dashboard
 - **Optional Baidu Pan sync** — Git history, incremental bidirectional sync, text merging, and per-file version restore; the original file-backup mode remains available
@@ -83,6 +133,8 @@ Sync is disabled by default. New installations default to Git mode; older config
 - Generation quantities are approximate prose-length targets. Previews show the actual character count, excluding whitespace and including punctuation.
 - Git sync has automated engine and adapter tests. Actual Baidu authorization/network behavior and Android/iOS device behavior still require installation testing; see the sync documentation.
 - Creating an annotation requires a text selection in editing mode. Text selection in reading mode is not supported for creation, though sidebar navigation works in both modes. There is no custom highlight-color picker; existing `<mark>` colors are displayed. The vault tab reads every Markdown note on first scan and lists at most 300 results, so use search and filters in large vaults. Selections crossing blank lines, heading/list blocks, or code blocks must be annotated in smaller parts.
+- Writing skills inject only the `SKILL.md` body; `references/` and `scripts/` are not read or executed by the plugin. Codex/OpenCode auto-invocation depends on the description and is not guaranteed. `.agents` is hidden and the plugin's Git sync excludes hidden paths by default, so keep `Skills/` as the visible canonical root.
+- The floating toolbar currently covers editing mode only; reading mode uses Obsidian's native menu. It is off on mobile by default to avoid overlapping the native selection menu, handles, and keyboard toolbar. The cursor-idle trigger is off by default.
 
 ---
 
@@ -93,6 +145,7 @@ Sync is disabled by default. New installations default to Git mode; older config
 3. Click the brain ribbon icon → **AI 助手**, or open Obsidian’s command palette and select an IStart-Note-AI command.
 4. Type a request in natural language — or create a work and continue writing in the **Writing** group.
 5. To take reading notes, select text and run **Add annotation** or **AI annotation**; the highlighter ribbon icon opens the annotation sidebar.
+6. To standardize writing rules, add a `SKILL.md` under `Skills/`, then open **Settings → Skill → Rescan**.
 
 ---
 
@@ -122,13 +175,15 @@ npm run build
 
 Default AI settings: Base URL `https://api.deepseek.com`, model `deepseek-v4-flash`, output style `knowledge-base`. Enter the root URL without a trailing slash or `/v1/chat/completions`, since the client appends that suffix.
 
-Settings are organized into four tabs:
+Settings are organized into six tabs:
 
 | Tab | Key settings |
 | --- | --- |
 | **Knowledge** | Q&A path, Concepts path, Questions index path, index status + rebuild |
 | **Writing** | Works path (`Writing`), full document/project context by default; nearby mode uses 2,000 characters per side, continuation target (800 Chinese characters), insertion target (200 Chinese characters) |
+| **Skill** | Enable auto-attach, writing-only scope, skill roots, maximum injected characters, discovered skill list |
 | **Annotations** | Default inline/footnote comment style, collapse sidebar after mobile navigation, open annotation sidebar |
+| **Interface** | Floating toolbar toggle, show on selection, cursor-idle trigger, mobile enable |
 | **Auxiliary** | API key, Base URL, model, output style, Baidu sync |
 
 ---
@@ -141,6 +196,7 @@ Settings are organized into four tabs:
 - **Hotkeys** — the plugin does not register default hotkeys. Assign your preferred shortcuts in Settings → Hotkeys to AI assistant, continue writing, insert between passages, next chapter, new work, add annotation, or AI annotation.
 - **Status bar** — "Continue" / "Next chapter" buttons appear when a chapter file is open
 - **Annotations** — select text and run **Add annotation** or **AI annotation** from the command palette, editor menu, or command panel. The highlighter ribbon icon opens the annotation sidebar; click a card to jump back, or use its menu to edit it, request AI suggestions, copy, or remove it.
+- **Floating toolbar** — select text to see annotation, AI annotation, polish, expand, and explain actions; **More** opens the full command panel. Enable a cursor-idle trigger under Settings → Interface if desired.
 - **Editor right-click** — AI assistant, Vault QA, concept completion, practical templates, document beautification, add annotation, and AI annotation; continuation, insertion, and their settings appear without a selection, while polish/expand/explain appear with a selection. Chapter notes also show character extraction.
 - **File right-click** — AI assistant / beautify; these handlers operate on the active editor, so open the target note first
 - **Cloud ribbon icon** — opens the Baidu sync sidebar with manual sync and version history in Git mode
@@ -149,6 +205,7 @@ Settings are organized into four tabs:
 
 - Open the command panel from the IStart-Note-AI icon in the navigation menu or the **Open command panel** command. Contextual shortcuts use Phosphor Duotone icons with short labels; other actions are under **All features**.
 - The annotation sidebar opens as a right drawer and starts on the current note. Controls meet mobile touch-target guidance, cards always expose a **More** button, and long-press also opens the action menu. Jumping to the source collapses the drawer by default (disable it in Settings → Annotations). The add/edit dialog keeps submit reachable above the keyboard, an AI draft does not automatically focus the textarea, and AI suggestions use the same mobile-safe result preview.
+- The floating toolbar is disabled on mobile by default. Enable it under Settings → Interface if needed; it uses larger touch targets but may overlap Obsidian's native selection menu and selection handles.
 - With prose on both sides of the cursor, the panel and assistant prioritize **插写** (insert between passages); at the end, they prioritize continuation. **All features** retains both writing entries.
 - Add commands such as continue, insert between passages, polish, expand, explain, summarize, and add annotation in **Settings → Interface → Configure mobile toolbar → Add a command**. Writing commands use matching Phosphor Bold icons; insertion uses arrows converging on the gap, while annotations use a highlighter icon.
 - The panel and assistant show **生成量** (generation quantity) directly on mobile and desktop. Reading mode offers an explicit switch to editing before writing actions become available. Standalone instructions in reading mode still receive the current document and produce a display-only preview.
@@ -184,6 +241,10 @@ Writing/                   # writing domain (write out)
     01-chapter.md          # type: chapter
   Papers/<paper>/
   Articles/<article>/
+Skills/                    # visible writing-skill root (syncable)
+  writing-craft/SKILL.md   # shared craft rules
+  work-<work>/SKILL.md     # work-specific rules
+.agents/skills/            # optional Codex/OpenCode bridge
 ```
 
 Frontmatter types: `concept` / `question` / `reading-project` / `reading-note` / `writing-project` / `chapter` / `outline` / `character` / `setting` / `reference`; practical templates use `execution-artifact-*` types.
@@ -202,6 +263,7 @@ src/
     artifact/         Practical template types, prompt, validation, rendering
     sync/             JavaScript Git engine, bundle exchange, merge and recovery
     annotations/      Annotation parsing, deletion ranges and navigation lookup
+    skills/           Agent Skills parsing, discovery, scope selection and prompt injection
     schema.ts         SCHEMA_VERSION + helpers
   ai/                 AI feature modules (assistant, annotation drafting, classifier, reading planner, writing planner, continuer, ...)
   features/
@@ -215,8 +277,9 @@ src/
     dashboard/        Knowledge debt modal
     sync/             Baidu sync
     command-panel/    Unified command panel
+    toolbar/          Floating editor toolbar (CodeMirror 6 ViewPlugin)
   vault/              Q&A and concept-note writer
-  settings/           Settings tab (Knowledge / Writing / Auxiliary)
+  settings/           Settings tab (Knowledge / Writing / Skill / Annotations / Interface / Auxiliary)
   actions/            Action registry + definitions
   main.ts
 ```
@@ -235,7 +298,7 @@ File mode retains backup, restore, status scanning, bidirectional sync, per-file
 
 Git mode syncs ordinary vault files, including attachments and deletions, with configured ignore rules and size limits (100 MB per file by default). It saves commits, exchanges incremental Git bundles, merges text, allows conflict resolution, and restores individual file versions. It needs no system Git. Automatic sync is off by default; when enabled it runs at startup and every minute while the app is visible.
 
-Configuration push/pull transfers Base URL, model, the three knowledge paths, automatic graph opening, remote path, ignore rules, and file size limit. Writing settings, output style, annotation settings, credentials, sync mode, and automatic behavior stay local. Startup configuration pull is off by default. See [Git sync documentation](./docs/git-sync.md) (Chinese) for migration, history storage, and recovery details.
+Configuration push/pull transfers Base URL, model, the three knowledge paths, automatic graph opening, remote path, ignore rules, and file size limit. Writing settings, output style, skill settings, annotation settings, credentials, sync mode, and automatic behavior stay local. Startup configuration pull is off by default. See [Git sync documentation](./docs/git-sync.md) (Chinese) for migration, history storage, and recovery details.
 
 ---
 

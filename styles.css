@@ -1405,3 +1405,134 @@ button.istart-import-merge {
   min-height: 120px;
   font-size: 16px;
 }
+
+/* ── Writing skills settings ─────────────────────────────── */
+
+.istart-skill-roots {
+  width: 100%;
+  min-height: 72px;
+  font-family: var(--font-monospace);
+  font-size: 12px;
+}
+
+.istart-skill-path {
+  margin-top: 2px;
+  color: var(--text-faint);
+  font-family: var(--font-monospace);
+  font-size: 11px;
+  overflow-wrap: anywhere;
+}
+
+/* ── Floating editor toolbar ─────────────────────────────── */
+
+.istart-floating-toolbar {
+  position: fixed;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  max-width: min(720px, calc(100vw - 16px));
+  padding: 4px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 8px;
+  background: var(--background-primary);
+  box-shadow: 0 4px 18px rgba(0, 0, 0, 0.16);
+  overflow-x: auto;
+  overscroll-behavior: contain;
+  visibility: hidden;
+}
+
+.istart-floating-toolbar-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-height: 30px;
+  padding: 4px 8px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-normal);
+  font-size: 12px;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.istart-floating-toolbar-item:hover,
+.istart-floating-toolbar-item:focus-visible {
+  background: var(--background-modifier-hover);
+}
+
+.istart-floating-toolbar-item.is-more {
+  color: var(--text-muted);
+}
+
+.istart-floating-toolbar-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--text-accent);
+}
+
+.istart-floating-toolbar-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.istart-floating-toolbar-label {
+  line-height: 1;
+}
+
+.istart-floating-toolbar-handle {
+  position: fixed;
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 50%;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
+  cursor: pointer;
+}
+
+.istart-floating-toolbar-handle:hover {
+  transform: scale(1.05);
+}
+
+.istart-floating-toolbar-handle-icon {
+  display: flex;
+}
+
+.istart-floating-toolbar-handle-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.is-mobile .istart-floating-toolbar {
+  max-width: calc(100vw - 16px);
+  padding: 6px;
+  border-radius: 12px;
+}
+
+.is-mobile .istart-floating-toolbar-item {
+  min-height: 40px;
+  padding: 6px 10px;
+  font-size: 13px;
+}
+
+.is-mobile .istart-floating-toolbar-handle {
+  width: 38px;
+  height: 38px;
+}
+
+.is-mobile .istart-floating-toolbar-handle-icon svg {
+  width: 20px;
+  height: 20px;
+}

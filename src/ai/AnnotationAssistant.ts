@@ -8,6 +8,7 @@ export interface AnnotationDraftInput {
   before: string;
   after: string;
   existingComment?: string;
+  skillContext?: { genre?: string; projectTitle?: string; projectPath?: string };
 }
 
 export interface AnnotationSuggestionInput {
@@ -17,6 +18,7 @@ export interface AnnotationSuggestionInput {
   comment: string;
   before: string;
   after: string;
+  skillContext?: { genre?: string; projectTitle?: string; projectPath?: string };
 }
 
 const SYSTEM_PROMPT = `你是阅读批注助手。用户正在阅读一篇笔记，选中了一段文字，想留下一条以后能快速看懂的批注。
@@ -55,6 +57,8 @@ export async function draftAnnotation(settings: DeepSeekSettings, input: Annotat
     userPrompt: context,
     temperature: 0.4,
     thinking: "disabled",
+    skillFeature: "annotation",
+    skillContext: input.skillContext,
   });
   const draft = cleanAnnotationDraft(raw);
   if (!draft) throw new Error("AI 未能生成有效批注，请重试");
@@ -84,6 +88,8 @@ export async function suggestFromAnnotation(
     userPrompt: context,
     temperature: 0.5,
     thinking: "disabled",
+    skillFeature: "annotation",
+    skillContext: input.skillContext,
   });
   const suggestion = cleanAnnotationSuggestion(raw);
   if (!suggestion) throw new Error("AI 未能生成有效建议，请重试");

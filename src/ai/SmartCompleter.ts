@@ -123,7 +123,7 @@ export class SmartCompleter {
   }
 
   private async call(prompt: string): Promise<string> {
-    return this.llm.chat({ userPrompt: prompt, temperature: 0.6 });
+    return this.llm.chat({ userPrompt: prompt, temperature: 0.6, skillFeature: "assistant" });
   }
 
   private parseDocumentSuggestions(raw: string): DocumentSuggestion[] {

@@ -4,6 +4,8 @@ import type { RequestUrlResponse } from "obsidian";
 import { DEFAULT_SETTINGS } from "../../types";
 import { LLMClient, LLMError, LLMResponseError } from "./LLMClient";
 import { generateWritingText } from "../../ai/WritingGeneration";
+import { setSkillProvider } from "../skills/SkillRuntime";
+import type { SkillDefinition } from "../skills/types";
 
 vi.mock("obsidian", () => ({ requestUrl: vi.fn() }));
 const request = vi.mocked(requestUrl);
@@ -20,7 +22,10 @@ const requestBody = (index = 0) => {
   return JSON.parse(options.body);
 };
 
-beforeEach(() => request.mockReset());
+beforeEach(() => {
+  request.mockReset();
+  setSkillProvider(null);
+});
 
 describe("writing responses from DeepSeek", () => {
   it("disables thinking on the official endpoint and separates a small prose target from its output budget", async () => {
@@ -92,5 +97,40 @@ describe("writing responses from DeepSeek", () => {
   it("keeps available prose even if the service stops at its output limit", async () => {
     request.mockResolvedValue(response({ choices: [{ message: { content: "可预览的正文" }, finish_reason: "length" }] }));
     expect(await new LLMClient(settings).chat({ userPrompt: "写作" })).toBe("可预览的正文");
+  });
+
+  it("injects the active writing skill into the system prompt", async () => {
+    request.mockResolvedValue(success);
+    const selected: SkillDefinition = {
+      id: "writing-craft",
+      name: "写作规范",
+      description: "Shared writing rules",
+      body: "段落要短，避免重复。",
+      scope: "global",
+      apply: "writing",
+      priority: 10,
+      path: "Skills/writing-craft/SKILL.md",
+      root: "Skills",
+    };
+    let requestedFeature = "";
+    setSkillProvider((input) => {
+      requestedFeature = input.feature;
+      return [selected];
+    });
+
+    await new LLMClient(settings).chat({
+      systemPrompt: "基础系统提示",
+      userPrompt: "继续写",
+      skillFeature: "writing",
+    });
+
+    const body = requestBody();
+    expect(requestedFeature).toBe("writing");
+    expect(body.messages).toHaveLength(2);
+    expect(body.messages[0].role).toBe("system");
+    expect(body.messages[0].content).toContain("基础系统提示");
+    expect(body.messages[0].content).toContain("writing-craft");
+    expect(body.messages[0].content).toContain("段落要短");
+    expect(body.messages[1]).toEqual({ role: "user", content: "继续写" });
   });
 });

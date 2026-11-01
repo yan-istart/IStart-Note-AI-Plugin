@@ -12,4 +12,8 @@ export class Notice {
 
 export class MarkdownView {}
 
+export function normalizePath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+}
+
 export async function requestUrl(): Promise<never> { throw new Error("Unexpected real network request in tests"); }

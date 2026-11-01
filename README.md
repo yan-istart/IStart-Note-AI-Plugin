@@ -23,8 +23,8 @@
 IStart-Note-AI 是一个面向 Obsidian 的 AI 插件,围绕三大业务场景:**知识**(读进来)、**写作**(写出去)、**辅助**(跨设备支撑)。
 
 - 知识:把零散笔记变成可检索、可关联的知识系统
-- 写作:把灵感变成作品——网文小说、论文、长文
-- 辅助:AI 助手、文档美化、模型设置、百度网盘同步
+- 写作:把灵感变成作品——网文小说、论文、长文，并支持写作 Skill
+- 辅助:AI 助手、侧边栏批注、文档美化、模型设置、百度网盘同步
 
 ---
 
@@ -38,7 +38,7 @@ IStart-Note-AI is an Obsidian plugin built around three business scenarios: **Kn
 
 For the full English documentation see [README.en.md](./README.en.md).
 
-> 本文按当前源码实现整理。`package.json` 与 `manifest.json` 标注版本为 **2.2.6**，最低支持 **Obsidian 1.7.2**。
+> 本文按当前源码实现整理。`package.json` 与 `manifest.json` 标注版本为 **2.4.1**，最低支持 **Obsidian 1.7.2**。
 
 ---
 
@@ -66,8 +66,57 @@ For the full English documentation see [README.en.md](./README.en.md).
 - **生成下一章**:按大纲梗概生成完整新章,先预览后写入
 - **润色**:选区改写,保持作品文风
 - **提取角色卡**:仅限小说，分析当前章节前 6,000 字符内的角色，写入 `_角色/`
+- **写作 Skill**:读取标准 Agent Skills `SKILL.md`，按通用写作技巧、体裁规范和当前作品规范自动附带；Codex/OpenCode 可发现同一份文件。详见 [写作 Skill](./docs/skills.md)
 
 写作项目存放在可配置的 `Writing/` 根目录。知识库问答按 frontmatter 类型排除 `chapter`、`writing-project`、`character`、`setting`、`outline`、`snippet`。当前没有设置开关，也不按整个目录排除；无类型笔记和导入的 `reference` 资料仍可能被检索。
+
+#### 写作 Skill 快速配置
+
+写作 Skill 使用标准 Agent Skills `SKILL.md`，按三层自动匹配：
+
+| 作用域 | 适用内容 | 自动附带条件 |
+| --- | --- | --- |
+| `global` | 公共写作技巧、修改检查表、通用规范 | 写作类 AI 请求 |
+| `genre` | 网文、论文、长文的体裁规范 | 当前作品体裁匹配 |
+| `project` | 某个作品的文风、禁忌、节奏与连续性检查 | 当前文件属于该作品 |
+
+推荐目录：
+
+```text
+Skills/
+  writing-craft/SKILL.md       # 公共写作技巧
+  writing-webnovel/SKILL.md    # 体裁规范
+  work-<作品>/SKILL.md         # 作品规范
+.agents/skills/                # Codex/OpenCode 桥接目录
+```
+
+作品 Skill 的 frontmatter 示例：
+
+```yaml
+---
+name: 示例作品 · 写作规范
+description: Use only when writing or editing the work "示例作品".
+metadata:
+  istart/scope: project
+  istart/project: 示例作品
+  istart/project-path: Writing/Novels/示例作品
+  istart/genre: novel
+  istart/priority: 30
+---
+```
+
+插件会从章节文件向上查找 `_作品.md`，自动识别作品、目录和体裁。注入顺序为：通用 Skill → 体裁 Skill → 作品 Skill；作品级规则优先。人物、剧情和世界观事实仍以 `_作品.md`、`_大纲.md`、`_角色/`、`_设定/` 为准，不要重复写入 Skill。Skill 文件本身会从知识库问答索引中排除。
+
+Codex/OpenCode 使用同一份文件：
+
+```bash
+cd <vault>
+mkdir -p .agents/skills
+ln -s ../../Skills/writing-craft .agents/skills/writing-craft
+ln -s ../../Skills/work-example .agents/skills/work-example
+```
+
+OpenCode 也可以直接配置 `"skills": ["./Skills"]`。启用后，在设置 → **Skill** 中点击「重新扫描」即可查看和单独开关。完整说明与示例见 [写作 Skill](./docs/skills.md)。
 
 ### 3. 辅助 Auxiliary
 
@@ -75,6 +124,7 @@ For the full English documentation see [README.en.md](./README.en.md).
 - **侧边栏批注**:选中文字添加 `==高亮==` 与行内/脚注批注，在右侧边栏汇总当前笔记或全库的高亮、批注和 Obsidian 注释；点击可跳回原文，支持搜索、筛选、编辑、复制与移除
 - **AI 批注**:可让 AI 根据选中文字与少量上下文草拟批注，确认或修改后再写入；也可针对已有批注获取 AI 补充建议，再选择是否追加到批注
 - **AI 服务**:默认 DeepSeek，可配置 API Key 与 Base URL，请求为 `POST {baseUrl}/v1/chat/completions`。模型下拉框仅提供 `deepseek-v4-flash`（默认）和 `deepseek-v4-pro`；其他端点需接受所选模型名称。当前没有自定义模型输入或 Provider 管理器
+- **悬浮工具栏**:编辑器中选中文字后显示当前可用操作；可开启光标空闲入口，在光标旁展开续写、插写、总结等操作。移动端默认关闭，避免与原生选区菜单重叠
 - **美化当前文档**:AI 重组结构、插入 Callout、双链及适当的 Mermaid 图，预览后替换全文
 - **输出风格可选**:知识库、技术、极简、产品、学术、叙事、卡片化
 - **百度网盘同步**(可选):Git 提交历史、双向增量同步、文本合并与单文件版本恢复；兼容原有文件备份方式
@@ -96,6 +146,8 @@ Git 模式：在设置中启用百度网盘同步、填写百度 App ID、App Se
 - 生成量是近似字数目标，不保证严格字数；预览显示实际生成字数（不计空白，包含标点）。
 - Git 同步已有内核与适配器自动化测试；百度授权、真实网络服务及 Android/iOS 真机行为仍需安装后验证，详见同步说明。
 - 批注创建需要编辑模式下的文字选区；阅读模式暂不支持直接选中文字创建批注，但仍可点击侧边栏批注跳转。批注不提供自定义高亮颜色，只会显示已有 `<mark>` 的颜色。全库模式首次扫描会读取所有 Markdown 笔记，笔记很多时需要等待；列表最多显示前 300 条，可用搜索和筛选缩小范围。跨空行、标题/列表块或代码块的选区需要分段处理。
+- 写作 Skill 只注入 `SKILL.md` 正文；`references/` 与 `scripts/` 不会由插件自动读取或执行。Codex/OpenCode 的自动调用依赖 `description`，不能保证每次触发。`.agents` 为隐藏目录，当前插件的 Git 同步默认不同步隐藏路径，建议把 `Skills/` 作为可见主目录。
+- 悬浮工具栏目前只覆盖编辑模式，阅读模式仍使用 Obsidian 原生菜单；移动端默认关闭，避免与原生选区菜单、选区手柄和键盘工具栏重叠。光标空闲入口默认关闭。
 
 ---
 
@@ -106,6 +158,7 @@ Git 模式：在设置中启用百度网盘同步、填写百度 App ID、App Se
 3. 点击左侧脑形图标打开功能面板 → **AI 助手**，或从 Obsidian 命令面板选择 IStart-Note-AI 命令。
 4. 用自然语言输入指令,或在**写作**分组里新建作品、续写章节。
 5. 想边读边记时，选中文字后运行「添加批注」或「AI 批注」；点击高亮图标打开批注侧边栏。
+6. 想统一写作规范时，在 `Skills/` 下创建 `SKILL.md`，再到设置 → **Skill** 点击「重新扫描」。
 
 ---
 
@@ -134,13 +187,15 @@ npm ci && npm run build
 
 AI 默认值：Base URL 为 `https://api.deepseek.com`，模型为 `deepseek-v4-flash`，输出风格为 `knowledge-base`。Base URL 填根地址，不加末尾斜杠或 `/v1/chat/completions`，客户端会追加该后缀。
 
-设置页按四个标签组织:
+设置页按六个标签组织:
 
 | 标签 | 主要设置 |
 | --- | --- |
 | **知识** | Q&A 目录、问题索引目录、概念页目录、知识索引状态与重建 |
 | **写作** | 作品目录（`Writing`）、默认完整当前文档及作品资料；附近模式每侧 2,000 字符、续写目标（800 中文字）、插写目标（200 中文字） |
+| **Skill** | 启用自动附带、写作场景限制、Skill 根目录、最大注入字符、已发现 Skill 列表 |
 | **批注** | 默认行内/脚注批注、移动端跳转后收起侧栏、打开批注侧边栏 |
+| **界面** | 悬浮工具栏开关、选中时显示、光标空闲入口、移动端启用 |
 | **辅助** | API Key、Base URL、模型、输出风格、百度同步、隐私说明 |
 
 ---
@@ -153,6 +208,7 @@ AI 默认值：Base URL 为 `https://api.deepseek.com`，模型为 `deepseek-v4-
 - 快捷键：插件没有注册默认快捷键，可在 Obsidian 设置 → 快捷键中为 AI 助手、续写、插写、下一章、新建作品、添加批注等命令自行绑定。
 - 状态栏:打开章节文件时显示「续写」「下一章」一键按钮
 - 批注:选中文字后运行「添加批注」或「AI 批注」，也可在编辑器右键菜单和功能面板中使用；高亮图标打开批注侧边栏。侧边栏中点击批注跳回原文，右上角菜单可编辑批注、获取 AI 建议、复制或移除批注
+- 悬浮工具栏：编辑器中选中文字后显示添加批注、AI 批注、润色、扩写、解释等操作；末尾「更多」打开完整功能面板。可在设置 → 界面中开启光标空闲入口
 - 编辑器右键：AI 助手、知识库问答、概念补全、实用模板、美化文档、添加批注、AI 批注；无选区时显示续写、插写及各自设置，选中文字时显示润色、扩写、解释，章节笔记额外显示提取角色卡
 - 文件列表右键：AI 助手 / 美化文档；实际操作使用当前编辑器，请先打开目标笔记
 - 云形图标：打开百度同步侧边栏，Git 模式提供手动同步和版本历史
@@ -161,6 +217,7 @@ AI 默认值：Base URL 为 `https://api.deepseek.com`，模型为 `deepseek-v4-
 
 - 从导航菜单中的 IStart-Note-AI 图标或「打开功能面板」命令进入。面板顶部根据当前文件与选区显示常用操作，使用 Phosphor Duotone 图标和短标签；其余操作收进「全部功能」。
 - 批注侧边栏在手机上以右侧抽屉打开，默认只显示当前笔记。控件加大到适合触控，卡片右侧始终显示「更多」按钮，长按卡片也会打开操作菜单；点击批注跳回原文后默认自动收起侧栏，可在设置 → 批注中关闭。添加或编辑批注的弹窗使用移动端安全布局，AI 草拟完成后不会自动聚焦输入框或弹出键盘；AI 建议结果也使用移动端安全预览弹窗。
+- 悬浮工具栏在移动端默认关闭；如需使用，在设置 → 界面中开启。按钮使用更大的触控高度，但可能与 Obsidian 原生选区菜单重叠，请按设备习惯选择。
 - 无选区且光标前后都有正文时，面板和助手优先显示「插写」；文末优先「续写」。「全部功能」保留续写与插写两个入口。
 - 在 Obsidian 设置 → 界面 → 配置移动工具栏 → 添加命令，将「续写」「插写」「润色选中文字」「扩写」「解释」「总结」「添加批注」等加入工具栏；写作命令使用同组 Phosphor Bold 图标，插写采用向中间汇合的箭头，批注使用高亮图标。
 - 移动端和桌面端的快捷面板、AI 助手均直接显示「生成量」入口；阅读模式下显示「切换到编辑模式」，切换后再显示写作操作。阅读模式中直接输入其他指令时，助手仍会读取当前文档，结果以展示方式预览。
@@ -196,6 +253,10 @@ Writing/                   # 写作域(输出/生产)
     01-章节.md             # type: chapter
   Papers/<论文>/           # 论文
   Articles/<长文>/         # 通用长文
+Skills/                    # 写作 Skill(可见主目录，可同步)
+  writing-craft/SKILL.md   # 公共写作技巧
+  work-<作品>/SKILL.md     # 作品规范
+.agents/skills/            # 可选：Codex/OpenCode 桥接目录
 ```
 
 Frontmatter 类型:`concept` / `question` / `reading-project` / `reading-note` / `writing-project` / `chapter` / `outline` / `character` / `setting` / `reference`；实用模板使用 `execution-artifact-*` 类型。
@@ -214,6 +275,7 @@ src/
     artifact/         实用模板(检查表/SOP/复盘)类型、校验、渲染
     sync/             JavaScript Git 内核、版本包交换、合并与恢复
     annotations/      批注解析、删除范围与跳转定位
+    skills/           Agent Skills 解析、发现、作用域选择和 prompt 注入
     schema.ts         SCHEMA_VERSION + 工具函数
   ai/                 AI 能力模块(助手、批注草拟、分类器、阅读规划、写作规划、续写...)
   features/
@@ -227,8 +289,9 @@ src/
     dashboard/        知识债务看板
     sync/             百度网盘同步
     command-panel/    统一命令面板
+    toolbar/          编辑器悬浮工具栏(CodeMirror 6 ViewPlugin)
   vault/              Q&A 与概念页写入
-  settings/           设置页(知识/写作/批注/辅助)
+  settings/           设置页(知识/写作/Skill/批注/界面/辅助)
   actions/            动作注册与面板定义
   main.ts
 ```
@@ -247,7 +310,7 @@ AI 功能会把你选中的内容和部分笔记上下文发送到所配置的 A
 
 Git 模式同步符合规则的普通 Vault 文件，包含附件与删除，使用忽略正则与大小限制（默认单文件 100 MB）。它保存提交、交换增量 Git bundle、合并文本、处理冲突并恢复单文件历史版本，无需系统 Git。自动同步默认关闭，开启后在启动时和应用可见时每分钟执行。
 
-配置推送/拉取传递 Base URL、模型、三个知识路径、自动打开图谱、远端路径、忽略规则与大小限制。写作设置、输出风格、批注设置、凭证、同步方式和自动行为保持本地设置；启动时拉取配置默认关闭。迁移步骤、本地历史位置与恢复细节见 [Git 同步说明](./docs/git-sync.md)。
+配置推送/拉取传递 Base URL、模型、三个知识路径、自动打开图谱、远端路径、忽略规则与大小限制。写作设置、输出风格、Skill 设置、批注设置、凭证、同步方式和自动行为保持本地设置；启动时拉取配置默认关闭。迁移步骤、本地历史位置与恢复细节见 [Git 同步说明](./docs/git-sync.md)。
 
 ---
 

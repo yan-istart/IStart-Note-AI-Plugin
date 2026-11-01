@@ -97,7 +97,7 @@ export function registerAllActions(plugin: DeepSeekPlugin, actions: ActionDef[])
   });
 }
 
-function openPanel(plugin: DeepSeekPlugin, actions: ActionDef[]) {
+export function openPanel(plugin: DeepSeekPlugin, actions: ActionDef[]) {
   const ctx = buildContext(plugin, null);
   const target = captureEditorTarget(plugin.app);
   const canInsert = !!target && !!getInsertionContext(target.content, target.editor.posToOffset(target.cursor));
@@ -170,7 +170,7 @@ function openPanel(plugin: DeepSeekPlugin, actions: ActionDef[]) {
   }))).open();
 }
 
-function buildContext(plugin: DeepSeekPlugin, targetFile: TFile | null): ActionContext {
+export function buildContext(plugin: DeepSeekPlugin, targetFile: TFile | null): ActionContext {
   const activeFile = plugin.app.workspace.getActiveFile();
   const file = targetFile ?? activeFile;
   const fileMeta = file ? plugin.app.metadataCache.getFileCache(file) : null;
@@ -190,7 +190,7 @@ function buildContext(plugin: DeepSeekPlugin, targetFile: TFile | null): ActionC
   };
 }
 
-function evaluateWhen(when: ActionDef["when"], ctx: ActionContext): boolean {
+export function evaluateWhen(when: ActionDef["when"], ctx: ActionContext): boolean {
   if (when.always) return true;
   if (when.hasEditor && !ctx.editor) return false;
   if (when.hasSelection && !ctx.selection) return false;

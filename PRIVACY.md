@@ -21,6 +21,7 @@ The request body may include:
 | --- | --- | --- |
 | Selection | The currently selected text | Whenever you trigger the AI assistant with a non-empty selection |
 | Annotation context | The highlighted text, current annotation comment, and up to ~600 characters before/after | Annotation drafting, rewriting, or requesting AI suggestions |
+| Writing skill | The body of enabled local `SKILL.md` files, selected by global/genre/project scope | Writing AI requests while skills are enabled |
 | Active file | The active document content (truncated, typically up to ~2,000 characters) | When the assistant needs context (most actions) |
 | Active file metadata | File name, frontmatter `type` field | Most actions |
 | Cursor context | Up to ~500 characters before the cursor | Continue / fill-empty-section actions |

@@ -15,7 +15,81 @@ export interface DeepSeekSettings {
   continueMode: "cursor" | "chapter";
   annotationCommentStyle: "inline" | "footnote";
   annotationCollapseSidebarOnMobile: boolean;
+  skills: SkillSettings;
+  floatingToolbar: FloatingToolbarSettings;
   baiduSync: BaiduSyncConfig;
+}
+
+/** Editor selection/cursor floating action bar. */
+export interface FloatingToolbarSettings {
+  enabled: boolean;
+  showOnSelection: boolean;
+  /** Show a small trigger after the cursor is idle; click to expand the toolbar. */
+  showAtCursor: boolean;
+  /** Desktop only unless explicitly enabled. */
+  mobile: boolean;
+}
+
+export const DEFAULT_FLOATING_TOOLBAR_SETTINGS: FloatingToolbarSettings = {
+  enabled: true,
+  showOnSelection: true,
+  showAtCursor: false,
+  mobile: false,
+};
+
+export function loadFloatingToolbarSettings(saved?: Partial<FloatingToolbarSettings>): FloatingToolbarSettings {
+  return {
+    ...DEFAULT_FLOATING_TOOLBAR_SETTINGS,
+    ...saved,
+    enabled: saved?.enabled !== false,
+    showOnSelection: saved?.showOnSelection !== false,
+    showAtCursor: saved?.showAtCursor === true,
+    mobile: saved?.mobile === true,
+  };
+}
+
+/** Local writing-skill discovery and injection. Skill files remain standard Agent Skills. */
+export interface SkillSettings {
+  enabled: boolean;
+  /** Vault-relative roots, e.g. Skills and .agents/skills. */
+  roots: string[];
+  /** Total maximum characters injected into one AI request. */
+  maxChars: number;
+  /** Skill IDs excluded from automatic injection. */
+  disabledSkillIds: string[];
+  /** If true, writing skills are only injected for writing contexts or writing AI features. */
+  writingOnly: boolean;
+}
+
+export const DEFAULT_SKILL_ROOTS = ["Skills", ".agents/skills"];
+
+export const DEFAULT_SKILL_SETTINGS: SkillSettings = {
+  enabled: true,
+  roots: [...DEFAULT_SKILL_ROOTS],
+  maxChars: 6000,
+  disabledSkillIds: [],
+  writingOnly: true,
+};
+
+export function loadSkillSettings(saved?: Partial<SkillSettings>): SkillSettings {
+  const savedRoots = Array.isArray(saved?.roots) ? saved?.roots ?? [] : [];
+  const roots = savedRoots.filter((root): root is string => typeof root === "string" && root.trim().length > 0);
+  const savedMax = saved?.maxChars;
+  const maxChars = typeof savedMax === "number" && Number.isFinite(savedMax) && savedMax > 0
+    ? Math.min(20000, Math.round(savedMax))
+    : DEFAULT_SKILL_SETTINGS.maxChars;
+  const disabledSkillIds = Array.isArray(saved?.disabledSkillIds)
+    ? (saved?.disabledSkillIds ?? []).filter((id): id is string => typeof id === "string")
+    : [];
+  return {
+    ...DEFAULT_SKILL_SETTINGS,
+    ...saved,
+    enabled: saved?.enabled !== false,
+    roots: roots.length ? roots : [...DEFAULT_SKILL_ROOTS],
+    maxChars,
+    disabledSkillIds,
+    writingOnly: saved?.writingOnly !== false,
+  };
 }
 
 export interface BaiduSyncConfig {
@@ -80,6 +154,8 @@ export const DEFAULT_SETTINGS: DeepSeekSettings = {
   continueMode: "cursor",
   annotationCommentStyle: "inline",
   annotationCollapseSidebarOnMobile: true,
+  skills: { ...DEFAULT_SKILL_SETTINGS, roots: [...DEFAULT_SKILL_ROOTS] },
+  floatingToolbar: { ...DEFAULT_FLOATING_TOOLBAR_SETTINGS },
   baiduSync: { ...DEFAULT_BAIDU_SYNC_CONFIG },
 };
 

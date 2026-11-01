@@ -1,5 +1,5 @@
-import { Notice, Plugin, TFile, normalizePath, Platform, MarkdownView } from "obsidian";
-import { DeepSeekSettings, DEFAULT_SETTINGS, CompletionDepth } from "./types";
+import { Notice, Plugin, TAbstractFile, TFile, normalizePath, Platform, MarkdownView } from "obsidian";
+import { DeepSeekSettings, DEFAULT_SETTINGS, CompletionDepth, loadSkillSettings, loadFloatingToolbarSettings } from "./types";
 import { DeepSeekSettingsTab } from "./settings/SettingsTab";
 import { BaiduSyncService } from "./features/sync/BaiduSyncService";
 import { BaiduSyncModal } from "./features/sync/BaiduSyncModal";
@@ -51,11 +51,18 @@ import { AnnotationService, inspectAnnotationSelection } from "./features/annota
 import { draftAnnotation } from "./ai/AnnotationAssistant";
 import { headingAtOffset } from "./core/annotations/AnnotationParser";
 import type { AnnotationCommentStyle } from "./core/annotations/AnnotationParser";
+import { SkillRegistry } from "./core/skills/SkillRegistry";
+import { setSkillProvider } from "./core/skills/SkillRuntime";
+import { selectSkills } from "./core/skills/SkillSelector";
+import { resolveWritingScope } from "./core/skills/WritingScope";
+import { createFloatingToolbarExtension } from "./features/toolbar/FloatingToolbarExtension";
 
 export default class DeepSeekPlugin extends Plugin {
   settings!: DeepSeekSettings;
   /** In-memory vault knowledge index, rebuilt on load, updated incrementally. */
   knowledgeIndex!: KnowledgeIndexService;
+  /** Local Agent Skills discovered from Skills/ and .agents/skills. */
+  skillRegistry!: SkillRegistry;
   private automaticSyncRunning = false;
   private automaticSyncMessage = "";
   private aiJobs = new Set<string>();
@@ -63,8 +70,12 @@ export default class DeepSeekPlugin extends Plugin {
   async onload() {
     await this.loadSettings();
 
+    this.skillRegistry = new SkillRegistry(this.app, () => this.settings.skills);
+    void this.skillRegistry.refresh();
+    this.registerSkillRuntime();
+
     // Build knowledge index
-    this.knowledgeIndex = new KnowledgeIndexService(this.app);
+    this.knowledgeIndex = new KnowledgeIndexService(this.app, (path) => this.skillRegistry.isSkillPath(path));
     this.app.workspace.onLayoutReady(() => {
       this.knowledgeIndex.rebuild();
     });
@@ -85,6 +96,16 @@ export default class DeepSeekPlugin extends Plugin {
         if (file instanceof TFile) this.knowledgeIndex.updateFile(file);
       })
     );
+    const invalidateSkills = (file: TAbstractFile) => {
+      if (this.skillRegistry.isSkillPath(file.path)) this.skillRegistry.invalidate();
+    };
+    this.registerEvent(this.app.vault.on("modify", invalidateSkills));
+    this.registerEvent(this.app.vault.on("create", invalidateSkills));
+    this.registerEvent(this.app.vault.on("delete", invalidateSkills));
+    this.registerEvent(this.app.vault.on("rename", (file, oldPath) => {
+      if (this.skillRegistry.isSkillPath(oldPath)) this.skillRegistry.invalidate();
+      invalidateSkills(file);
+    }));
 
     this.registerView(SYNC_VIEW_TYPE, (leaf) => new BaiduSyncView(leaf, this));
     this.registerView(ANNOTATION_VIEW_TYPE, (leaf) => new AnnotationView(leaf, this));
@@ -95,7 +116,35 @@ export default class DeepSeekPlugin extends Plugin {
     this.addSettingTab(new DeepSeekSettingsTab(this.app, this));
     registerQuickIcons();
     registerAllActions(this, ALL_ACTIONS);
+    this.registerEditorExtension(createFloatingToolbarExtension(this));
     if (!Platform.isMobile) this.registerWritingStatusBar();
+  }
+
+  /** Install one skill provider shared by every LLMClient call. */
+  private registerSkillRuntime(): void {
+    setSkillProvider(async (request) => {
+      if (!this.settings.skills.enabled) return [];
+      const activeFile = request.useActiveFile === false ? null : this.app.workspace.getActiveFile();
+      const inferred = activeFile ? await resolveWritingScope(this.app, activeFile) : null;
+      const writingScope = request.projectPath
+        ? {
+            projectTitle: request.projectTitle ?? inferred?.projectTitle ?? "",
+            projectPath: request.projectPath,
+            genre: request.genre ?? inferred?.genre ?? "",
+          }
+        : inferred;
+      const genre = request.genre ?? writingScope?.genre ?? "";
+      const skills = await this.skillRegistry.ensureLoaded();
+      return selectSkills(
+        skills,
+        { ...request, writingScope, genre },
+        this.settings.skills
+      );
+    });
+  }
+
+  onunload(): void {
+    setSkillProvider(null);
   }
 
   /** 状态栏快捷入口:打开章节文件时显示「续写」与「下一章」按钮 */
@@ -334,13 +383,21 @@ export default class DeepSeekPlugin extends Plugin {
       heading,
       defaultStyle: this.settings.annotationCommentStyle,
       autoDraft: aiDraft,
-      draft: () => draftAnnotation(this.settings, {
-        fileName: target.file.basename,
-        heading,
-        selection: inspection.selected,
-        before: target.content.slice(Math.max(0, fromOffset - 600), fromOffset),
-        after: target.content.slice(toOffset, toOffset + 600),
-      }),
+      draft: async () => {
+        const scope = await resolveWritingScope(this.app, target.file);
+        return draftAnnotation(this.settings, {
+          fileName: target.file.basename,
+          heading,
+          selection: inspection.selected,
+          before: target.content.slice(Math.max(0, fromOffset - 600), fromOffset),
+          after: target.content.slice(toOffset, toOffset + 600),
+          skillContext: scope ? {
+            genre: scope.genre,
+            projectTitle: scope.projectTitle,
+            projectPath: scope.projectPath,
+          } : undefined,
+        });
+      },
       onSubmit: (comment: string, style: AnnotationCommentStyle) => {
         new AnnotationService(this.app).add({ target, comment, style });
         this.settings.annotationCommentStyle = style;
@@ -737,7 +794,7 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
       // 4. Call AI
       const { LLMClient } = await import("./core/llm");
       const llm = new LLMClient(this.settings);
-      const raw = await llm.chat({ systemPrompt, userPrompt, temperature: 0.5 });
+      const raw = await llm.chat({ systemPrompt, userPrompt, temperature: 0.5, skillFeature: "knowledge" });
 
       // 5. Post-process: beautify + auto-link
       const knownConcepts = this.getKnownConcepts();
@@ -1028,7 +1085,17 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
       const llm = new LLMClient(this.settings);
       const systemPrompt = `你是专业的文字润色助手。在不改变原意的前提下，提升文字的流畅度与表现力，修正语病。直接输出润色后的文字，不要任何解释。`;
       const userPrompt = `${ctx?.styleProfile ? `文风基调：${ctx.styleProfile}\n\n` : ""}原文：\n${selection}\n\n润色后：`;
-      const raw = await llm.chat({ systemPrompt, userPrompt, temperature: 0.6 });
+      const raw = await llm.chat({
+        systemPrompt,
+        userPrompt,
+        temperature: 0.6,
+        skillFeature: "writing",
+        skillContext: ctx ? {
+          genre: ctx.genre,
+          projectTitle: ctx.projectTitle,
+          projectPath: ctx.projectPath,
+        } : undefined,
+      });
       return { mode: "replace", content: raw.trim(), explanation: "润色（将替换选中文字）" };
     }, () => { void this.polishWriting(target); });
   }
@@ -1057,6 +1124,12 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
         systemPrompt,
         userPrompt: `章节：第${ctx.chapterNumber}章 ${ctx.chapterTitle}\n\n正文：\n${content.slice(0, 6000)}`,
         temperature: 0.4,
+        skillFeature: "writing",
+        skillContext: {
+          genre: ctx.genre,
+          projectTitle: ctx.projectTitle,
+          projectPath: ctx.projectPath,
+        },
       });
       notice.hide();
 
@@ -1173,6 +1246,8 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
   async loadSettings() {
     const saved: Partial<DeepSeekSettings> | null = await this.loadData();
     this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
+    this.settings.skills = loadSkillSettings(saved?.skills);
+    this.settings.floatingToolbar = loadFloatingToolbarSettings(saved?.floatingToolbar);
     this.settings.baiduSync = loadBaiduSyncConfig(saved?.baiduSync);
     if (this.settings.baiduSync.enabled && this.settings.baiduSync.accessToken && this.settings.baiduSync.autoPullConfig) {
       void this.pullConfig(true);

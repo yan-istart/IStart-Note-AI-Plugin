@@ -53,6 +53,7 @@ export class StoryContinuer {
       systemPrompt: this.buildSystem(CONTINUE_SYSTEM, ctx, request.targetWords, request.mode),
       userPrompt: parts + "\n\n" + userPrompt,
       temperature: 0.8,
+      skillContext: this.skillContext(ctx),
     }, request.targetWords);
     return this.trimIncompleteSentence(raw.trim());
   }
@@ -67,6 +68,7 @@ export class StoryContinuer {
         ctx, request.targetWords, "cursor"),
       userPrompt: parts + "\n\n" + prompt.userPrompt,
       temperature: 0.6,
+      skillContext: this.skillContext(ctx),
     }, request.targetWords);
     return raw.trim();
   }
@@ -81,6 +83,7 @@ export class StoryContinuer {
       systemPrompt: this.buildSystem(CHAPTER_SYSTEM, ctx, targetWords, "chapter"),
       userPrompt: parts + "\n\n" + userPrompt,
       temperature: 0.8,
+      skillContext: this.skillContext(ctx),
     }, targetWords);
     return this.trimIncompleteSentence(raw.trim());
   }
@@ -105,6 +108,14 @@ export class StoryContinuer {
     }
 
     return lines.join("\n");
+  }
+
+  private skillContext(ctx: WritingContext) {
+    return {
+      genre: ctx.genre,
+      projectTitle: ctx.projectTitle,
+      projectPath: ctx.projectPath,
+    };
   }
 
   private buildSystem(template: string, ctx: WritingContext, targetWords: number, mode: string): string {

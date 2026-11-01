@@ -113,7 +113,7 @@ export class AIAssistant {
   }
 
   private async callAPI(systemPrompt: string, userPrompt: string): Promise<string> {
-    return this.llm.chat({ systemPrompt, userPrompt, temperature: 0.5 });
+    return this.llm.chat({ systemPrompt, userPrompt, temperature: 0.5, skillFeature: "assistant" });
   }
 
   private parseResponse(raw: string, ctx: AssistantContext): { mode: AssistantResult["mode"]; content: string } {

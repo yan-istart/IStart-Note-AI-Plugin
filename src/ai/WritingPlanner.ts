@@ -51,7 +51,12 @@ export class WritingPlanner {
       .replace(/\{\{premise\}\}/g, premise || "(未提供)")
       .replace("{{novelOnly}}", novelOnly);
 
-    const raw = await this.llm.chat({ userPrompt: prompt, temperature: 0.7 });
+    const raw = await this.llm.chat({
+      userPrompt: prompt,
+      temperature: 0.7,
+      skillFeature: "writing",
+      skillContext: { genre, useActiveFile: false },
+    });
     return this.parse(raw, title);
   }
 

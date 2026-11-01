@@ -58,7 +58,7 @@ export interface SearchOptions {
 export class KnowledgeIndexService {
   private entries: Map<string, IndexEntry> = new Map();
 
-  constructor(private app: App) {}
+  constructor(private app: App, private isExcluded?: (path: string) => boolean) {}
 
   // ── Build / Rebuild ────────────────────────────────────────
 
@@ -220,6 +220,10 @@ export class KnowledgeIndexService {
   // ── Internals ──────────────────────────────────────────────
 
   private indexFile(file: TFile): void {
+    if (this.isExcluded?.(file.path)) {
+      this.entries.delete(file.path);
+      return;
+    }
     const meta: CachedMetadata | null = this.app.metadataCache.getFileCache(file);
     const fm = frontmatterOf(meta);
 
