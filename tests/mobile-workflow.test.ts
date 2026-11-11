@@ -94,7 +94,7 @@ describe("insertion between existing passages", () => {
 
   it("exposes quantity controls directly in the assistant and preserves the original writing position", async () => {
     const doc = setup(undefined, "上文\n\n下文", 2);
-    doc.plugin.openAssistant();
+    doc.plugin.openQuickAssistant();
     const controls = ui.inputs[0][3];
     expect(controls.quickActions.map((action: any) => action.id)).toContain("insert-settings");
     doc.editor.setCursor({ line: 2, ch: 2 });
@@ -258,7 +258,7 @@ describe("insertion between existing passages", () => {
   it("offers insertion in the assistant and keeps the original position when focus moves", async () => {
     const doc = setup(undefined, "上文\n\n下文", 2);
     const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("连接段");
-    doc.plugin.openAssistant();
+    doc.plugin.openQuickAssistant();
     expect(ui.inputs[0][3].quickActions[0].id).toBe("insert");
     doc.editor.setCursor({ line: 2, ch: 2 });
     ui.inputs[0][2]("插写");
@@ -275,7 +275,7 @@ describe("reading-mode assistant", () => {
     doc.app.workspace.activeEditor = null;
     const setViewState = vi.fn().mockImplementation(async () => { doc.app.workspace.activeEditor = { editor: doc.editor } as any; });
     Object.assign(doc.app.workspace, { getActiveViewOfType: () => ({ leaf: { setViewState } }) });
-    doc.plugin.openAssistant();
+    doc.plugin.openQuickAssistant();
     expect(ui.inputs[0][3].onEnableWriting).toBeTypeOf("function");
     ui.inputs[0][3].onEnableWriting();
     await vi.waitFor(() => expect(ui.inputs).toHaveLength(2));
@@ -288,7 +288,7 @@ describe("reading-mode assistant", () => {
     doc.app.workspace.activeEditor = null;
     Object.assign(doc.app.vault, { cachedRead: vi.fn().mockResolvedValue(doc.text()) });
     const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("<!-- mode:append -->\n总结正文");
-    doc.plugin.openAssistant();
+    doc.plugin.openQuickAssistant();
     ui.inputs[0][2]("总结当前文档");
     await vi.waitFor(() => expect(ui.results).toHaveLength(1));
     expect(chat.mock.calls[0][0].userPrompt).toContain(doc.text());
@@ -397,7 +397,7 @@ describe("mobile quick-action workflow", () => {
   it("keeps the original selection when opening the assistant", async () => {
     const doc = setup(); doc.select();
     const target = captureEditorTarget(doc.app)!;
-    doc.plugin.openAssistant(target);
+    doc.plugin.openQuickAssistant(target);
     doc.editor.setCursor({ line: 0, ch: 2 });
     vi.spyOn(WritingProjectManager.prototype, "loadContext").mockResolvedValue(null);
     vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("润色结果");

@@ -34,8 +34,8 @@ const NOVEL_HOOK_RULE = "收尾时留一个轻微悬念或钩子，为下一章�
 export class StoryContinuer {
   private llm: LLMClient;
 
-  constructor(settings: DeepSeekSettings) {
-    this.llm = new LLMClient(settings);
+  constructor(settings: DeepSeekSettings, llm?: LLMClient) {
+    this.llm = llm ?? new LLMClient(settings);
   }
 
   /** 续写:光标处或章节末尾 */

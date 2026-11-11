@@ -51,8 +51,8 @@ const STANDARD_PROMPT = `你是一个个人知识图谱助手。请根据给定�
 export class ConceptCompleter {
   private llm: LLMClient;
 
-  constructor(settings: DeepSeekSettings) {
-    this.llm = new LLMClient(settings);
+  constructor(settings: DeepSeekSettings, llm?: LLMClient) {
+    this.llm = llm ?? new LLMClient(settings);
   }
 
   async complete(

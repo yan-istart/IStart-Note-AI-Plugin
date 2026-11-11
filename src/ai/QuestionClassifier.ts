@@ -27,8 +27,8 @@ const CLASSIFY_PROMPT = `你是一个知识图谱助手，负责对用户的问�
 export class QuestionClassifier {
   private llm: LLMClient;
 
-  constructor(settings: DeepSeekSettings) {
-    this.llm = new LLMClient(settings);
+  constructor(settings: DeepSeekSettings, llm?: LLMClient) {
+    this.llm = llm ?? new LLMClient(settings);
   }
 
   async classify(question: string, history: string[]): Promise<QuestionClassification> {

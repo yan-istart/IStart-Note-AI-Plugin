@@ -1,3 +1,4 @@
+import { questionEvolution } from "../../core/agent/WorkflowDrafts";
 import { App, TFile, normalizePath, stringifyYaml } from "obsidian";
 import { frontmatterOf, fmString } from "../../util/frontmatter";
 import { DeepSeekSettings, QuestionClassification } from "../../types";
@@ -162,61 +163,8 @@ export class QuestionGraphManager {
       questions.push({ path: qPath, title: qTitle, category, parent });
     }
 
-    if (questions.length < 2) return; // 不够画图
-
-    // 构建 Mermaid 节点和边
-    const nodeIds = new Map<string, string>();
-    let idCounter = 0;
-    const getId = (title: string): string => {
-      if (!nodeIds.has(title)) {
-        nodeIds.set(title, `Q${idCounter++}`);
-      }
-      return nodeIds.get(title)!;
-    };
-
-    const lines: string[] = [];
-
-    // 先声明所有节点
-    for (const q of questions) {
-      const id = getId(q.title);
-      const shortTitle = q.title.length > 20 ? q.title.slice(0, 20) + "..." : q.title;
-      lines.push(`    ${id}["${this.mermaidEscapeStr(shortTitle)}"]`);
-    }
-
-    // 画边：有 parent 的画从 parent 到自己的边
-    for (const q of questions) {
-      if (q.parent) {
-        const parentId = getId(q.parent);
-        const childId = getId(q.title);
-        const label = q.category === "refinement" ? "深化" : q.category === "expansion" ? "扩展" : "";
-        if (label) {
-          lines.push(`    ${parentId} -->|${label}| ${childId}`);
-        } else {
-          lines.push(`    ${parentId} --> ${childId}`);
-        }
-      }
-    }
-
-    // 如果没有任何边（全是 new），不生成图
-    const hasEdges = questions.some((q) => q.parent);
-    if (!hasEdges) return;
-
-    const mermaidBlock = `\n## 问题演化\n\n\`\`\`mermaid\ngraph TD\n${lines.join("\n")}\n\`\`\`\n`;
-
-    // 替换或追加
-    const existingMermaid = content.match(/\n## 问题演化\n[\s\S]*?```mermaid[\s\S]*?```\n?/);
-    let newContent: string;
-    if (existingMermaid) {
-      newContent = content.replace(existingMermaid[0], mermaidBlock);
-    } else {
-      newContent = content.trimEnd() + "\n" + mermaidBlock;
-    }
-
-    await this.app.vault.modify(indexFile, newContent);
-  }
-
-  private mermaidEscapeStr(text: string): string {
-    return text.replace(/[[\](){}|<>#&"]/g, "").trim() || "?";
+    const updated = questionEvolution(content, questions);
+    if (updated !== content) await this.app.vault.modify(indexFile, updated);
   }
 
   private async ensureFolder(path: string): Promise<void> {

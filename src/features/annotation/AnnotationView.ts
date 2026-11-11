@@ -573,6 +573,9 @@ export class AnnotationView extends ItemView {
     menu.addItem((item) => item.setTitle("获取 AI 建议").setIcon("istart-assistant").onClick(() => {
       void this.requestSuggestion(annotation);
     }));
+    menu.addItem((item) => item.setTitle("在 Agent 中继续讨论").setIcon("messages-square").onClick(() => {
+      void this.discussAnnotation(annotation).catch(error => new Notice((error as Error).message));
+    }));
     menu.addItem((item) => item.setTitle("复制文字与批注").setIcon("copy").onClick(() => {
       void this.copy(annotation);
     }));
@@ -588,6 +591,17 @@ export class AnnotationView extends ItemView {
   }
 
   // ── Actions ───────────────────────────────────────────────
+
+  private async discussAnnotation(annotation: AnnotationItem): Promise<void> {
+    const file = this.app.vault.getAbstractFileByPath(annotation.path);
+    if (!(file instanceof TFile)) throw new Error("找不到原文件");
+    const content = await this.readFreshFile(file);
+    const range = locateSourceRange(content, annotation);
+    if (!range) throw new Error("原文位置已变化，请刷新批注后重试");
+    await this.plugin.activateAgentView({ path: annotation.path, selection: { ...range, text: content.slice(range.start, range.end), content }, annotation: this.commentText(annotation) }, true);
+    const session = this.plugin.agent.active;
+    if (session) this.plugin.agent.update(session.id, { draft: "围绕这条批注继续分析，并提出值得追问的问题。" });
+  }
 
   private async navigate(annotation: AnnotationItem): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(annotation.path);

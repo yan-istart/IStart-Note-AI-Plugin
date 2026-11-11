@@ -58,8 +58,8 @@ const PROMPT = `你是一个技术文档可视化助手。根据用户提供的�
 export class DiagramGenerator {
   private llm: LLMClient;
 
-  constructor(settings: DeepSeekSettings) {
-    this.llm = new LLMClient(settings);
+  constructor(settings: DeepSeekSettings, llm?: LLMClient) {
+    this.llm = llm ?? new LLMClient(settings);
   }
 
   async generate(

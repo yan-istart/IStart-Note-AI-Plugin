@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { requestUrl } from "obsidian";
 import type { RequestUrlResponse } from "obsidian";
 import { DEFAULT_SETTINGS } from "../../types";
@@ -25,6 +25,42 @@ const requestBody = (index = 0) => {
 beforeEach(() => {
   request.mockReset();
   setSkillProvider(null);
+});
+afterEach(() => vi.unstubAllGlobals());
+
+describe("agent conversations and transport", () => {
+  it("preserves user/assistant turns and isolates explicitly pinned skills from the active file", async () => {
+    request.mockResolvedValue(success);
+    const provider = vi.fn(() => []); setSkillProvider(provider);
+    await new LLMClient(settings, { skills: [], skillContext: { useActiveFile: false } }).chatMessages([
+      { role: "user", content: "original question" }, { role: "assistant", content: "earlier answer" }, { role: "user", content: "follow up" },
+    ], { systemPrompt: "agent rules" });
+    expect(provider).not.toHaveBeenCalled();
+    expect(requestBody().messages).toEqual([{ role: "system", content: "agent rules" }, { role: "user", content: "original question" }, { role: "assistant", content: "earlier answer" }, { role: "user", content: "follow up" }]);
+  });
+  it("decodes SSE across UTF-8 and line boundaries without exposing reasoning", async () => {
+    const data = new TextEncoder().encode('data: {"choices":[{"delta":{"reasoning_content":"hidden"}}]}\r\n\r\ndata: {"choices":[{"delta":{"content":"你好"}}]}\n\ndata: {"choices":[{"delta":{"content":"世界"},"finish_reason":"stop"}]}\n\ndata: [DONE]\n');
+    const body = new ReadableStream({ start(controller) { for (let i = 0; i < data.length; i += 7) controller.enqueue(data.slice(i, i + 7)); controller.close(); } });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { headers: { "content-type": "text/event-stream" } })));
+    const delta = vi.fn();
+    expect(await new LLMClient(settings).chatMessages([{ role: "user", content: "hi" }], { onDelta: delta })).toBe("你好世界");
+    expect(delta.mock.calls.flat().join("")).toBe("你好世界"); expect(request).not.toHaveBeenCalled();
+  });
+  it("falls back for CORS before streaming, and discards cancelled requestUrl results", async () => {
+    request.mockResolvedValue(success); vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("CORS"); }));
+    expect(await new LLMClient(settings).chatMessages([{ role: "user", content: "hi" }], { onDelta: () => {} })).toBe("连接正文");
+    expect(request).toHaveBeenCalledOnce();
+    request.mockReset().mockReturnValue(Object.assign(new Promise<RequestUrlResponse>(() => {}), { arrayBuffer: Promise.resolve(new ArrayBuffer(0)), json: Promise.resolve(null), text: Promise.resolve("") }));
+    const abort = new AbortController();
+    const job = new LLMClient(settings, { signal: abort.signal }).chat({ userPrompt: "hi" });
+    abort.abort(); await expect(job).rejects.toThrow("停止");
+  });
+  it("does not issue duplicate requests if the stream fails after receiving output", async () => {
+    const body = new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"partial"}}]}\n\n')); }, pull(c) { c.error(new TypeError("disconnected")); } });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { headers: { "content-type": "text/event-stream" } })));
+    await expect(new LLMClient(settings).chatMessages([{ role: "user", content: "hi" }], { onDelta: () => {} })).rejects.toThrow("disconnected");
+    expect(request).not.toHaveBeenCalled();
+  });
 });
 
 describe("writing responses from DeepSeek", () => {

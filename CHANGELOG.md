@@ -7,6 +7,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- Durable Agent task continuation from saved tool checkpoints, with explicit Continue versus Regenerate actions, restored source/project snapshots, and protection when source content or execution scope changes. Completed tool steps and drafts are reused after interruption.
+- Cross-turn draft revision and coalesced shared-index changes; full reading project continuation with preserved handwritten questions and progress; shared Mermaid question graph rendering; paged long-note reads; and template-plus-daily-run previews with usage/evidence options.
+- Persistent multi-session Agent sidebar with independent drafts, explicit references, Ask / Agent modes, bounded tool execution, source citations, previewed changes, cancellation, retry, branching, searchable/pinned/archived conversations, and Markdown export. Reuses existing AI generators and can continue quick-dialog results in the sidebar.
+- Multi-turn LLM transport, opt-in SSE with CORS fallback, fixed per-turn skills, conversation summaries, conflict-safe and idempotent writes, interrupted-task recovery, opt-in credential-free shared history, and regression coverage.
 - Sidebar annotations: turn selections into `==highlights==` with inline `^[...]` or footnote `[^n]` comments, browse current-note or whole-vault highlights, comments and `%%Obsidian comments%%` from a right-sidebar view, click to jump back to the source, and search/filter/edit/copy/remove entries. Annotations use plain Markdown and remain readable without the plugin.
 - AI annotation drafting from a selection plus nearby context, with an editable preview before anything is written.
 - AI suggestions for an existing annotation: analyze the highlighted text, current comment and nearby context, preview Markdown suggestions, and optionally append them to the annotation. Editing preserves the original highlight and inline/footnote/Obsidian-comment format, including shared footnote handling.

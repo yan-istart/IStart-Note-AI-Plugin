@@ -1536,3 +1536,82 @@ button.istart-import-merge {
   width: 20px;
   height: 20px;
 }
+
+/* Multi-session AI sidebar. All colors inherit the Obsidian theme. */
+.istart-agent-root { display:flex; flex-direction:column; height:100%; min-height:0; min-width:0; padding:0 !important; overflow:hidden; }
+.istart-agent-header,.istart-agent-sessionbar,.istart-agent-composer-actions,.istart-agent-composer-meta { display:flex; align-items:center; gap:8px; }
+.istart-agent-header { justify-content:space-between; padding:10px 12px; border-bottom:1px solid var(--background-modifier-border); }
+.istart-agent-brand { display:flex; flex-direction:row-reverse; align-items:center; gap:8px; font-weight:var(--font-semibold); }
+.istart-agent-brand svg { color:var(--interactive-accent); }
+.istart-agent-sessionbar { padding:8px 10px; }
+.istart-agent-root button { white-space:normal; overflow-wrap:anywhere; height:auto; }
+.istart-agent-root .istart-agent-icon-button { padding:6px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; background:transparent; border:0; box-shadow:none; }
+.istart-agent-root .istart-agent-icon-button:hover { background:var(--background-modifier-hover); }
+.istart-agent-root .istart-agent-session-title { flex:1; min-width:0; justify-content:flex-start; text-align:left; gap:8px; }
+.istart-agent-session-title > span:nth-child(2) { flex:1; }
+.istart-agent-root svg { width:16px; height:16px; flex-shrink:0; vertical-align:middle; }
+.istart-agent-conversation { flex:1; display:flex; flex-direction:column; min-height:0; min-width:0; }
+.istart-agent-context { display:flex; flex-wrap:wrap; gap:6px; padding:2px 12px 10px; font-size:var(--font-smallest); }
+.istart-agent-context-chip { display:flex; align-items:center; min-width:0; max-width:100%; background:var(--background-secondary); border-radius:5px; }
+.istart-agent-context-chip .istart-agent-text-button { min-width:0; font-size:var(--font-smallest); }
+.istart-agent-context-chip .istart-agent-text-button span:last-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.istart-agent-root .istart-agent-text-button { display:inline-flex; align-items:center; justify-content:flex-start; gap:5px; padding:5px 7px; box-shadow:none; font-size:var(--font-smaller); }
+.istart-agent-messages { flex:1; min-height:0; overflow:auto; padding:10px 14px 16px; overflow-wrap:anywhere; }
+.istart-agent-message { margin-bottom:22px; }
+.istart-agent-message-author { font-size:var(--font-smaller); font-weight:var(--font-semibold); margin-bottom:8px; }
+.istart-agent-message.is-user { margin-left:20px; padding:10px 12px; background:var(--background-secondary); border-radius:9px 9px 2px 9px; }
+.istart-agent-message.is-user .istart-agent-message-author { color:var(--text-muted); }
+.istart-agent-user-text,.istart-agent-stream-text { white-space:pre-wrap; }
+.istart-agent-message-body > :first-child { margin-top:0; }
+.istart-agent-message-body > :last-child { margin-bottom:0; }
+.istart-agent-message-body img { max-width:100%; }
+.istart-agent-message-body table { display:block; overflow:auto; }
+.istart-agent-message-body pre,.istart-agent-details pre { white-space:pre-wrap; overflow-wrap:anywhere; font-size:var(--font-smallest); max-height:320px; overflow:auto; }
+.istart-agent-root .istart-agent-details { margin:8px 0; font-size:var(--font-smaller); }
+.istart-agent-details summary { cursor:pointer; color:var(--text-muted); }
+.istart-agent-details blockquote { margin:6px 0; padding-left:10px; border-left:2px solid var(--interactive-accent); white-space:pre-wrap; }
+.istart-agent-step { display:flex; flex-wrap:wrap; align-items:center; gap:6px; padding:4px 0 4px 8px; }
+.istart-agent-step > details { flex-basis:100%; }
+.istart-agent-step.is-completed > span:first-child { color:var(--text-success); }
+.istart-agent-step.is-error > span:first-child,.istart-agent-error { color:var(--text-error); }
+.istart-agent-error { padding:8px 0; font-size:var(--font-smaller); white-space:pre-wrap; }
+.istart-agent-skills,.istart-agent-muted { color:var(--text-muted); font-size:var(--font-smallest); }
+.istart-agent-skills { margin-bottom:8px; }
+.istart-agent-sources,.istart-agent-proposal-actions,.istart-agent-message-actions { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:10px; }
+.istart-agent-sources button { background:var(--background-secondary); color:var(--text-accent); font-size:var(--font-smallest) !important; }
+.istart-agent-proposal { margin:12px 0; border:1px solid var(--background-modifier-border); padding:12px; border-radius:8px; }
+.istart-agent-proposal-title { font-weight:var(--font-semibold); }
+.istart-agent-change-path { font-size:var(--font-smallest); margin-top:10px; overflow-wrap:anywhere; }
+.istart-agent-root pre.istart-agent-diff-before { background:rgba(var(--color-red-rgb),.12); color:var(--text-normal); border-left:2px solid var(--color-red); padding:8px; }
+.istart-agent-root pre.istart-agent-diff-after { background:rgba(var(--color-green-rgb),.12); color:var(--text-normal); border-left:2px solid var(--color-green); padding:8px; }
+.istart-agent-composer { flex-shrink:0; padding:10px 12px 6px; border-top:1px solid var(--background-modifier-border); background:var(--background-primary); }
+.istart-agent-composer textarea { display:block; width:100%; min-height:70px; max-height:220px; resize:vertical; }
+.istart-agent-composer-actions { margin-top:8px; }
+.istart-agent-composer-actions > button:last-child { margin-left:auto; }
+.istart-agent-root .mod-cta { background:var(--interactive-accent); color:var(--text-on-accent); }
+.istart-agent-root .mod-cta:hover { background:var(--interactive-accent-hover); }
+.istart-agent-composer-meta { margin-top:8px; flex-wrap:wrap; font-size:var(--font-smallest); }
+.istart-agent-composer-meta select { max-width:100%; }
+.istart-agent-composer-meta label { display:flex; align-items:center; gap:4px; }
+.istart-agent-model { color:var(--text-muted); overflow-wrap:anywhere; }
+.istart-agent-status { padding:2px 12px 8px; font-size:var(--font-smallest); color:var(--text-muted); flex-shrink:0; overflow-wrap:anywhere; }
+.istart-agent-history { flex:1; min-height:0; display:flex; flex-direction:column; }
+.istart-agent-history-controls { padding:10px 12px; display:flex; flex-direction:column; gap:10px; }
+.istart-agent-history-controls input[type=search] { width:100%; }
+.istart-agent-history-controls label { display:flex; align-items:center; gap:6px; font-size:var(--font-smaller); }
+.istart-agent-history-list { overflow:auto; flex:1; padding:0 10px; }
+.istart-agent-history-row { display:flex; gap:4px; align-items:center; border-radius:6px; margin-bottom:6px; }
+.istart-agent-history-row.is-active { background:var(--background-modifier-hover); }
+.istart-agent-history-row > button:first-child { display:flex; flex-wrap:wrap; flex:1; min-width:0; padding:10px 8px; border:0; background:transparent; }
+.istart-agent-history-meta { flex-basis:100%; text-align:left; color:var(--text-muted); font-size:var(--font-smallest); }
+.istart-agent-empty { padding:20px 2px; }
+.istart-agent-empty h3 { margin:0 0 8px; }
+.istart-agent-empty p { color:var(--text-muted); font-size:var(--font-smaller); }
+.istart-agent-empty > button { display:flex !important; width:100%; margin:8px 0; text-align:left; }
+.istart-agent-name-input { width:100%; }
+.istart-agent-mobile .istart-agent-composer { padding-bottom:max(6px,env(safe-area-inset-bottom)); }
+.istart-agent-mobile .istart-agent-composer textarea { font-size:16px; }
+@media (pointer:coarse) {
+  .istart-agent-root button,.istart-agent-root select { min-height:44px; }
+  .istart-agent-root .istart-agent-context-chip .istart-agent-icon-button { min-width:44px; }
+}

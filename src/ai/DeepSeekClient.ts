@@ -20,8 +20,8 @@ const SYSTEM_PROMPT = `你是一个知识图谱构建助手。用户会向你提
 export class DeepSeekClient {
   private llm: LLMClient;
 
-  constructor(settings: DeepSeekSettings) {
-    this.llm = new LLMClient(settings);
+  constructor(settings: DeepSeekSettings, llm?: LLMClient) {
+    this.llm = llm ?? new LLMClient(settings);
   }
 
   async ask(question: string): Promise<DeepSeekResponse> {

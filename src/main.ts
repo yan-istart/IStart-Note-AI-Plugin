@@ -56,6 +56,11 @@ import { setSkillProvider } from "./core/skills/SkillRuntime";
 import { selectSkills } from "./core/skills/SkillSelector";
 import { resolveWritingScope } from "./core/skills/WritingScope";
 import { createFloatingToolbarExtension } from "./features/toolbar/FloatingToolbarExtension";
+import { AgentController, SYNC_HISTORY_PATH } from "./features/agent/AgentController";
+import { AgentView, AGENT_VIEW_TYPE } from "./features/agent/AgentView";
+import { referenceFromTarget } from "./core/agent/Context";
+import { loadAgentSettings, type NoteReference } from "./core/agent/types";
+import { setResultConversationHandler } from "./features/agent/ResultConversation";
 
 export default class DeepSeekPlugin extends Plugin {
   settings!: DeepSeekSettings;
@@ -63,6 +68,7 @@ export default class DeepSeekPlugin extends Plugin {
   knowledgeIndex!: KnowledgeIndexService;
   /** Local Agent Skills discovered from Skills/ and .agents/skills. */
   skillRegistry!: SkillRegistry;
+  agent!: AgentController;
   private automaticSyncRunning = false;
   private automaticSyncMessage = "";
   private aiJobs = new Set<string>();
@@ -73,6 +79,27 @@ export default class DeepSeekPlugin extends Plugin {
     this.skillRegistry = new SkillRegistry(this.app, () => this.settings.skills);
     void this.skillRegistry.refresh();
     this.registerSkillRuntime();
+
+    this.agent = new AgentController(this);
+    const activeMarkdown = this.app.workspace.getActiveViewOfType(MarkdownView);
+    if (activeMarkdown) this.agent.trackView(activeMarkdown);
+    await this.agent.load();
+    this.registerView(AGENT_VIEW_TYPE, leaf => new AgentView(leaf, this));
+    this.registerEvent(this.app.workspace.on("active-leaf-change", leaf => {
+      if (leaf?.view instanceof MarkdownView) this.agent.trackView(leaf.view);
+    }));
+    this.registerEvent(this.app.vault.on("modify", file => {
+      if (file.path === SYNC_HISTORY_PATH) void this.agent.pullSharedHistory().catch(error => new Notice(`会话共享读取失败：${(error as Error).message}`));
+    }));
+    setResultConversationHandler((content, reference) => {
+      this.agent.importResult(content, reference);
+      void this.activateAgentView();
+    });
+    this.addRibbonIcon("messages-square", "IStart AI 助手", () => this.openAssistant());
+    this.addCommand({ id: "agent-new-session", name: "新建 AI 会话", callback: () => { void this.activateAgentView(undefined, true); } });
+    this.addCommand({ id: "agent-stop", name: "停止当前 AI 会话生成", callback: () => { const s = this.agent.active; if (s) this.agent.stop(s.id); } });
+    this.addCommand({ id: "ai-assistant-quick", name: "AI 快捷弹窗", callback: () => this.openQuickAssistant() });
+    this.addCommand({ id: "vault-qa-quick", name: "知识库问答快捷弹窗", callback: () => this.openVaultQAQuick() });
 
     // Build knowledge index
     this.knowledgeIndex = new KnowledgeIndexService(this.app, (path) => this.skillRegistry.isSkillPath(path));
@@ -145,6 +172,8 @@ export default class DeepSeekPlugin extends Plugin {
 
   onunload(): void {
     setSkillProvider(null);
+    setResultConversationHandler(null);
+    void this.agent?.dispose().catch(error => new Notice(`会话保存失败：${(error as Error).message}`));
   }
 
   /** 状态栏快捷入口:打开章节文件时显示「续写」与「下一章」按钮 */
@@ -174,7 +203,25 @@ export default class DeepSeekPlugin extends Plugin {
 
   // ── AI 助手（统一入口） ────────────────────────────────────
 
-  openAssistant(target: EditorTarget | null = captureEditorTarget(this.app)) {
+  openAssistant(target: EditorTarget | null = captureEditorTarget(this.app), file?: TFile | null) {
+    const reference = file ? { path: file.path } : target ? referenceFromTarget(target) : this.agent.captureCurrent();
+    void this.activateAgentView(reference ?? undefined).catch(error => new Notice((error as Error).message));
+  }
+
+  async activateAgentView(reference?: NoteReference, fresh = false): Promise<void> {
+    if (this.agent.error) new Notice(this.agent.error);
+    else if (fresh || !this.agent.active || this.agent.active.archived || (reference && this.agent.active.messages.length > 0 && (this.agent.isRunning(this.agent.active.id) || this.agent.active.references[0]?.path !== reference.path))) this.agent.create(reference ? [reference] : []);
+    else if (reference) this.agent.attach(reference);
+    const workspace = this.app.workspace;
+    let leaf = workspace.getLeavesOfType(AGENT_VIEW_TYPE)[0];
+    if (!leaf) {
+      leaf = await workspace.ensureSideLeaf(AGENT_VIEW_TYPE, "right", { active: true, reveal: true, split: false });
+      if (!(leaf.view instanceof AgentView)) await leaf.setViewState({ type: AGENT_VIEW_TYPE, active: true });
+    }
+    await workspace.revealLeaf(leaf);
+  }
+
+  openQuickAssistant(target: EditorTarget | null = captureEditorTarget(this.app)) {
     const activeFile = target?.file ?? this.app.workspace.getActiveFile();
     const selection = target?.selection.trim() ?? "";
     const fileName = activeFile?.basename ?? "";
@@ -204,7 +251,7 @@ export default class DeepSeekPlugin extends Plugin {
       await view.leaf.setViewState({ type: "markdown", state: { file: file.path, mode: "source" }, active: true });
       const target = captureEditorTarget(this.app);
       if (!target || target.path !== file.path) throw new Error("无法取得当前编辑器，请手动切换到编辑模式后打开助手");
-      this.openAssistant(target);
+      this.openQuickAssistant(target);
     } catch (error) { new Notice((error as Error).message); }
   }
 
@@ -310,7 +357,7 @@ export default class DeepSeekPlugin extends Plugin {
             continueAfter(nextTarget);
             return true;
           },
-        } : undefined, options
+        } : undefined, { ...options, conversationReference: target ? referenceFromTarget(target) : undefined }
       ).open();
     } catch (error) {
       new Notice(`生成失败：${(error as Error).message}`);
@@ -736,6 +783,15 @@ export default class DeepSeekPlugin extends Plugin {
    * then sends them as context so the AI can answer with source references.
    */
   openVaultQA() {
+    const target = captureEditorTarget(this.app);
+    const reference = target ? referenceFromTarget(target) : this.agent.captureCurrent();
+    void this.activateAgentView(reference ?? undefined).then(() => {
+      const session = this.agent.active;
+      if (session) this.agent.update(session.id, { mode: "ask", searchVault: true });
+    }).catch(error => new Notice((error as Error).message));
+  }
+
+  openVaultQAQuick() {
     const editor = this.app.workspace.activeEditor?.editor ?? null;
     const selection = editor?.getSelection().trim() ?? "";
     const activeFile = this.app.workspace.getActiveFile();
@@ -1249,6 +1305,7 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
     this.settings.skills = loadSkillSettings(saved?.skills);
     this.settings.floatingToolbar = loadFloatingToolbarSettings(saved?.floatingToolbar);
     this.settings.baiduSync = loadBaiduSyncConfig(saved?.baiduSync);
+    this.settings.agent = loadAgentSettings(saved?.agent);
     if (this.settings.baiduSync.enabled && this.settings.baiduSync.accessToken && this.settings.baiduSync.autoPullConfig) {
       void this.pullConfig(true);
     }
@@ -1256,6 +1313,7 @@ ${selection ? `用户当前选中的文字：\n${selection}\n` : ""}`;
 
   async saveSettings() {
     await this.saveData(this.settings);
+    this.agent?.refreshSettings();
     for (const leaf of this.app.workspace.getLeavesOfType(SYNC_VIEW_TYPE)) {
       if (leaf.view instanceof BaiduSyncView) leaf.view.refreshSettings();
     }

@@ -37,8 +37,8 @@ const PAPER_ONLY = `4. characters 与 world_settings 输出空数组。`;
 export class WritingPlanner {
   private llm: LLMClient;
 
-  constructor(settings: DeepSeekSettings) {
-    this.llm = new LLMClient(settings);
+  constructor(settings: DeepSeekSettings, llm?: LLMClient) {
+    this.llm = llm ?? new LLMClient(settings);
   }
 
   async plan(genre: WritingGenre, title: string, premise: string): Promise<WritingPlan> {

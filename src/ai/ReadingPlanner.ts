@@ -135,8 +135,8 @@ const FEYNMAN_PROMPT = `你是一个学习检验助手。请基于章节内容�
 export class ReadingPlanner {
   private llm: LLMClient;
 
-  constructor(private settings: DeepSeekSettings) {
-    this.llm = new LLMClient(settings);
+  constructor(private settings: DeepSeekSettings, llm?: LLMClient) {
+    this.llm = llm ?? new LLMClient(settings);
   }
 
   /** 第一步：生成全书骨架（轻量，一次请求） */

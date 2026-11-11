@@ -1,4 +1,6 @@
+import { DEFAULT_AGENT_SETTINGS, type AgentSettings } from "./core/agent/types";
 export interface DeepSeekSettings {
+  agent: AgentSettings;
   apiKey: string;
   baseUrl: string;
   model: "deepseek-v4-flash" | "deepseek-v4-pro";
@@ -138,6 +140,7 @@ export function loadBaiduSyncConfig(saved?: Partial<BaiduSyncConfig>): BaiduSync
 }
 
 export const DEFAULT_SETTINGS: DeepSeekSettings = {
+  agent: { ...DEFAULT_AGENT_SETTINGS },
   apiKey: "",
   baseUrl: "https://api.deepseek.com",
   model: "deepseek-v4-flash",

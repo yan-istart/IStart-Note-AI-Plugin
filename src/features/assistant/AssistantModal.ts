@@ -4,6 +4,8 @@ import { todayIso } from "../../core/schema";
 import { ActionModal } from "../../ui/ActionModal";
 import { panelIcon } from "../../ui/icons";
 import type { QuickAction, QuickActionId } from "../../actions/quickActions";
+import { canContinueResult, continueResult } from "../agent/ResultConversation";
+import type { NoteReference } from "../../core/agent/types";
 
 const QUICK_TAGS = [
   { label: "扩写", value: "扩写这段内容" },
@@ -231,7 +233,7 @@ export class AssistantResultModal extends ActionModal {
     private onRetry: () => void,
     private onCreateConcept?: () => void,
     private extraAction?: { label: string; callback: () => void | boolean },
-    private options: { primaryLabel?: string; modeHint?: string; moreActions?: ResultAction[] } = {}
+    private options: { primaryLabel?: string; modeHint?: string; moreActions?: ResultAction[]; conversationReference?: NoteReference } = {}
   ) {
     super(app);
     this.component = new Component();
@@ -290,6 +292,7 @@ export class AssistantResultModal extends ActionModal {
     }
 
     const actions = [...(this.options.moreActions ?? []), ...secondary];
+    if (canContinueResult()) actions.push({ label: "在侧边栏继续讨论", callback: () => { continueResult(this.result.content, this.options.conversationReference); this.close(); } });
     if (!actions.some((action) => action.label === "复制")) actions.push({ label: "复制", callback: () => copyToClipboard(this.result.content) });
     actions.push({ label: "重新生成", callback: this.onRetry });
     primarySetting.addButton((btn) => {

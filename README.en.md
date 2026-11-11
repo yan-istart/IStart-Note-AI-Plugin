@@ -107,7 +107,7 @@ OpenCode can also use `"skills": ["./Skills"]`. Then open **Settings → Skill �
 
 ### 3. Auxiliary
 
-- **AI assistant** — process a selection, current note, or cursor context with natural-language instructions; preview before replacing a selection, inserting, or appending, with options to copy results or create a concept page
+- **Multi-session AI sidebar** — independent histories and drafts, Ask / Agent modes, follow-up questions, source references, tool execution records, branches, and Markdown export. Interrupted tasks resume from saved tool checkpoints. Pending drafts can be revised across turns, reading projects continue chapter by chapter with progress updates, and templates can include a daily run. Attach notes with `@` or capture a selection/cursor, then preview changes before applying. Reuses existing AI generators. The original dialog remains available as **AI 快捷弹窗**; results can continue in the sidebar. See [Agent documentation (Chinese)](./docs/agent-sidebar.md).
 - **Sidebar annotations** — turn a selection into `==highlight==` with an inline or footnote comment, then browse the current note or whole vault from the right sidebar. Click to jump back, search/filter, edit, copy, or remove. Existing `<mark>` highlights and `%%Obsidian comments%%` are recognized too
 - **AI annotation** — let the configured AI draft a comment from the selection and nearby context; review or edit before writing. You can also request AI suggestions for an existing annotation and choose whether to append them
 - **AI service** — DeepSeek by default. API key and Base URL are configurable; requests use `POST {baseUrl}/v1/chat/completions`. The model dropdown only offers `deepseek-v4-flash` (default) and `deepseek-v4-pro`; another endpoint must accept the selected model name. There is no custom-model input or provider manager
@@ -126,7 +126,7 @@ Sync is disabled by default. New installations default to Git mode; older config
 
 ## Current limitations
 
-- Vault QA searches titles, tags, headings, links, concepts, and domains using an in-memory metadata index. It sends up to eight matching notes, using the first 600 characters of each, plus any selection. It has no embeddings or full-text semantic search.
+- Vault QA searches titles, tags, headings, links, concepts, and domains using an in-memory metadata index. The sidebar search returns up to eight notes with 1,800-character snippets and can read longer excerpts on demand; the legacy quick dialog uses 600 characters per note. There are no embeddings or full-text semantic search.
 - Reading project creation generates pre-reading questions and note templates. Dedicated commands for resuming a project, generating chapter summaries, and Feynman tests are not registered; use the AI assistant for these tasks.
 - Ordinary notes support continuation and insertion between existing passages. Insertion reads both sides of the cursor and previews a connecting passage before writing; chapter notes also use the outline, characters, and settings. Next-chapter generation requires an open chapter note. New projects create chapter templates, not complete prose.
 - Full context is the default: the complete current document, complete project outline, and every complete character/setting card. Other chapters' prose is not included automatically. Project sources still use `_作品.md`, `_大纲.md`, `_角色/`, and `_设定/` in the chapter's parent directory. Explicit nearby mode restores context clipping and name matching with three characters/two settings.
@@ -198,7 +198,7 @@ Settings are organized into six tabs:
 - **Annotations** — select text and run **Add annotation** or **AI annotation** from the command palette, editor menu, or command panel. The highlighter ribbon icon opens the annotation sidebar; click a card to jump back, or use its menu to edit it, request AI suggestions, copy, or remove it.
 - **Floating toolbar** — select text to see annotation, AI annotation, polish, expand, and explain actions; **More** opens the full command panel. Enable a cursor-idle trigger under Settings → Interface if desired.
 - **Editor right-click** — AI assistant, Vault QA, concept completion, practical templates, document beautification, add annotation, and AI annotation; continuation, insertion, and their settings appear without a selection, while polish/expand/explain appear with a selection. Chapter notes also show character extraction.
-- **File right-click** — AI assistant / beautify; these handlers operate on the active editor, so open the target note first
+- **File right-click** — AI assistant attaches the clicked note. Beautify uses the active editor, so open the target note first.
 - **Cloud ribbon icon** — opens the Baidu sync sidebar with manual sync and version history in Git mode
 
 ### Mobile
@@ -208,14 +208,14 @@ Settings are organized into six tabs:
 - The floating toolbar is disabled on mobile by default. Enable it under Settings → Interface if needed; it uses larger touch targets but may overlap Obsidian's native selection menu and selection handles.
 - With prose on both sides of the cursor, the panel and assistant prioritize **插写** (insert between passages); at the end, they prioritize continuation. **All features** retains both writing entries.
 - Add commands such as continue, insert between passages, polish, expand, explain, summarize, and add annotation in **Settings → Interface → Configure mobile toolbar → Add a command**. Writing commands use matching Phosphor Bold icons; insertion uses arrows converging on the gap, while annotations use a highlighter icon.
-- The panel and assistant show **生成量** (generation quantity) directly on mobile and desktop. Reading mode offers an explicit switch to editing before writing actions become available. Standalone instructions in reading mode still receive the current document and produce a display-only preview.
+- The panel and quick assistant dialog show **生成量** (generation quantity) directly on mobile and desktop. Reading mode offers an explicit switch to editing before writing actions become available. Standalone instructions in reading mode still receive the current document and produce a display-only preview.
 - Continuation generates with saved parameters. Quantity/settings offers short (about 300), medium (800), long (1500), or a custom target of 1–10000 Chinese characters, along with cursor/end position, context scope, and instructions.
 - Insertion defaults to 200 characters; quantity/settings offers short (about 100), medium (200), long (300), or custom 1–10000, with bridging, explanation, and transition instructions. Its target is saved separately from continuation; context scope is shared. Cancel any selection and place the cursor between existing prose.
 - Full context preserves the entire current chapter before and after the cursor. Continuation treats existing following prose as a reference. Chapter synopsis prefers the updated outline, falling back to the chapter's `synopsis` property when needed. Clipping only applies to explicit nearby mode.
 - Previews show target and actual counts. **More → Adjust quantity / context** reopens the controls. Writing disables thinking on the official DeepSeek endpoint and separates prose length from the output-token budget. Empty prose gets at most one recovery request; exhausted budget, reasoning-only output, empty responses, and service interruptions are reported separately.
 - Continuation's **Insert and continue** accepts the current result before generating more; insertion only writes the connecting passage. **More → Regenerate** retries without inserting. Writes use the original file, cursor, and selection; switching files or changing the original content blocks insertion while leaving the result available to copy.
 - Assistant, continuation, insertion, question, new-work, and result dialogs have a scrolling body and persistent footer sized to the visible keyboard viewport. Mobile dialogs do not explicitly focus text fields.
-- Keyboard sizing combines Obsidian's native keyboard inset with the browser's visible viewport. While typing, the assistant collapses shortcuts and offers **Execute** and **Hide keyboard** in the title bar. Hiding the keyboard preserves the dialog and entered text.
+- Keyboard sizing combines Obsidian's native keyboard inset with the browser's visible viewport. While typing, the quick assistant dialog collapses shortcuts and offers **Execute** and **Hide keyboard** in the title bar. Hiding the keyboard preserves the dialog and entered text.
 - Importing files/folders outside the vault requires desktop Obsidian; mobile can use pasted text or vault sources.
 
 ---
@@ -267,6 +267,7 @@ src/
     schema.ts         SCHEMA_VERSION + helpers
   ai/                 AI feature modules (assistant, annotation drafting, classifier, reading planner, writing planner, continuer, ...)
   features/
+    agent/            Multi-session Agent sidebar and controller
     assistant/        AI assistant modals
     annotation/       Add/delete dialogs and annotation sidebar view
     writing/          New work, plan preview, continue, import, project/context management

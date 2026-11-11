@@ -30,12 +30,22 @@ The request body may include:
 | Reading notes | The notes for a specific chapter (truncated to ~3,000 characters) | Reading project: chapter summary, Feynman test |
 | Your instruction | The natural-language prompt you type into the assistant | Always |
 
-The plugin never reads files outside the configured paths unless you explicitly point it at them. The plugin never sends your API key to anything other than the provider's endpoint.
+During a task, the Agent can read Markdown notes explicitly attached or discovered by its tools inside the current vault. Other features read their configured context. The Agent does not read outside the vault; desktop manuscript import reads only local sources explicitly selected by the user. API keys are sent only to the configured provider endpoint.
 
 You are subject to the privacy policy of whichever provider you configure. Review:
 
 - DeepSeek: <https://platform.deepseek.com>
 - For other providers, consult their own documentation.
+
+## Agent conversation history
+
+Conversations, drafts, source snapshots, tool records, and proposed changes are stored separately from settings in `<vault.configDir>/plugins/istart-note-ai/agent/sessions.json`. Snapshots and previews can include complete note contents. Conversation files do not store provider keys or Baidu credentials; external vault/system backups can still copy the plugin directory.
+
+Task checkpoints in that file include pending tool requests, returned observations, source snapshots, and project context. They are included when shared history is enabled. Continuing a task sends the required restored history to the currently configured model service and checks whether source notes changed.
+
+Agent requests send budgeted history or summaries, references, tool results, and selected skills to the configured model service. Retrieved sources can include notes other than the open document. Optional streaming uses browser HTTPS requests and falls back to Obsidian transport when CORS prevents access, using the same endpoint.
+
+Shared history is off by default. Enabling it writes `IStart/Agent Sessions/history.json`, a regular vault file that Git-mode or other vault sync services can synchronize. Disabling sharing stops updates but does not delete existing shared files or remote versions. Markdown exports are also vault notes. Deleting a conversation preserves notes already created and does not remove backup copies.
 
 ## What is sent to Baidu Cloud
 

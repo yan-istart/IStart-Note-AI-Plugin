@@ -38,7 +38,7 @@ const SUGGESTION_PROMPT = `你是阅读批注助手。用户已经选中了一�
 4. 不要重复原文，不要写“建议：”前缀，不要编造原文没有的事实。`;
 
 /** Ask the configured LLM for a concise annotation draft. */
-export async function draftAnnotation(settings: DeepSeekSettings, input: AnnotationDraftInput): Promise<string> {
+export async function draftAnnotation(settings: DeepSeekSettings, input: AnnotationDraftInput, client?: LLMClient): Promise<string> {
   const selection = input.selection.trim();
   if (!selection) throw new Error("请先选中文字");
 
@@ -51,7 +51,7 @@ export async function draftAnnotation(settings: DeepSeekSettings, input: Annotat
     input.after ? `下文（节选）：\n${input.after.slice(0, 600)}` : "",
   ].filter(Boolean).join("\n\n");
 
-  const llm = new LLMClient(settings);
+  const llm = client ?? new LLMClient(settings);
   const raw = await llm.chat({
     systemPrompt: SYSTEM_PROMPT,
     userPrompt: context,
@@ -68,7 +68,8 @@ export async function draftAnnotation(settings: DeepSeekSettings, input: Annotat
 /** Ask the LLM how the current annotation could be deepened. */
 export async function suggestFromAnnotation(
   settings: DeepSeekSettings,
-  input: AnnotationSuggestionInput
+  input: AnnotationSuggestionInput,
+  client?: LLMClient
 ): Promise<string> {
   const selection = input.selection.trim();
   if (!selection && !input.comment.trim()) throw new Error("这条批注没有可分析的内容");
@@ -82,7 +83,7 @@ export async function suggestFromAnnotation(
     input.after ? `下文（节选）：\n${input.after.slice(0, 600)}` : "",
   ].filter(Boolean).join("\n\n");
 
-  const llm = new LLMClient(settings);
+  const llm = client ?? new LLMClient(settings);
   const raw = await llm.chat({
     systemPrompt: SUGGESTION_PROMPT,
     userPrompt: context,

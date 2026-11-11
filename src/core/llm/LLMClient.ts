@@ -22,7 +22,15 @@ import { renderSkillInstructions } from "../skills/SkillPrompt";
  * swapping out this module.
  */
 
+export interface LLMMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
 export interface LLMChatOptions {
+  signal?: AbortSignal;
+  /** Opt-in streaming transport; falls back to requestUrl when browser CORS prevents fetch. */
+  onDelta?: (text: string) => void;
   /** Optional system prompt. Sent as the first message when provided. */
   systemPrompt?: string;
   /** Required user prompt. */
@@ -72,7 +80,7 @@ export class LLMError extends Error {
 }
 
 export class LLMClient {
-  constructor(private settings: DeepSeekSettings) {}
+  constructor(private settings: DeepSeekSettings, private defaults: { skillContext?: LLMChatOptions["skillContext"]; signal?: AbortSignal; skills?: SkillDefinition[] } = {}) {}
 
   /** Throw a friendly error if the API key is not configured. */
   ensureApiKey(): void {
@@ -86,52 +94,53 @@ export class LLMClient {
    * @returns The raw assistant message content. Empty or malformed responses have specific errors.
    */
   async chat(options: LLMChatOptions): Promise<string> {
+    return this.chatMessages([{ role: "user", content: options.userPrompt }], options);
+  }
+
+  async chatMessages(history: LLMMessage[], options: Omit<LLMChatOptions, "userPrompt"> = {}): Promise<string> {
     this.ensureApiKey();
-
-    let activeSkills: SkillDefinition[] = [];
-    try {
-      activeSkills = await resolveActiveSkills({
-        systemPrompt: options.systemPrompt,
-        userPrompt: options.userPrompt,
-        feature: options.skillFeature ?? "other",
-        genre: options.skillContext?.genre,
-        projectTitle: options.skillContext?.projectTitle,
-        projectPath: options.skillContext?.projectPath,
-        useActiveFile: options.skillContext?.useActiveFile,
-      });
-    } catch {
-      // A malformed skill or unreadable vault must never block the AI request.
-      activeSkills = [];
+    if (!history.length) throw new Error("对话消息不能为空");
+    const signal = this.defaults.signal ?? options.signal;
+    if (signal?.aborted) throw new Error("生成已停止");
+    const skillContext = this.defaults.skillContext ?? options.skillContext;
+    let activeSkills: SkillDefinition[] = this.defaults.skills ?? [];
+    if (!this.defaults.skills) {
+      try {
+        activeSkills = await resolveActiveSkills({
+          systemPrompt: options.systemPrompt,
+          userPrompt: [...history].reverse().find(m => m.role === "user")?.content ?? "",
+          feature: options.skillFeature ?? "other",
+          ...skillContext,
+        });
+      } catch { activeSkills = []; }
     }
-    const systemPrompt = [options.systemPrompt, renderSkillInstructions(activeSkills)]
-      .filter((part): part is string => !!part)
-      .join("\n\n");
-
-    const messages: { role: "system" | "user"; content: string }[] = [];
-    if (systemPrompt) {
-      messages.push({ role: "system", content: systemPrompt });
-    }
-    messages.push({ role: "user", content: options.userPrompt });
+    const systemPrompt = [options.systemPrompt, renderSkillInstructions(activeSkills)].filter(Boolean).join("\n\n");
+    const messages: LLMMessage[] = [...(systemPrompt ? [{ role: "system" as const, content: systemPrompt }] : []), ...history];
 
     let isOfficialDeepSeek = false;
     try { isOfficialDeepSeek = new URL(this.settings.baseUrl).hostname === "api.deepseek.com"; } catch { /* Request validation handles invalid URLs. */ }
 
-    const res = await requestUrl({
-      url: `${this.settings.baseUrl}/v1/chat/completions`,
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${this.settings.apiKey}`,
-      },
-      body: JSON.stringify({
-        model: options.model ?? this.settings.model,
-        messages,
-        temperature: options.temperature ?? 0.5,
-        ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
-        ...(isOfficialDeepSeek && options.thinking ? { thinking: { type: options.thinking } } : {}),
-      }),
-      throw: false,
-    });
+    const url = `${this.settings.baseUrl.replace(/\/$/, "")}/v1/chat/completions`;
+    const headers = { "Content-Type": "application/json", Authorization: `Bearer ${this.settings.apiKey}` };
+    const payload = {
+      model: options.model ?? this.settings.model, messages,
+      temperature: options.temperature ?? 0.5,
+      ...(options.maxTokens ? { max_tokens: options.maxTokens } : {}),
+      ...(isOfficialDeepSeek && options.thinking ? { thinking: { type: options.thinking } } : {}),
+    };
+    const request = async () => {
+      if (options.onDelta) {
+        try { return await streamCompletion(url, headers, payload, options.onDelta, signal); }
+        catch (error) {
+          // A fetch/CORS failure before receiving data is safe to retry using Obsidian's transport.
+          if (!(error instanceof StreamUnavailable) || signal?.aborted) throw error;
+        }
+      }
+      const response = await requestUrl({ url, method: "POST", headers, body: JSON.stringify(payload), throw: false });
+      return response;
+    };
+    if (signal?.aborted) throw new Error("生成已停止");
+    const res = await abortable(request(), signal);
 
     if (res.status !== 200) {
       throw new LLMError(res.status, `LLM API 错误: ${res.status}`, res.text);
@@ -160,4 +169,53 @@ export class LLMClient {
     }
     throw new LLMResponseError("empty_content", "模型服务返回空正文，请调整生成要求或稍后重试", reason);
   }
+}
+
+
+class StreamUnavailable extends Error {}
+
+/** requestUrl has no cancellation API; discard late results and never execute subsequent tools. */
+export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (!signal) return promise;
+  return new Promise<T>((resolve, reject) => {
+    const cancel = () => { cleanup(); reject(new Error("生成已停止")); };
+    const cleanup = () => signal.removeEventListener("abort", cancel);
+    promise.then(value => { cleanup(); resolve(value); }, error => { cleanup(); reject(error); });
+    if (signal.aborted) { cancel(); return; }
+    signal.addEventListener("abort", cancel, { once: true });
+  });
+}
+
+async function streamCompletion(url: string, headers: Record<string, string>, payload: object, onDelta: (text: string) => void, signal?: AbortSignal): Promise<{ status: number; text: string; json: unknown }> {
+  let response: Response;
+  try { response = await fetch(url, { method: "POST", headers, body: JSON.stringify({ ...payload, stream: true }), signal }); }
+  catch (error) { if (signal?.aborted) throw error; throw new StreamUnavailable(); }
+  if (!response.ok) return { status: response.status, text: await response.text(), json: null };
+  if (!response.headers.get("content-type")?.includes("text/event-stream")) {
+    const json: unknown = await response.json();
+    return { status: response.status, text: "", json };
+  }
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error("模型服务没有返回可读取的数据流");
+  const decoder = new TextDecoder(); let buffer = "", content = "", finishReason: string | undefined;
+  function consume(line: string): void {
+    if (!line.startsWith("data:")) return;
+    const value = line.slice(5).trim(); if (!value || value === "[DONE]") return;
+    const data = JSON.parse(value) as { error?: unknown; choices?: { delta?: { content?: unknown }; finish_reason?: string }[] };
+    if (data.error) throw new Error("模型流式响应失败");
+    const choice = data.choices?.[0];
+    if (choice?.finish_reason) finishReason = choice.finish_reason;
+    if (typeof choice?.delta?.content === "string") { content += choice.delta.content; onDelta(choice.delta.content); }
+  }
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+      const lines = buffer.split("\n"); buffer = lines.pop() ?? "";
+      for (const line of lines) consume(line.replace(/\r$/, ""));
+      if (done) { consume(buffer); break; }
+    }
+  } finally { await reader.cancel().catch(() => {}); reader.releaseLock(); }
+  const json = { choices: [{ message: { content }, finish_reason: finishReason }] };
+  return { status: 200, text: "", json };
 }

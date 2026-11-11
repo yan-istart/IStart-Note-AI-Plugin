@@ -493,6 +493,22 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
           })
       );
 
+    new Setting(el).setName("Agent 对话").setHeading();
+    new Setting(el).setName("打开 AI 助手侧边栏").setDesc("多会话、知识库问答、写作与修改预览")
+      .addButton(b => b.setButtonText("打开").onClick(() => this.plugin.openAssistant()));
+    new Setting(el).setName("流式输出").setDesc("逐步显示回答。服务不支持浏览器跨域请求时，自动回退为完整回复。")
+      .addToggle(t => t.setValue(this.plugin.settings.agent.streaming).onChange(async value => { this.plugin.settings.agent.streaming = value; await this.plugin.saveSettings(); }));
+    new Setting(el).setName("每轮工具步数上限").setDesc("2–20 步，默认 8 步。复杂任务可以拆分到后续消息。")
+      .addSlider(s => s.setLimits(2, 20, 1).setValue(this.plugin.settings.agent.maxSteps).setDynamicTooltip().onChange(async value => { this.plugin.settings.agent.maxSteps = value; await this.plugin.saveSettings(); }));
+    new Setting(el).setName("上下文资料预算").setDesc("引用笔记、对话历史和工具结果的字符预算，不含工具说明和技能。")
+      .addDropdown(d => d.addOption("12000", "精简 · 12,000 字符").addOption("30000", "标准 · 30,000 字符").addOption("60000", "扩展 · 60,000 字符").setValue(String(this.plugin.settings.agent.contextChars)).onChange(async value => { this.plugin.settings.agent.contextChars = Number(value); await this.plugin.saveSettings(); }));
+    new Setting(el).setName("共享会话历史").setDesc("默认仅存本机插件目录。启用后将对话内容与引用快照写入 IStart/Agent Sessions/history.json，可由 Vault 同步服务同步；API Key 不写入会话文件。关闭后保留已有共享文件。")
+      .addToggle(t => t.setValue(this.plugin.settings.agent.syncHistory).onChange(async value => {
+        this.plugin.settings.agent.syncHistory = value;
+        await this.plugin.saveSettings();
+        if (value) await this.plugin.agent.pushSharedHistory();
+      }));
+
     // ── 百度网盘同步 ──────────────────────────────────────────
     new Setting(el).setName("百度网盘同步").setHeading();
 

@@ -65,21 +65,8 @@ export class ConceptPageManager {
     depth: CompletionDepth
   ): Promise<void> {
     const content = await this.app.vault.read(file);
-    const { frontmatter, body } = this.splitFrontmatter(content);
-
-    // 先清除空占位标题，再判断哪些 section 已有内容
-    const cleanedBody = this.removeEmptySections(body);
-    const existingSections = this.getExistingSections(cleanedBody);
-
-    const newSections = this.buildSections(result, existingSections, depth);
-    const updatedFrontmatter = this.updateFrontmatter(frontmatter, result);
-
-    // 合并：cleanedBody 只保留顶级标题和有内容的 section，新内容追加
-    const updatedBody = this.mergeSections(cleanedBody, newSections);
-
-    const newContent = updatedFrontmatter
-      ? `---\n${stringifyYaml(updatedFrontmatter)}---\n\n${updatedBody}`
-      : updatedBody;
+    const { frontmatter } = this.splitFrontmatter(content);
+    const newContent = this.renderCompletion(content, result, depth);
 
     await this.app.vault.modify(file, newContent);
 
@@ -92,6 +79,25 @@ export class ConceptPageManager {
       const movedFile = await this.moveTodomainFolder(file, result.domain);
       await this.updateDomainIndex(result.domain, conceptName, movedFile.path);
     }
+  }
+
+  renderCompletion(content: string, result: ConceptCompletionResult, depth: CompletionDepth): string {
+    const { frontmatter, body } = this.splitFrontmatter(content);
+
+    // 先清除空占位标题，再判断哪些 section 已有内容
+    const cleanedBody = this.removeEmptySections(body);
+    const existingSections = this.getExistingSections(cleanedBody);
+
+    const newSections = this.buildSections(result, existingSections, depth);
+    const updatedFrontmatter = this.updateFrontmatter(frontmatter, result);
+
+    // 合并：cleanedBody 只保留顶级标题和有内容的 section，新内容追加
+    const updatedBody = this.mergeSections(cleanedBody, newSections);
+
+    return updatedFrontmatter
+      ? `---\n${stringifyYaml(updatedFrontmatter)}---\n\n${updatedBody}`
+      : updatedBody;
+
   }
 
   buildPreviewMarkdown(result: ConceptCompletionResult, depth: CompletionDepth): string {

@@ -13,7 +13,7 @@ export class VaultWriter {
     await this.ensureFolder(folderPath);
 
     const filePath = await this.uniqueFilePath(folderPath, `${date}-${safeTitle}`);
-    const content = this.buildNoteContent(question, response);
+    const content = this.renderQANote(question, response);
     const file = await this.app.vault.create(filePath, content);
 
     for (const concept of response.concepts) {
@@ -43,7 +43,7 @@ export class VaultWriter {
     return file;
   }
 
-  private buildNoteContent(question: string, response: DeepSeekResponse): string {
+  renderQANote(question: string, response: DeepSeekResponse): string {
     const conceptLinks = response.concepts.map((c) => `- [[${c}]]`).join("\n");
     const relationLines = response.relations
       .map((r) => `- [[${r.from}]] -${r.relation}-> [[${r.to}]]`)
