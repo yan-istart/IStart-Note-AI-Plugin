@@ -1500,6 +1500,12 @@ button.istart-import-merge {
   color: var(--text-on-accent);
   box-shadow: 0 3px 12px rgba(0, 0, 0, 0.18);
   cursor: pointer;
+  visibility: hidden;
+}
+
+.istart-floating-toolbar.is-positioned,
+.istart-floating-toolbar-handle.is-positioned {
+  visibility: visible;
 }
 
 .istart-floating-toolbar-handle:hover {

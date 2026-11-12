@@ -116,7 +116,6 @@ class FloatingToolbarView {
     handle.type = "button";
     handle.title = "IStart 操作";
     handle.setAttribute("aria-label", "打开 IStart 操作");
-    handle.style.visibility = "hidden";
     setIcon(handle.createSpan({ cls: "istart-floating-toolbar-handle-icon" }), "istart-assistant");
     handle.addEventListener("pointerdown", (event) => event.preventDefault());
     handle.addEventListener("mousedown", (event) => event.preventDefault());
@@ -142,7 +141,6 @@ class FloatingToolbarView {
     toolbar.className = "istart-floating-toolbar";
     toolbar.setAttribute("role", "toolbar");
     toolbar.setAttribute("aria-label", "IStart 快捷操作");
-    toolbar.style.visibility = "hidden";
 
     for (const action of actions) this.addActionButton(toolbar, action, ctx);
     const more = toolbar.createEl("button", {
@@ -215,9 +213,8 @@ class FloatingToolbarView {
     );
     const anchorX = (coords.left + coords.right) / 2;
     const left = clamp(anchorX - rect.width / 2, margin, Math.max(margin, viewportWidth - rect.width - margin));
-    toolbar.style.left = `${left}px`;
-    toolbar.style.top = `${top}px`;
-    toolbar.style.visibility = "visible";
+    toolbar.setCssStyles({ left: `${left}px`, top: `${top}px` });
+    toolbar.addClass("is-positioned");
   }
 
   private positionHandle(handle: HTMLElement, pos: number): void {
@@ -230,9 +227,8 @@ class FloatingToolbarView {
     const margin = 4;
     const left = clamp(coords.right + margin, margin, Math.max(margin, this.win.innerWidth - rect.width - margin));
     const top = clamp(coords.top - 2, margin, Math.max(margin, this.win.innerHeight - rect.height - margin));
-    handle.style.left = `${left}px`;
-    handle.style.top = `${top}px`;
-    handle.style.visibility = "visible";
+    handle.setCssStyles({ left: `${left}px`, top: `${top}px` });
+    handle.addClass("is-positioned");
   }
 
   private schedulePosition(): void {
