@@ -24,7 +24,7 @@ export class CommandPanelModal extends ActionModal {
   constructor(app: App, groups: PanelGroup[], private quickActions: PanelAction[] = []) {
     super(app);
     this.groups = groups;
-    this.titleEl.setText("IStart-Note-AI");
+    this.titleEl.setText("IStart 全部功能");
   }
 
   onOpen() {

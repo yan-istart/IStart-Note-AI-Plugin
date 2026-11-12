@@ -1,7 +1,7 @@
-import type { AgentRunContext, ChangeProposal } from "./types";
+import type { AgentRunContext, ChangeProposal, ProofreadingReport } from "./types";
 export type ToolArguments = Record<string, string | number | boolean>;
 export interface ToolField { type: "string" | "number" | "boolean"; required?: boolean; choices?: string[] }
-export interface ToolResult { content: string; proposals?: ChangeProposal[] }
+export interface ToolResult { content: string; proposals?: ChangeProposal[]; proofreading?: ProofreadingReport }
 export interface AgentTool {
   name: string;
   description: string;
@@ -21,7 +21,7 @@ export class ToolRegistry {
   }
   get(name: string, input: unknown, mode: AgentRunContext["mode"]): { tool: AgentTool; args: ToolArguments } {
     const tool = this.tools.get(name);
-    if (!tool || (tool.draft && mode === "ask")) throw new Error(`此模式下不可用的工具：${name}`);
+    if (!tool || (tool.draft && mode !== "agent")) throw new Error(`此模式下不可用的工具：${name}`);
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("工具参数必须是对象");
     const args: ToolArguments = {};
     for (const [key, value] of Object.entries(input)) {

@@ -1,3 +1,4 @@
+import { ImportAgentBridge } from "./ImportAgentBridge";
 import {
   App, Modal, Setting, Notice, TFile, TFolder, TAbstractFile,
   AbstractInputSuggest, normalizePath,
@@ -6,7 +7,7 @@ import { DeepSeekSettings } from "../../../types";
 import { WritingGenre } from "../types";
 import { ChapterSplitter, RawChapter, SplitInputFile, MaterialKind } from "./ChapterSplitter";
 import { TextCleaner, CleanOptions, DEFAULT_CLEAN_OPTIONS } from "./TextCleaner";
-import { ImportAnalyzer, ImportAnalysis, ImportClassifier } from "./ImportAnalyzer";
+import { ImportAnalysis } from "./ImportAnalyzer";
 import { ImportManager } from "./ImportManager";
 import {
   isDesktop, readLocalFile, listLocalManuscriptFiles, fileExtensionOf, basenameOf,
@@ -107,7 +108,10 @@ export class ImportModal extends Modal {
   private classifying = false;
   private classifiedBy: "rules" | "ai" = "rules";
 
-  constructor(app: App, private settings: DeepSeekSettings) {
+  private aiAbort = new AbortController();
+  private closed = false;
+
+  constructor(app: App, private settings: DeepSeekSettings, private agentBridge: ImportAgentBridge) {
     super(app);
     this.titleEl.setText("导入原稿");
   }
@@ -117,6 +121,9 @@ export class ImportModal extends Modal {
   }
 
   onClose() {
+    this.closed = true;
+    this.aiAbort.abort();
+    this.importManager?.cancel();
     this.fileSuggest?.close();
     this.folderSuggest?.close();
     this.contentEl.empty();
@@ -496,19 +503,22 @@ export class ImportModal extends Modal {
 
   /** AI 批量智能分类,失败保留规则结果 */
   private async aiClassify() {
-    if (this.classifying || this.rawChapters.length === 0) return;
+    if (this.classifying || this.running || this.closed || this.rawChapters.length === 0) return;
+    if (this.aiAbort.signal.aborted) this.aiAbort = new AbortController();
     this.classifying = true;
     this.render();
 
     const notice = new Notice("AI 分类中(约 10-30 秒)...", 0);
     try {
-      const classifier = new ImportClassifier(this.settings);
+      const original = this.rawChapters;
       const units = this.rawChapters.map((c, i) => ({
         index: i,
         title: c.title,
         head: c.content.slice(0, 300),
       }));
-      const kinds = await classifier.classifyUnits(units);
+      const kinds = await this.agentBridge.classify(units, this.aiAbort.signal);
+      if (this.closed || this.aiAbort.signal.aborted) return;
+      if (original !== this.rawChapters) throw new Error("原稿单元已变化，请重新分类");
 
       let applied = 0;
       this.rawChapters = this.rawChapters.map((c, i) => {
@@ -526,8 +536,9 @@ export class ImportModal extends Modal {
       notice.hide();
       new Notice(`AI 分类失败,保留规则分类:${(err as Error).message}`);
     } finally {
+      notice.hide();
       this.classifying = false;
-      this.render();
+      if (!this.closed) this.render();
     }
   }
 
@@ -584,6 +595,7 @@ export class ImportModal extends Modal {
     if (this.running) {
       actionSetting.addButton((btn) =>
         btn.setButtonText("取消导入").onClick(() => {
+          this.aiAbort.abort();
           this.importManager?.cancel();
           new Notice("已请求取消,正在停止...");
         })
@@ -600,12 +612,14 @@ export class ImportModal extends Modal {
   // ── 执行 ───────────────────────────────────────────────────
 
   private async runImport() {
-    if (this.running) return;
+    if (this.running || this.classifying || this.closed) return;
+    this.aiAbort = new AbortController();
     this.running = true;
     this.progressText = "清洗文本...";
     this.render();
 
     const manager = new ImportManager(this.app, this.settings);
+    const title = this.title, genre = this.genre;
     this.importManager = manager;
     try {
       // 1. 清洗
@@ -617,14 +631,17 @@ export class ImportModal extends Modal {
 
       // 2. AI 反推元数据(失败不阻断导入)
       this.setProgress("AI 分析中(采样章节,约 30 秒)...");
-      const analyzer = new ImportAnalyzer(this.settings);
-      const analysis = await analyzer
-        .analyze(this.title, this.genre, cleaned)
-        .catch(() => EMPTY_ANALYSIS);
+      let analysis = EMPTY_ANALYSIS;
+      try { analysis = await this.agentBridge.analyze(title, genre, cleaned, this.aiAbort.signal); }
+      catch (error) {
+        if (this.closed || this.aiAbort.signal.aborted) throw error;
+        new Notice("Agent 元数据分析未完成，使用原稿和规则结果继续导入；可在助手会话中查看错误。");
+      }
+      if (this.closed || this.aiAbort.signal.aborted) throw new Error("导入已停止");
 
       // 3. 落盘
       const file = await manager.run(
-        { title: this.title, genre: this.genre, chapters: cleaned, analysis },
+        { title, genre, chapters: cleaned, analysis },
         (p) => {
           this.setProgress(`写入章节 ${p.done}/${p.total}:${p.label}`);
         }
@@ -641,7 +658,10 @@ export class ImportModal extends Modal {
     } catch (err) {
       this.running = false;
       new Notice(`导入失败:${(err as Error).message}`);
-      this.render();
+      if (!this.closed) this.render();
+    } finally {
+      this.running = false;
+      if (!this.closed) this.render();
     }
   }
 

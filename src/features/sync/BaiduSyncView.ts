@@ -5,8 +5,11 @@ import { BaiduPanClient } from "./BaiduPanClient";
 import { BaiduGitSyncService } from "./BaiduGitSyncService";
 import { runGitSync, GitHistoryModal } from "./BaiduGitSyncModal";
 import type DeepSeekPlugin from "../../main";
+import { mountGitChangesPanel } from "./GitChangesPanel";
+import { renderWorkbenchNav } from "../workbench/WorkbenchNav";
+import { WORKBENCH_VIEWS } from "../workbench/WorkbenchController";
 
-export const SYNC_VIEW_TYPE = "istart-baidu-sync-view";
+export const SYNC_VIEW_TYPE = WORKBENCH_VIEWS.sync;
 
 interface FileStatus {
   path: string;
@@ -23,6 +26,7 @@ export class BaiduSyncView extends ItemView {
   private viewIsOpen = false;
   private renderedSettingsKey = "";
   private renderGeneration = 0;
+  private unmountChanges?: () => void;
 
   constructor(leaf: WorkspaceLeaf, plugin: DeepSeekPlugin) {
     super(leaf);
@@ -30,8 +34,8 @@ export class BaiduSyncView extends ItemView {
   }
 
   getViewType(): string { return SYNC_VIEW_TYPE; }
-  getDisplayText(): string { return "百度云同步状态"; }
-  getIcon(): string { return "cloud"; }
+  getDisplayText(): string { return "IStart 工作台"; }
+  getIcon(): string { return "istart-assistant"; }
 
   onOpen(): Promise<void> {
     this.viewIsOpen = true;
@@ -40,6 +44,7 @@ export class BaiduSyncView extends ItemView {
   }
 
   onClose(): Promise<void> {
+    this.unmountChanges?.();
     this.viewIsOpen = false;
     this.renderGeneration++;
     return Promise.resolve();
@@ -62,24 +67,30 @@ export class BaiduSyncView extends ItemView {
 
   private render() {
     if (!this.viewIsOpen) return;
+    this.unmountChanges?.();
     const generation = ++this.renderGeneration;
     this.renderedSettingsKey = this.settingsKey();
     const root = this.containerEl.children[1] as HTMLElement;
     root.empty();
     root.addClass("istart-sync-root");
+    renderWorkbenchNav(root, this.plugin, "sync");
 
     // 标题栏
     const header = root.createDiv({ cls: "istart-sync-header" });
-    header.createEl("h4", { text: "百度云同步状态" });
+    header.createEl("h4", { text: "IStart 数据同步" });
 
     const cfg = this.plugin.settings.baiduSync;
     header.createSpan({
       text: cfg.syncEngine === "git" ? "Git 版本同步" : "文件同步",
       cls: "istart-sync-mode",
     });
+    root.createEl("p", { text: "存储服务：百度网盘", cls: "istart-sync-hint" });
+    if (cfg.enabled && cfg.syncEngine === "git") {
+      this.unmountChanges = mountGitChangesPanel(root.createDiv(), this.plugin.gitChanges);
+    }
     if (!cfg.enabled || !cfg.accessToken) {
       root.createEl("p", {
-        text: "请先在设置中启用百度云同步并完成授权。",
+        text: "请先在设置 → 数据同步中启用 IStart 数据同步，并在百度网盘配置中完成授权。",
         cls: "istart-sync-hint",
       });
       return;

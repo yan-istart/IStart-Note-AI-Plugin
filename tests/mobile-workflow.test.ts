@@ -14,6 +14,7 @@ const ui = vi.hoisted(() => ({ results: [] as any[][], inputs: [] as any[][], se
 vi.mock("obsidian", async (original) => ({
   ...await original(),
   Plugin: class { constructor(public app: App) {} },
+  Component: class {},
   Modal: class {}, ItemView: class {}, PluginSettingTab: class {}, AbstractInputSuggest: class {},
   MarkdownView: class {},
   normalizePath: (path: string) => path,
@@ -65,345 +66,112 @@ beforeEach(() => {
   ui.results.length = ui.inputs.length = ui.settings.length = ui.insertSettings.length = ui.panels.length = 0;
 });
 
-describe("insertion between existing passages", () => {
-  it.each(["insert", "continue"] as const)("keeps the entire current chapter on both sides for %s", async (action) => {
-    const before = "开头事实：他已经失去左手。\n" + "前半章的细节。".repeat(400);
-    const after = "后半章的细节。".repeat(400) + "\n章末事实：妹妹仍留在家中。";
-    const metadata = "---\ntype: chapter\n---\n";
-    const doc = setup(undefined, metadata + before + after, metadata.length + before.length);
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("符合上下文的正文");
-    await doc.plugin.runQuickAction(action);
-    const prompt = chat.mock.calls[0][0];
-    expect(prompt.userPrompt).toContain(before.trimEnd());
-    expect(prompt.userPrompt).toContain(after.trimStart());
-    expect(prompt.userPrompt).not.toContain("type: chapter");
-    expect(prompt.thinking).toBe("disabled");
-    expect(ui.results[0][6].modeHint).toContain("完整当前文档");
-    expect(ui.results[0][6].modeHint).toContain("实际生成 8 字");
+describe("unified workbench entry points", () => {
+  it("captures source anchors before the workbench takes focus and immediately runs a configured task", async () => {
+    const doc = setup(); doc.select(); const target = captureEditorTarget(doc.app)!;
+    const prepareTask = vi.fn((_task: unknown, _refs: unknown) => ({ id: "task-session" }));
+    const submitTask = vi.fn(async () => {});
+    Object.assign(doc.plugin, { agent: { prepareTask, submitTask } });
+    vi.spyOn(doc.plugin as any, "activateWorkbench").mockImplementation(async () => { doc.editor.setCursor({ line: 0, ch: 2 }); });
+    await doc.plugin.startAgentAction("polish-writing", target);
+    expect(prepareTask.mock.calls[0][0]).toMatchObject({ tool: "writing.generate", args: { task: "polish" } });
+    expect(prepareTask.mock.calls[0][1]).toEqual([expect.objectContaining({ path: "note.md", selection: { start: 0, end: 2, text: "上文", content: "上文" } })]);
+    expect(submitTask).toHaveBeenCalledWith("task-session");
+  });
+  it("opens parameter tasks in the assistant without generating before the user fills the card", async () => {
+    const doc = setup(); const prepareTask = vi.fn((_task: unknown, _refs: unknown) => ({ id: "task-session" }));
+    const submitTask = vi.fn(); Object.assign(doc.plugin, { agent: { prepareTask, submitTask } });
+    vi.spyOn(doc.plugin as any, "activateWorkbench").mockResolvedValue(undefined);
+    await doc.plugin.startAgentAction("new-reading-project");
+    expect(prepareTask.mock.calls[0][0]).toMatchObject({ tool: "reading.plan" });
+    expect(prepareTask.mock.calls[0][1]).toEqual([]); expect(submitTask).not.toHaveBeenCalled();
+  });
+  it("routes existing generation commands to Agent while keeping ordinary annotations local", () => {
+    const doc = setup(); doc.select();
+    const start = vi.spyOn(doc.plugin, "startAgentAction").mockResolvedValue(undefined);
+    const annotation = vi.spyOn(doc.plugin, "addAnnotation").mockImplementation(() => {});
+    const commands: any[] = [];
+    Object.assign(doc.plugin, { addCommand: (command: any) => commands.push(command), registerEvent: vi.fn(), addRibbonIcon: vi.fn() });
+    registerAllActions(doc.plugin, ALL_ACTIONS);
+    commands.find(command => command.id === "ai-annotation").editorCheckCallback(false);
+    expect(start.mock.calls[0][0]).toBe("ai-annotation");
+    commands.find(command => command.id === "add-annotation").editorCheckCallback(false);
+    expect(annotation).toHaveBeenCalledOnce(); expect(start).toHaveBeenCalledOnce();
+  });
+  it("opens the assistant from a single workbench ribbon entry while retaining the panel command", () => {
+    const doc = setup();
+    const commands: any[] = [];
+    const ribbons: any[][] = [];
+    const assistant = vi.spyOn(doc.plugin, "openAssistant").mockImplementation(() => {});
+    Object.assign(doc.plugin, {
+      addCommand: (command: any) => commands.push(command),
+      registerEvent: vi.fn(),
+      addRibbonIcon: (...args: any[]) => ribbons.push(args),
+    });
+    registerAllActions(doc.plugin, ALL_ACTIONS);
+    expect(ribbons).toHaveLength(1);
+    expect(ribbons[0][1]).toBe("IStart 工作台");
+    ribbons[0][2]();
+    expect(assistant).toHaveBeenCalledTimes(1);
+    expect(ui.panels).toHaveLength(0);
+    commands.find(command => command.id === "open-panel").callback();
+    expect(ui.panels).toHaveLength(0);
+    expect(assistant).toHaveBeenCalledTimes(2);
   });
 
-  it("includes the whole chapter when continuing from the document end", async () => {
-    const text = "章节开头的关键事实\n" + "正文情节。".repeat(600);
-    const doc = setup(undefined, text);
-    doc.plugin.settings.continueMode = "chapter";
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("承接全文的正文");
-    await doc.plugin.continueWriting();
-    expect(chat.mock.calls[0][0].userPrompt).toContain(text);
-    expect(ui.results[0][1].mode).toBe("append");
+  it("routes the existing sync command into the workbench rather than a separate sync modal", () => {
+    const doc = setup();
+    const commands: any[] = [];
+    const sync = vi.spyOn(doc.plugin, "activateSyncView").mockResolvedValue(undefined);
+    const modal = vi.spyOn(doc.plugin, "openDataSyncModal").mockImplementation(() => {});
+    Object.assign(doc.plugin, { addCommand: (command: any) => commands.push(command), registerEvent: vi.fn(), addRibbonIcon: vi.fn() });
+    registerAllActions(doc.plugin, ALL_ACTIONS);
+    const command = commands.find(item => item.id === "baidu-sync");
+    expect(command.checkCallback(true)).toBe(true);
+    expect(sync).not.toHaveBeenCalled();
+    command.checkCallback(false);
+    expect(sync).toHaveBeenCalledTimes(1);
+    expect(modal).not.toHaveBeenCalled();
   });
+});
 
-  it("exposes quantity controls directly in the assistant and preserves the original writing position", async () => {
-    const doc = setup(undefined, "上文\n\n下文", 2);
-    doc.plugin.openQuickAssistant();
-    const controls = ui.inputs[0][3];
-    expect(controls.quickActions.map((action: any) => action.id)).toContain("insert-settings");
-    doc.editor.setCursor({ line: 2, ch: 2 });
-    controls.onQuickAction("insert-settings");
-    await vi.waitFor(() => expect(ui.insertSettings).toHaveLength(1));
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("新连接段");
-    ui.insertSettings[0][3]({ instruction: "转场", targetWords: 300, contextScope: "full" });
-    await vi.waitFor(() => expect(ui.results).toHaveLength(1));
-    expect(chat.mock.calls[0][0].userPrompt).toContain("【下文（插入位置之后）】\n下文");
-    expect(doc.plugin.settings.insertTargetWords).toBe(300);
-  });
-
-  it("preserves a preview when quantity adjustment is blocked by document edits", async () => {
-    const doc = setup(undefined, "上文\n\n下文", 2);
-    vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("连接段");
-    await doc.plugin.insertWriting();
-    doc.edit();
-    expect(ui.results[0][6].moreActions[0].callback()).toBe(false);
-    expect(ui.insertSettings).toHaveLength(0);
-  });
-
-  it("reads both sides and inserts at the captured cursor, preserving the original prose", async () => {
-    const doc = setup(undefined, "上文\n\n下文", 2);
-    doc.plugin.settings.continueMode = "chapter";
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("承上启下");
-    const target = captureEditorTarget(doc.app)!;
-    doc.editor.setCursor({ line: 2, ch: 2 });
-    await doc.plugin.runQuickAction("insert", target);
-    expect(ui.insertSettings).toHaveLength(0);
-    expect(doc.text()).toBe("上文\n\n下文");
-    const prompt = chat.mock.calls[0][0];
-    expect(prompt.userPrompt).toContain("【上文（插入位置之前）】\n上文");
-    expect(prompt.userPrompt).toContain("【下文（插入位置之后）】\n下文");
-    expect(prompt.systemPrompt).toContain("约 200 字");
-    expect(prompt.systemPrompt).toContain("不改写、不复述两侧原文");
-    const result = ui.results[0];
-    expect(result[1].mode).toBe("insert");
-    expect(result[5]).toBeUndefined();
-    expect(result[2]()).toBe(true);
-    expect(doc.text()).toBe("上文\n承上启下\n\n\n下文");
-    expect(result[2]()).toBe(false);
-    expect(doc.text()).toBe("上文\n承上启下\n\n\n下文");
-  });
-
-  it("limits context to the nearby prose and excludes frontmatter", async () => {
-    const metadata = "---\ntitle: 测试\n---\n";
-    const before = "远处的前文".repeat(20) + "上文末尾";
-    const after = "下文开头" + "远处的后文".repeat(20);
-    const doc = setup(undefined, metadata + before + "\n\n" + after, metadata.length + before.length);
-    doc.plugin.settings.continueContextChars = 4;
-    doc.plugin.settings.writingContextScope = "nearby";
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("连接段");
-    await doc.plugin.insertWriting();
-    expect(chat.mock.calls[0][0].userPrompt).toContain("【上文（插入位置之前）】\n上文末尾");
-    expect(chat.mock.calls[0][0].userPrompt).toContain("【下文（插入位置之后）】\n下文开头");
-    expect(chat.mock.calls[0][0].userPrompt).not.toMatch(/title:|远处/);
-  });
-
+describe("legacy entry aliases", () => {
   it.each([
-    ["文末", "上文\n\n", 2],
-    ["文首", "\n\n下文", 2],
-    ["元数据之后", "---\ntitle: 测试\n---\n下文", "---\ntitle: 测试\n---\n".length],
-    ["空元数据之后", "---\n---\n下文", 8],
-    ["元数据之中", "---\ntitle: 测试\n---\n正文", 6],
-  ])("does not generate when the cursor is at %s", async (_name, text, offset) => {
-    const doc = setup(undefined, text, offset);
-    const chat = vi.spyOn(LLMClient.prototype, "chat");
-    await doc.plugin.insertWriting();
-    expect(chat).not.toHaveBeenCalled();
-    expect(ui.results).toHaveLength(0);
+    ["continue", "continue-writing"], ["insert", "insert-writing"], ["continue-settings", "continue-writing-settings"],
+    ["insert-settings", "insert-writing-settings"], ["polish", "polish-writing"], ["expand", "expand-selection"],
+    ["explain", "explain-selection"], ["summarize", "summarize-note"],
+  ] as const)("routes %s to its Agent task with the captured editor target", async (quick, action) => {
+    const doc = setup(); const target = captureEditorTarget(doc.app)!;
+    const start = vi.spyOn(doc.plugin, "startAgentAction").mockResolvedValue(undefined);
+    await doc.plugin.runQuickAction(quick, target);
+    expect(start).toHaveBeenCalledWith(action, target);
+    expect(ui.results).toHaveLength(0); expect(ui.inputs).toHaveLength(0);
   });
-
-  it("rejects a selection rather than silently replacing it", async () => {
-    const doc = setup(undefined, "上文\n\n下文", 2);
-    doc.select();
-    const chat = vi.spyOn(LLMClient.prototype, "chat");
-    await doc.plugin.insertWriting();
-    expect(chat).not.toHaveBeenCalled();
-    expect(doc.text()).toBe("上文\n\n下文");
-  });
-
-  it("saves separate insertion defaults and passes a custom bridging instruction", async () => {
-    const doc = setup(undefined, "上文\n\n下文", 2);
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("解释段");
-    await doc.plugin.insertWriting(true);
-    expect(chat).not.toHaveBeenCalled();
-    expect(ui.insertSettings[0][1]).toBe(200);
-    ui.insertSettings[0][3]({ instruction: "解释前后观点的关系", targetWords: 100 });
-    await vi.waitFor(() => expect(ui.results).toHaveLength(1));
-    expect(doc.plugin.settings.insertTargetWords).toBe(100);
-    expect(doc.plugin.settings.continueTargetWords).toBe(800);
-    expect(doc.plugin.settings.continueMode).toBe("cursor");
-    expect(chat.mock.calls[0][0].userPrompt).toContain("解释前后观点的关系");
-    expect(chat.mock.calls[0][0].systemPrompt).toContain("约 100 字");
-  });
-
-  it("retries from both original sides and blocks writing after an edit", async () => {
-    const doc = setup(undefined, "上文\n\n下文", 2);
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValueOnce("旧连接").mockResolvedValueOnce("新连接");
-    await doc.plugin.insertWriting();
-    ui.results[0][3]();
-    await vi.waitFor(() => expect(ui.results).toHaveLength(2));
-    expect(chat.mock.calls[0][0]).toEqual(chat.mock.calls[1][0]);
-    expect(doc.text()).toBe("上文\n\n下文");
-    doc.edit();
-    expect(ui.results[1][2]()).toBe(false);
-    expect(doc.text()).toBe("已修改");
-  });
-
-  it("prevents a second insertion or continuation while generation is pending", async () => {
-    const doc = setup(undefined, "上文\n\n下文", 2);
-    let resolve!: (text: string) => void;
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockImplementation(() => new Promise((done) => { resolve = done; }));
-    const pending = doc.plugin.insertWriting();
-    await doc.plugin.insertWriting();
-    await doc.plugin.continueWriting();
-    expect(chat).toHaveBeenCalledTimes(1);
-    resolve("连接段");
-    await pending;
-    expect(ui.results).toHaveLength(1);
-  });
-
-  it("injects chapter context and characters mentioned only in the following passage", async () => {
-    const doc = setup("chapter", "他推开门。\n\n小林站在月港等他。", 5);
-    const context = {
-      projectTitle: "远行", oneLiner: "寻找故人", styleProfile: "简洁克制", genre: "novel",
-      chapterNumber: 1, chapterTitle: "第一章", chapterSynopsis: "两人相遇", prevSynopsis: "", nextSynopsis: "",
-      characters: [{ name: "小林", role: "support", summary: "旧友，沉默寡言" }],
-      worldSettings: [{ name: "月港", category: "地理", content: "只在夜间开放" }],
-    } as const;
-    vi.spyOn(WritingProjectManager.prototype, "loadContext").mockResolvedValue(context as any);
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("他走过街巷来到港口。");
-    await doc.plugin.insertWriting();
-    const prompt = chat.mock.calls[0][0];
-    expect(prompt.userPrompt).toContain("文风基调：简洁克制");
-    expect(prompt.userPrompt).toContain("角色卡 小林（support）：旧友，沉默寡言");
-    expect(prompt.userPrompt).toContain("世界观设定 月港（地理）：只在夜间开放");
-    expect(prompt.userPrompt).toContain("【下文（插入位置之后）】\n小林站在月港等他。");
-    expect(prompt.systemPrompt).not.toContain("为下一章铺垫");
-    expect(ui.results[0][1].explanation).toBe("插写：note");
-  });
-
-  it.each([undefined, "chapter"])("prioritizes insertion in the panel for %s and keeps both writing entries", (type) => {
-    const doc = setup(type, "上文\n\n下文", 2);
+  it.each(["beautify-note", "check-typos", "knowledge-debt"])("routes the remaining %s command to Agent", action => {
+    const doc = setup();
+    const start = vi.spyOn(doc.plugin, "startAgentAction").mockResolvedValue(undefined);
     const commands: any[] = [];
     Object.assign(doc.plugin, { addCommand: (command: any) => commands.push(command), registerEvent: vi.fn(), addRibbonIcon: vi.fn() });
     registerAllActions(doc.plugin, ALL_ACTIONS);
-    expect(commands.find((command) => command.id === "insert-writing").icon).toBe("istart-insert");
-    const openPanel = commands.find((command) => command.id === "open-panel").callback;
-    openPanel();
-    const panel = ui.panels[0];
-    expect(panel[2][0].id).toBe("insert-writing");
-    expect(panel[2].find((action: any) => action.id === "insert-writing-settings").label).toBe("生成量");
-    expect(panel[1].flatMap((group: any) => group.actions).map((action: any) => action.id)).toEqual(
-      expect.arrayContaining(["continue-writing", "insert-writing"]));
-    doc.editor.setCursor({ line: 2, ch: 2 });
-    openPanel();
-    expect(ui.panels[1][2][0].id).toBe("continue-writing");
+    const command = commands.find(c => c.id === action);
+    (command.editorCheckCallback ?? command.checkCallback)(false);
+    expect(start.mock.calls[0][0]).toBe(action);
+    expect(ui.results).toHaveLength(0); expect(ui.panels).toHaveLength(0);
   });
-
-  it("offers insertion in the assistant and keeps the original position when focus moves", async () => {
-    const doc = setup(undefined, "上文\n\n下文", 2);
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("连接段");
-    doc.plugin.openQuickAssistant();
-    expect(ui.inputs[0][3].quickActions[0].id).toBe("insert");
-    doc.editor.setCursor({ line: 2, ch: 2 });
-    ui.inputs[0][2]("插写");
-    await vi.waitFor(() => expect(ui.results).toHaveLength(1));
-    expect(chat.mock.calls[0][0].userPrompt).toContain("【下文（插入位置之后）】\n下文");
-    expect(ui.results[0][2]()).toBe(true);
-    expect(doc.text()).toBe("上文\n连接段\n\n\n下文");
+  it("redirects both old quick dialogs into the assistant", () => {
+    const doc = setup(); const target = captureEditorTarget(doc.app)!;
+    const assistant = vi.spyOn(doc.plugin, "openAssistant").mockImplementation(() => {});
+    const qa = vi.spyOn(doc.plugin, "openVaultQA").mockImplementation(() => {});
+    doc.plugin.openQuickAssistant(target); doc.plugin.openVaultQAQuick();
+    expect(assistant).toHaveBeenCalledWith(target); expect(qa).toHaveBeenCalledOnce();
+    expect(ui.inputs).toHaveLength(0);
   });
-});
-
-describe("reading-mode assistant", () => {
-  it("offers an explicit switch to editing, then shows the generation controls", async () => {
-    const doc = setup();
-    doc.app.workspace.activeEditor = null;
-    const setViewState = vi.fn().mockImplementation(async () => { doc.app.workspace.activeEditor = { editor: doc.editor } as any; });
-    Object.assign(doc.app.workspace, { getActiveViewOfType: () => ({ leaf: { setViewState } }) });
-    doc.plugin.openQuickAssistant();
-    expect(ui.inputs[0][3].onEnableWriting).toBeTypeOf("function");
-    ui.inputs[0][3].onEnableWriting();
-    await vi.waitFor(() => expect(ui.inputs).toHaveLength(2));
-    expect(setViewState).toHaveBeenCalledWith({ type: "markdown", state: { file: "note.md", mode: "source" }, active: true });
-    expect(ui.inputs[1][3].quickActions.map((action: any) => action.id)).toContain("continue-settings");
-  });
-
-  it("reads the open document for standalone instructions and keeps that context on retry", async () => {
-    const doc = setup(undefined, "当前阅读文档的重要内容");
-    doc.app.workspace.activeEditor = null;
-    Object.assign(doc.app.vault, { cachedRead: vi.fn().mockResolvedValue(doc.text()) });
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("<!-- mode:append -->\n总结正文");
-    doc.plugin.openQuickAssistant();
-    ui.inputs[0][2]("总结当前文档");
-    await vi.waitFor(() => expect(ui.results).toHaveLength(1));
-    expect(chat.mock.calls[0][0].userPrompt).toContain(doc.text());
-    expect(ui.results[0][1].mode).toBe("show");
-    ui.results[0][3]();
-    await vi.waitFor(() => expect(ui.results).toHaveLength(2));
-    expect(chat.mock.calls[1][0].userPrompt).toEqual(chat.mock.calls[0][0].userPrompt);
-  });
-});
-
-describe("mobile quick-action workflow", () => {
-  it("continues directly and inserts before using the accepted text in the next request", async () => {
-    const doc = setup();
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValueOnce("第一段").mockResolvedValueOnce("第二段");
-    await doc.plugin.runQuickAction("continue");
-    expect(ui.settings).toHaveLength(0);
-    expect(doc.text()).toBe("上文");
-    const first = ui.results[0];
-    expect(first[5].label).toBe("插入并继续");
-    expect(first[5].callback()).toBe(true);
-    await vi.waitFor(() => expect(ui.results).toHaveLength(2));
-    expect(doc.text()).toBe("上文\n第一段\n");
-    expect(chat.mock.calls[1][0].userPrompt).toContain("上文\n第一段");
-    expect(ui.results[1][2]()).toBe(true);
-    expect(doc.text()).toBe("上文\n第一段\n\n第二段\n");
-  });
-
-  it("retry keeps the original context and never inserts the rejected version", async () => {
-    const doc = setup();
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValueOnce("旧版本").mockResolvedValueOnce("新版本");
-    await doc.plugin.continueWriting();
-    ui.results[0][3]();
-    await vi.waitFor(() => expect(ui.results).toHaveLength(2));
-    expect(chat.mock.calls[0][0]).toEqual(chat.mock.calls[1][0]);
-    expect(doc.text()).toBe("上文");
-  });
-
-  it("suppresses repeated generation while a request is pending", async () => {
-    const doc = setup();
-    let resolve!: (text: string) => void;
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockImplementation(() => new Promise((done) => { resolve = done; }));
-    const pending = doc.plugin.continueWriting();
-    await doc.plugin.continueWriting();
-    expect(chat).toHaveBeenCalledTimes(1);
-    resolve("续文");
-    await pending;
-    expect(ui.results).toHaveLength(1);
-  });
-
-  it("refuses insertion and another continuation if the original document changes", async () => {
-    const doc = setup();
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("续文");
-    await doc.plugin.continueWriting();
-    doc.edit();
-    expect(ui.results[0][5].callback()).toBe(false);
-    expect(doc.text()).toBe("已修改");
-    expect(chat).toHaveBeenCalledTimes(1);
-  });
-
-  it("uses chapter context for story continuation", async () => {
-    const doc = setup("chapter");
-    const context = { chapterTitle: "第一章" } as any;
-    vi.spyOn(WritingProjectManager.prototype, "loadContext").mockResolvedValue(context);
-    const story = vi.spyOn(StoryContinuer.prototype, "continueStory").mockResolvedValue("故事续文");
-    const chat = vi.spyOn(LLMClient.prototype, "chat");
-    await doc.plugin.continueWriting();
-    expect(story).toHaveBeenCalledWith(context, { mode: "cursor", instruction: "", targetWords: 800, contextScope: "full" }, "上文", "");
-    expect(chat).not.toHaveBeenCalled();
-  });
-
-  it("opens settings without generating, then saves the chosen defaults", async () => {
-    const doc = setup();
-    const chat = vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("续文");
-    await doc.plugin.continueWriting(true);
-    expect(chat).not.toHaveBeenCalled();
-    ui.settings[0][3]({ mode: "chapter", instruction: "收束", targetWords: 300 });
-    await vi.waitFor(() => expect(ui.results).toHaveLength(1));
-    expect(doc.plugin.settings.continueMode).toBe("chapter");
-    expect(doc.plugin.settings.continueTargetWords).toBe(300);
-    expect(ui.results[0][1].mode).toBe("append");
-  });
-
-  it("forces explanation to a preview even if the model suggests replacing the selection", async () => {
-    const doc = setup(); doc.select();
-    vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("<!-- mode:replace -->\n解释内容");
-    await doc.plugin.runQuickAction("explain");
-    expect(ui.results[0][1].mode).toBe("show");
-    expect(doc.text()).toBe("上文");
-  });
-
-  it("registers toolbar icons and checks selection requirements for commands", () => {
-    const doc = setup();
-    const commands: any[] = [];
+  it("retains selection checks on commands", () => {
+    const doc = setup(); const commands: any[] = [];
     Object.assign(doc.plugin, { addCommand: (command: any) => commands.push(command), registerEvent: vi.fn(), addRibbonIcon: vi.fn() });
     registerAllActions(doc.plugin, ALL_ACTIONS);
-    const continuation = commands.find((command) => command.id === "continue-writing");
-    const polish = commands.find((command) => command.id === "polish-writing");
-    expect(continuation.icon).toBe("istart-continue");
-    expect(continuation.editorCheckCallback(true)).toBe(true);
+    const polish = commands.find(c => c.id === "polish-writing");
     expect(polish.editorCheckCallback(true)).toBe(false);
-    doc.select();
-    expect(continuation.editorCheckCallback(true)).toBe(false);
-    expect(polish.editorCheckCallback(true)).toBe(true);
-  });
-
-  it("keeps the original selection when opening the assistant", async () => {
-    const doc = setup(); doc.select();
-    const target = captureEditorTarget(doc.app)!;
-    doc.plugin.openQuickAssistant(target);
-    doc.editor.setCursor({ line: 0, ch: 2 });
-    vi.spyOn(WritingProjectManager.prototype, "loadContext").mockResolvedValue(null);
-    vi.spyOn(LLMClient.prototype, "chat").mockResolvedValue("润色结果");
-    ui.inputs[0][3].onQuickAction("polish");
-    await vi.waitFor(() => expect(ui.results).toHaveLength(1));
-    expect(ui.results[0][2]()).toBe(true);
-    expect(doc.text()).toBe("润色结果");
+    doc.select(); expect(polish.editorCheckCallback(true)).toBe(true);
   });
 });

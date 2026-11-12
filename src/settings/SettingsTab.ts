@@ -4,7 +4,7 @@ import type { DeepSeekSettings } from "../types";
 import type { SkillDefinition } from "../core/skills/types";
 import { BaiduAuthModal } from "../features/sync/BaiduAuthModal";
 
-type SettingsSection = "knowledge" | "writing" | "skill" | "annotation" | "interface" | "auxiliary";
+type SettingsSection = "knowledge" | "writing" | "skill" | "annotation" | "interface" | "sync" | "auxiliary";
 
 export class DeepSeekSettingsTab extends PluginSettingTab {
   private activeSection: SettingsSection = "auxiliary"; // start with AI setup
@@ -41,6 +41,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
       { id: "skill", label: "Skill" },
       { id: "annotation", label: "批注" },
       { id: "interface", label: "界面" },
+      { id: "sync", label: "数据同步" },
       { id: "auxiliary", label: "辅助" },
     ];
 
@@ -72,6 +73,9 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         break;
       case "interface":
         this.renderInterface(container);
+        break;
+      case "sync":
+        this.renderSync(container);
         break;
       case "auxiliary":
         this.renderAuxiliary(container);
@@ -509,11 +513,20 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         if (value) await this.plugin.agent.pushSharedHistory();
       }));
 
-    // ── 百度网盘同步 ──────────────────────────────────────────
-    new Setting(el).setName("百度网盘同步").setHeading();
+    // ── 隐私与诊断 ───────────────────────────────────────────
+    new Setting(el).setName("隐私与诊断").setHeading();
+    el.createEl("p", {
+      text: "AI 功能会把选中内容和部分上下文发送到所配置的 API 端点。同步功能会把笔记上传到你配置的存储服务；目前支持百度网盘。完整说明见 PRIVACY.md。",
+      attr: { style: "color: var(--text-muted); font-size: 13px;" },
+    });
+  }
+
+  private renderSync(el: HTMLElement): void {
+    new Setting(el).setName("IStart 数据同步").setHeading();
 
     new Setting(el)
-      .setName("启用百度云同步")
+      .setName("启用 IStart 数据同步")
+      .setDesc("通过配置的存储服务同步笔记与附件，默认关闭。")
       .addToggle((t) =>
         t.setValue(this.plugin.settings.baiduSync.enabled).onChange(async (v) => {
           this.plugin.settings.baiduSync.enabled = v;
@@ -522,19 +535,12 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         })
       );
 
-    if (this.plugin.settings.baiduSync.enabled) {
-      this.renderBaiduSyncSettings(el);
-    }
+    new Setting(el).setName("存储服务").setDesc("当前支持百度网盘；启用后可在「百度网盘配置」中管理授权信息。");
 
-    // ── 隐私与诊断 ───────────────────────────────────────────
-    new Setting(el).setName("隐私与诊断").setHeading();
-    el.createEl("p", {
-      text: "AI 功能会把选中内容和部分上下文发送到所配置的 API 端点。同步功能会把笔记上传到你自己的百度网盘。完整说明见 PRIVACY.md。",
-      attr: { style: "color: var(--text-muted); font-size: 13px;" },
-    });
+    if (this.plugin.settings.baiduSync.enabled) this.renderSyncSettings(el);
   }
 
-  private renderBaiduSyncSettings(el: HTMLElement): void {
+  private renderSyncSettings(el: HTMLElement): void {
     const cfg = this.plugin.settings.baiduSync;
 
     new Setting(el).setName("同步方式")
@@ -553,8 +559,58 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         }));
       new Setting(el).setName("手动 Git 整库同步")
         .setDesc("同步整个笔记库的笔记与附件，包括所有子目录。忽略规则、大小限制和配置目录排除仍生效；可查看、恢复整库版本。")
-        .addButton((btn) => btn.setButtonText("打开同步").onClick(() => this.plugin.openBaiduSyncModal()));
+        .addButton((btn) => btn.setButtonText("打开同步").onClick(() => this.plugin.openDataSyncModal()));
     }
+
+    if (cfg.syncEngine === "files") {
+      new Setting(el)
+        .setName("自动备份")
+        .setDesc("原有文件备份偏好，默认关闭")
+        .addToggle((t) => t.setValue(cfg.autoBackup).onChange(async (v) => { cfg.autoBackup = v; await this.plugin.saveSettings(); }));
+
+      new Setting(el)
+        .setName("备份插件本身")
+        .addToggle((t) => t.setValue(cfg.backupPlugin).onChange(async (v) => { cfg.backupPlugin = v; await this.plugin.saveSettings(); }));
+    }
+
+    new Setting(el)
+      .setName("忽略规则")
+      .setDesc("正则表达式")
+      .addText((t) =>
+        t.setPlaceholder("node_modules|.git").setValue(cfg.ignorePattern).onChange(async (v) => {
+          cfg.ignorePattern = v.trim();
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(el)
+      .setName("单文件大小限制（MB）")
+      .addText((t) =>
+        t.setPlaceholder("100").setValue(String(cfg.fileSizeLimitMB)).onChange(async (v) => {
+          const n = parseInt(v);
+          if (!isNaN(n) && n > 0) { cfg.fileSizeLimitMB = n; await this.plugin.saveSettings(); }
+        })
+      );
+
+    this.renderBaiduSyncSettings(el);
+
+    // 配置同步
+    new Setting(el).setName("跨设备配置同步").setDesc("不含凭证").setHeading();
+
+    new Setting(el).setName("启动时自动拉取配置")
+      .setDesc("默认关闭；自动同步开关始终由本设备控制。")
+      .addToggle((toggle) => toggle.setValue(cfg.autoPullConfig).onChange(async (value) => {
+        cfg.autoPullConfig = value; await this.plugin.saveSettings();
+      }));
+
+    new Setting(el)
+      .addButton((btn) => btn.setButtonText("推送配置").onClick(() => void this.plugin.pushConfig()))
+      .addButton((btn) => btn.setButtonText("拉取配置").onClick(async () => { await this.plugin.pullConfig(); this.display(); }));
+  }
+
+  private renderBaiduSyncSettings(el: HTMLElement): void {
+    const cfg = this.plugin.settings.baiduSync;
+    new Setting(el).setName("百度网盘配置").setDesc("IStart 数据同步的存储服务配置，文件上传到你自己的百度网盘。").setHeading();
 
     new Setting(el)
       .setName("App ID")
@@ -602,48 +658,5 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
           await this.plugin.saveSettings();
         })
       );
-
-    if (cfg.syncEngine === "files") {
-      new Setting(el)
-        .setName("自动备份")
-        .setDesc("原有文件备份偏好，默认关闭")
-        .addToggle((t) => t.setValue(cfg.autoBackup).onChange(async (v) => { cfg.autoBackup = v; await this.plugin.saveSettings(); }));
-
-      new Setting(el)
-        .setName("备份插件本身")
-        .addToggle((t) => t.setValue(cfg.backupPlugin).onChange(async (v) => { cfg.backupPlugin = v; await this.plugin.saveSettings(); }));
-    }
-
-    new Setting(el)
-      .setName("忽略规则")
-      .setDesc("正则表达式")
-      .addText((t) =>
-        t.setPlaceholder("node_modules|.git").setValue(cfg.ignorePattern).onChange(async (v) => {
-          cfg.ignorePattern = v.trim();
-          await this.plugin.saveSettings();
-        })
-      );
-
-    new Setting(el)
-      .setName("单文件大小限制（MB）")
-      .addText((t) =>
-        t.setPlaceholder("100").setValue(String(cfg.fileSizeLimitMB)).onChange(async (v) => {
-          const n = parseInt(v);
-          if (!isNaN(n) && n > 0) { cfg.fileSizeLimitMB = n; await this.plugin.saveSettings(); }
-        })
-      );
-
-    // 配置同步
-    new Setting(el).setName("跨设备配置同步").setDesc("不含凭证").setHeading();
-
-    new Setting(el).setName("启动时自动拉取配置")
-      .setDesc("默认关闭；自动同步开关始终由本设备控制。")
-      .addToggle((toggle) => toggle.setValue(cfg.autoPullConfig).onChange(async (value) => {
-        cfg.autoPullConfig = value; await this.plugin.saveSettings();
-      }));
-
-    new Setting(el)
-      .addButton((btn) => btn.setButtonText("推送配置").onClick(() => void this.plugin.pushConfig()))
-      .addButton((btn) => btn.setButtonText("拉取配置").onClick(async () => { await this.plugin.pullConfig(); this.display(); }));
   }
 }

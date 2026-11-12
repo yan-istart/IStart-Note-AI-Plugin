@@ -1,4 +1,5 @@
 import { SessionData } from "./types";
+import { validAgentTask } from "./AgentTasks";
 
 export interface SessionStorage {
   exists(path: string): Promise<boolean>;
@@ -8,6 +9,16 @@ export interface SessionStorage {
 }
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const strings = (v: unknown): boolean => Array.isArray(v) && v.every(x => typeof x === "string");
+function validStoryConfig(v: unknown): boolean {
+  return object(v) && [1, 2, 3].includes(Number(v.rounds)) && typeof v.rounds === "number" && Array.isArray(v.characterPaths) && v.characterPaths.length <= 4 && strings(v.characterPaths) && new Set(v.characterPaths).size === v.characterPaths.length;
+}
+function validStory(v: unknown): boolean {
+  if (!object(v) || typeof v.projectPath !== "string" || typeof v.chapterPath !== "string" || !Array.isArray(v.cast) || !v.cast.length || v.cast.length > 4 || !v.cast.every(c => object(c) && validReference(c) && typeof c.content === "string" && String(c.path).startsWith(`${v.projectPath}/_角色/`)) || new Set(v.cast.map(c => c.path)).size !== v.cast.length) return false;
+  const cast = v.cast;
+  if (!Array.isArray(v.turns) || v.turns.length > 15 || !v.turns.every(t => object(t) && typeof t.name === "string" && typeof t.content === "string" && [1, 2, 3].includes(Number(t.round)) && typeof t.round === "number" && (t.path === undefined || cast.some(c => c.path === t.path)))) return false;
+  if (v.confirmedAt !== undefined && (typeof v.confirmedAt !== "number" || !Number.isFinite(v.confirmedAt))) return false;
+  return v.evolution === undefined || (v.confirmedAt !== undefined && object(v.evolution) && ["running", "completed", "error"].includes(String(v.evolution.status)) && typeof v.evolution.content === "string" && (v.evolution.error === undefined || typeof v.evolution.error === "string"));
+}
 function validReference(v: unknown): boolean {
   if (!object(v) || typeof v.path !== "string") return false;
   if (v.selection !== undefined && (!object(v.selection) || typeof v.selection.text !== "string" || typeof v.selection.content !== "string" || !Number.isInteger(v.selection.start) || !Number.isInteger(v.selection.end) || Number(v.selection.start) < 0 || Number(v.selection.end) < Number(v.selection.start) || (v.selection.content as string).slice(Number(v.selection.start), Number(v.selection.end)) !== v.selection.text)) return false;
@@ -16,6 +27,7 @@ function validReference(v: unknown): boolean {
 }
 function validCheckpoint(v: unknown): boolean {
   if (!object(v) || v.version !== 1 || !["ask", "agent"].includes(String(v.mode)) || typeof v.searchVault !== "boolean" || !Array.isArray(v.messages) || !v.messages.every(m => object(m) && ["user", "assistant"].includes(String(m.role)) && typeof m.content === "string")) return false;
+  if ((v.task !== undefined && !validAgentTask(v.task)) || (v.taskResult !== undefined && (typeof v.taskResult !== "string" || v.task === undefined))) return false;
   if (!Array.isArray(v.notes) || v.notes.length > 25 || !v.notes.every(n => object(n) && validReference(n) && typeof n.content === "string" && (n.selection === undefined || (object(n.selection) && n.selection.content === n.content)))) return false;
   if (new Set(v.notes.map(n => n.path)).size !== v.notes.length || (v.primaryPath !== undefined && (typeof v.primaryPath !== "string" || !v.notes.some(n => n.path === v.primaryPath)))) return false;
   const scope = v.scope;
@@ -26,10 +38,19 @@ function validCheckpoint(v: unknown): boolean {
   }
   return v.pendingTool === undefined || (object(v.pendingTool) && typeof v.pendingTool.stepId === "string" && typeof v.pendingTool.name === "string" && Object.prototype.hasOwnProperty.call(v.pendingTool, "args"));
 }
+function validProofreading(v: unknown): boolean {
+  if (!object(v) || typeof v.path !== "string" || typeof v.content !== "string" || typeof v.selected !== "boolean" || !object(v.result) || !Array.isArray(v.result.issues) || !Number.isInteger(v.result.unlocatedCount) || Number(v.result.unlocatedCount) < 0) return false;
+  const content = v.content;
+  return v.result.issues.every(i => object(i) && typeof i.original === "string" && !!i.original && typeof i.correction === "string" && typeof i.reason === "string" && Number.isInteger(i.start) && Number.isInteger(i.end) && Number(i.start) >= 0 && Number(i.end) <= content.length && Number(i.end) > Number(i.start) && content.slice(Number(i.start), Number(i.end)) === i.original);
+}
 function validMessage(v: unknown): boolean {
   if (!object(v) || typeof v.id !== "string" || !["user", "assistant"].includes(String(v.role)) || typeof v.content !== "string" || !Number.isFinite(v.createdAt)) return false;
+  if (v.task !== undefined && (v.role !== "user" || !validAgentTask(v.task))) return false;
+  if (v.taskReferences !== undefined && (v.task === undefined || !Array.isArray(v.taskReferences) || v.taskReferences.length > 8 || !v.taskReferences.every(validReference))) return false;
   if (v.status !== undefined && !["idle", "running", "completed", "cancelled", "error", "interrupted"].includes(String(v.status))) return false;
   if (v.error !== undefined && typeof v.error !== "string") return false;
+  if (v.proofreading !== undefined && (v.role !== "assistant" || !validProofreading(v.proofreading))) return false;
+  if (v.story !== undefined && (v.role !== "assistant" || !validStory(v.story))) return false;
   if (v.sources !== undefined && !strings(v.sources)) return false;
   if (v.skills !== undefined && !strings(v.skills)) return false;
   if (v.references !== undefined && (!Array.isArray(v.references) || !v.references.every(x => validReference(x) && object(x) && typeof x.content === "string"))) return false;
@@ -49,7 +70,8 @@ export function parseSessionData(raw: string): SessionData {
   if (!object(data) || data.version !== 1 || !(data.activeId === null || typeof data.activeId === "string") || !Array.isArray(data.sessions)) throw new Error("会话文件版本或格式无法识别，原文件已保留");
   const ids = new Set<string>();
   for (const s of data.sessions) {
-    if (!object(s) || typeof s.id !== "string" || !/^[a-zA-Z0-9-]+$/.test(s.id) || ids.has(s.id) || typeof s.title !== "string" || !Number.isFinite(s.createdAt) || !Number.isFinite(s.updatedAt) || typeof s.archived !== "boolean" || typeof s.pinned !== "boolean" || !["agent", "ask"].includes(String(s.mode)) || typeof s.draft !== "string" || typeof s.searchVault !== "boolean" || !Array.isArray(s.references) || !s.references.every(validReference) || !Array.isArray(s.messages) || !s.messages.every(validMessage) || (s.summary !== undefined && (!object(s.summary) || typeof s.summary.content !== "string" || typeof s.summary.through !== "string")) || (s.parentId !== undefined && typeof s.parentId !== "string")) throw new Error("会话数据损坏，原文件已保留");
+    if (object(s) && s.pendingTask !== undefined && !validAgentTask(s.pendingTask)) throw new Error("助手任务数据损坏，原文件已保留");
+    if (!object(s) || typeof s.id !== "string" || !/^[a-zA-Z0-9-]+$/.test(s.id) || ids.has(s.id) || typeof s.title !== "string" || !Number.isFinite(s.createdAt) || !Number.isFinite(s.updatedAt) || typeof s.archived !== "boolean" || typeof s.pinned !== "boolean" || !["agent", "ask", "story"].includes(String(s.mode)) || typeof s.draft !== "string" || typeof s.searchVault !== "boolean" || !Array.isArray(s.references) || !s.references.every(validReference) || !Array.isArray(s.messages) || !s.messages.every(validMessage) || (s.summary !== undefined && (!object(s.summary) || typeof s.summary.content !== "string" || typeof s.summary.through !== "string")) || (s.parentId !== undefined && typeof s.parentId !== "string") || (s.storyConfig !== undefined && !validStoryConfig(s.storyConfig))) throw new Error("会话数据损坏，原文件已保留");
     ids.add(s.id);
   }
   if (data.deleted !== undefined && (!object(data.deleted) || !Object.values(data.deleted).every(x => typeof x === "number" && Number.isFinite(x)))) throw new Error("会话删除记录损坏");
@@ -67,6 +89,7 @@ export class SessionStore {
     if (await this.storage.exists(path)) this.data = parseSessionData(await this.storage.read(path));
     for (const s of this.data.sessions) for (const m of s.messages) {
       if (m.status === "running") { m.status = "interrupted"; m.error = m.checkpoint ? "上次任务被中断，可点击「继续任务」接着处理" : "上次生成被中断，可重试或从此处分支继续"; }
+      if (m.story?.evolution?.status === "running") m.story.evolution = { status: "error", content: "", error: "角色推演被中断，可重试推演" };
       for (const step of m.steps ?? []) if (step.status === "running") step.status = "error";
       for (const p of m.proposals ?? []) if (p.status === "applying") p.status = "pending";
     }
@@ -104,6 +127,7 @@ export class SessionStore {
     }
     for (const s of sessions.values()) for (const m of s.messages) {
       if (m.status === "running") { m.status = "interrupted"; m.error = "另一设备的生成已中断，可继续提问"; }
+      if (m.story?.evolution?.status === "running") m.story.evolution = { status: "error", content: "", error: "另一设备的角色推演已中断，可重试推演" };
       for (const step of m.steps ?? []) if (step.status === "running") step.status = "error";
       for (const p of m.proposals ?? []) if (p.status === "applying") p.status = "pending";
     }

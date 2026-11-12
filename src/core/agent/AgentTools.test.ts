@@ -27,6 +27,29 @@ function fixture(note: NoteSnapshot = { path: "note.md", content: "first paragra
 }
 afterEach(() => vi.restoreAllMocks());
 describe("existing AI capabilities as Agent tools", () => {
+  it("refines the generated selection in an unsaved draft without changing surrounding prose", async () => {
+    const f = fixture(); const chat = vi.spyOn(f.client, "chat").mockResolvedValueOnce("expanded words").mockResolvedValueOnce("short");
+    const first = await f.execute("document.generate", { task: "expand" });
+    f.context.drafts = new Map(first.proposals![0].changes.map(change => [change.path, change]));
+    const refined = await f.execute("document.generate", { task: "rewrite", instruction: "缩短刚才扩写的内容" });
+    expect(chat.mock.calls[1][0].userPrompt).toContain("选区：expanded words");
+    expect(refined.proposals?.[0].changes[0].after).toBe("short paragraph"); expect(f.write).not.toHaveBeenCalled();
+  });
+  it("honors end-of-document continuation, exact length targets and context scope", async () => {
+    const f = fixture({ path: "note.md", content: "开头\n\n末尾", cursor: { offset: 2, content: "开头\n\n末尾" } });
+    f.context.writing = null;
+    const chat = vi.spyOn(f.client, "chat").mockResolvedValue("新增正文");
+    const result = await f.execute("writing.generate", { task: "continue", mode: "chapter", targetWords: 1, contextScope: "full" });
+    expect(chat.mock.calls[0][0].userPrompt).toContain("上文：开头\n\n末尾");
+    expect(chat.mock.calls[0][0].userPrompt).toContain("约1字"); expect(chat.mock.calls[0][0].thinking).toBe("disabled");
+    expect(result.proposals?.[0].changes[0].after).toBe("开头\n\n末尾\n\n新增正文\n"); expect(f.write).not.toHaveBeenCalled();
+  });
+  it("rejects insertion at the document end before making a generation request", async () => {
+    const f = fixture({ path: "note.md", content: "只有上文", cursor: { offset: 4, content: "只有上文" } });
+    f.context.writing = null;
+    const chat = vi.spyOn(f.client, "chat");
+    await expect(f.execute("writing.generate", { task: "insert" })).rejects.toThrow("两段正文之间"); expect(chat).not.toHaveBeenCalled();
+  });
   it("finishes a reading project in consecutive tool steps with one coherent, applicable preview", async () => {
     const f = fixture();
     vi.spyOn(ReadingPlanner.prototype, "planSkeleton").mockResolvedValue({ bookTitle: "Book", author: "Author", oneLiner: "summary", coreQuestions: ["why?"], prerequisites: ["Basics"], keyConcepts: [], chapterRelations: ["A --> B"], chapters: [{ number: 1, title: "One", summary: "intro", importance: "core", keyConcepts: [] }, { number: 2, title: "Two", summary: "more", importance: "recommended", keyConcepts: [] }] });
@@ -117,4 +140,69 @@ describe("existing AI capabilities as Agent tools", () => {
     expect(() => buildWritingProjectDraft(plan, "article", "Writing")).toThrow("重复");
     plan.chapters[0].number = NaN; expect(() => buildWritingProjectDraft(plan, "article", "Writing")).toThrow("格式");
   });
+});
+
+describe("remaining capabilities use Agent previews and readonly results", () => {
+  it("beautifies the captured whole document and never writes during generation", async () => {
+    const f = fixture();
+    const chat = vi.spyOn(f.client, "chat").mockResolvedValue("<!-- mode:replace -->\n# 整理\n\n保留内容");
+    const result = await f.execute("document.beautify", {});
+    expect(chat).toHaveBeenCalledOnce();
+    expect(result.proposals![0].changes[0]).toMatchObject({ path: "note.md", before: "first paragraph" });
+    expect(result.proposals![0].changes[0].after).toContain("保留内容");
+    expect(f.write).not.toHaveBeenCalled();
+    f.context.mode = "ask";
+    await expect(f.execute("document.beautify", {})).rejects.toThrow("不可用");
+  });
+  it.each(["rewrite", "suggest"])("%s an existing shared footnote without changing another reference", async task => {
+    const { parseAnnotations } = await import("../annotations/AnnotationParser");
+    const content = "==甲==[^1] 和 ==乙==[^1]\n\n[^1]: 原批注\n";
+    const annotation = parseAnnotations(content)[0];
+    const f = fixture({ path: "note.md", content, annotation: "原批注", selection: { start: annotation.contentStart, end: annotation.contentEnd, text: content.slice(annotation.contentStart, annotation.contentEnd), content } });
+    vi.spyOn(f.client, "chat").mockResolvedValue("新建议");
+    const result = await f.execute("annotation.assist", { task, annotationId: annotation.id });
+    const after = result.proposals![0].changes[0].after;
+    expect(after).toContain("==乙==[^1]"); expect(after).toContain("[^1]: 原批注");
+    const parsed = parseAnnotations(after);
+    expect(parsed[0].comment).toContain("新建议"); expect(parsed[1].comment).toBe("原批注");
+    if (task === "suggest") expect(parsed[0].comment).toContain("原批注");
+    expect(f.write).not.toHaveBeenCalled();
+    await expect(f.execute("annotation.assist", { task, annotationId: "stale" })).rejects.toThrow("位置已变化");
+  });
+  it("validates import samples before calling a model and ignores indices outside the submitted batch", async () => {
+    const f = fixture();
+    const chat = vi.spyOn(f.client, "chat").mockResolvedValue('{"classifications":[{"index":0,"kind":"setting"},{"index":999,"kind":"skip"}]}');
+    await expect(f.execute("import.classify", { units: JSON.stringify([{ index: -1, title: "x", head: "x" }]) })).rejects.toThrow("样本无效");
+    expect(chat).not.toHaveBeenCalled();
+    const result = await f.execute("import.classify", { units: JSON.stringify([{ index: 0, title: "设定", head: "世界观" }]) });
+    expect(JSON.parse(result.content).classifications).toEqual([{ index: 0, kind: "setting" }]);
+    expect(result.proposals).toBeUndefined(); expect(f.write).not.toHaveBeenCalled();
+  });
+  it("returns import metadata through the existing analyzer without creating project files", async () => {
+    const f = fixture();
+    vi.spyOn(f.client, "chat").mockResolvedValue('{"one_liner":"故事","style_profile":"克制","characters":[],"world_settings":[]}');
+    const result = await f.execute("import.analyze", { title: "原稿", genre: "novel", chapters: JSON.stringify([{ number: 1, title: "开篇", content: "故事正文" }]) });
+    expect(JSON.parse(result.content)).toMatchObject({ oneLiner: "故事", styleProfile: "克制" });
+    expect(result.proposals).toBeUndefined(); expect(f.write).not.toHaveBeenCalled();
+  });
+  it.each(["insert", "continue"])("preserves full prose on both sides for %s with the original cursor", async task => {
+    const before = "开头事实。" + "上文。".repeat(1500), after = "下文。".repeat(1500) + "章末事实。";
+    const content = "---\ntype: chapter\n---\n" + before + after;
+    const f = fixture({ path: "note.md", content, cursor: { offset: content.indexOf(after), content } });
+    f.context.writing = null;
+    const chat = vi.spyOn(f.client, "chat").mockResolvedValue("衔接正文");
+    const result = await f.execute("writing.generate", { task, contextScope: "full", mode: "cursor", targetWords: 123 });
+    expect(chat.mock.calls[0][0].userPrompt).toContain(before);
+    expect(chat.mock.calls[0][0].userPrompt).toContain(after);
+    expect(chat.mock.calls[0][0].userPrompt).not.toContain("type: chapter");
+    expect(result.proposals![0].changes[0].after).toContain(before + "\n衔接正文\n" + after);
+    expect(f.write).not.toHaveBeenCalled();
+  });
+});
+
+it("does not turn invalid manuscript metadata into a successful import analysis", async () => {
+  const f = fixture();
+  vi.spyOn(f.client, "chat").mockResolvedValue('{"one_liner":{},"style_profile":42}');
+  await expect(f.execute("import.analyze", { title: "原稿", genre: "article", chapters: '[{"number":1,"title":"正文","content":"正文内容"}]' })).rejects.toThrow("格式无效");
+  expect(f.write).not.toHaveBeenCalled();
 });

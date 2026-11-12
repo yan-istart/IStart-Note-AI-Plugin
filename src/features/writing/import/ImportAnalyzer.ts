@@ -39,8 +39,8 @@ JSON 格式:
 export class ImportAnalyzer {
   private llm: LLMClient;
 
-  constructor(settings: DeepSeekSettings) {
-    this.llm = new LLMClient(settings);
+  constructor(settings: DeepSeekSettings, client?: LLMClient) {
+    this.llm = client ?? new LLMClient(settings);
   }
 
   async analyze(title: string, genre: WritingGenre, chapters: RawChapter[]): Promise<ImportAnalysis> {
@@ -67,16 +67,16 @@ export class ImportAnalyzer {
     });
 
     const p = parseJsonSafe<Record<string, unknown> | null>(raw, null);
-    if (!p) return { oneLiner: "", styleProfile: "", characters: [], worldSettings: [] };
+    if (!p || typeof p.one_liner !== "string" || typeof p.style_profile !== "string") throw new Error("原稿元数据格式无效");
 
     return {
-      oneLiner: (p.one_liner as string) || "",
-      styleProfile: (p.style_profile as string) || "",
-      characters: Array.isArray(p.characters)
-        ? (p.characters as CharacterCard[]).filter((c) => c && typeof c.name === "string")
+      oneLiner: p.one_liner,
+      styleProfile: p.style_profile,
+      characters: genre === "novel" && Array.isArray(p.characters)
+        ? (p.characters as CharacterCard[]).filter((c) => c && typeof c.name === "string" && typeof c.summary === "string" && ["protagonist", "support", "villain"].includes(c.role)).slice(0, 5)
         : [],
-      worldSettings: Array.isArray(p.world_settings)
-        ? (p.world_settings as WorldSetting[]).filter((w) => w && typeof w.name === "string")
+      worldSettings: genre === "novel" && Array.isArray(p.world_settings)
+        ? (p.world_settings as WorldSetting[]).filter((w) => w && typeof w.name === "string" && typeof w.category === "string" && typeof w.content === "string").slice(0, 3)
         : [],
     };
   }
@@ -133,8 +133,8 @@ export interface ClassifyUnit {
 export class ImportClassifier {
   private llm: LLMClient;
 
-  constructor(settings: DeepSeekSettings) {
-    this.llm = new LLMClient(settings);
+  constructor(settings: DeepSeekSettings, client?: LLMClient) {
+    this.llm = client ?? new LLMClient(settings);
   }
 
   async classifyUnits(units: ClassifyUnit[]): Promise<Map<number, MaterialKind>> {
@@ -156,7 +156,7 @@ export class ImportClassifier {
 
       const p = parseJsonSafe<{ classifications?: { index: number; kind: string }[] } | null>(raw, null);
       for (const c of p?.classifications ?? []) {
-        if (typeof c.index === "number" && VALID_KINDS.includes(c.kind as MaterialKind)) {
+        if (Number.isInteger(c.index) && chunk.some(u => u.index === c.index) && VALID_KINDS.includes(c.kind as MaterialKind)) {
           result.set(c.index, c.kind as MaterialKind);
         }
       }

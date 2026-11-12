@@ -2,6 +2,7 @@ import { App, Notice, TFile, MarkdownView } from "obsidian";
 import type DeepSeekPlugin from "../../main";
 import { SessionStore, parseSessionData } from "../../core/agent/SessionStore";
 import { AgentRunner } from "../../core/agent/AgentRunner";
+import { StoryRunner } from "../../core/agent/StoryRunner";
 import { AgentTools } from "../../core/agent/AgentTools";
 import { LLMClient } from "../../core/llm";
 import { abortable } from "../../core/llm/LLMClient";
@@ -10,7 +11,8 @@ import { resolveWritingScope } from "../../core/skills/WritingScope";
 import { applyChanges, changedRange, noteName } from "../../core/agent/Changes";
 import { WritingProjectManager } from "../writing/WritingProjectManager";
 import { readNote, snapshotReference, writeChange, ensureNoteFolder } from "../../core/agent/Context";
-import { AgentSession, AgentMessage, AgentRunContext, ChangeProposal, NoteReference, NoteSnapshot, newSession, agentId } from "../../core/agent/types";
+import { AgentSession, AgentMessage, AgentRunContext, ChangeProposal, NoteReference, NoteSnapshot, StoryConfig, AgentTask, newSession, agentId } from "../../core/agent/types";
+import { AGENT_TASKS, validateTaskFields, taskDescription } from "../../core/agent/AgentTasks";
 
 export const SYNC_HISTORY_PATH = "IStart/Agent Sessions/history.json";
 export class AgentController {
@@ -22,7 +24,7 @@ export class AgentController {
   private pending = new Set<Promise<void>>();
   private applying = false;
   private disposed = false;
-  private lastMarkdown: MarkdownView | null = null;
+  private lastReference: NoteReference | null = null;
   private syncQueue: Promise<unknown> = Promise.resolve();
   private saveTimer: number | undefined;
   constructor(private plugin: DeepSeekPlugin, private app: App = plugin.app) {
@@ -42,14 +44,42 @@ export class AgentController {
   get sessions(): AgentSession[] { return this.store.data.sessions; }
   get active(): AgentSession | undefined { return this.sessions.find(s => s.id === this.store.data.activeId); }
   refreshSettings(): void { this.emit(); }
-  trackView(view: MarkdownView): void { this.lastMarkdown = view; }
-  captureCurrent(): NoteReference | null {
-    const view = this.app.workspace.getActiveViewOfType(MarkdownView) ?? this.lastMarkdown;
-    if (!view?.file) return null;
-    if (view.getMode() !== "source") return { path: view.file.path };
-    const editor = view.editor, content = editor.getValue();
+  trackView(view: MarkdownView): void {
+    this.lastReference = this.referenceFromView(view);
+  }
+  rememberEditor(editor: import("obsidian").Editor, file: TFile): void {
+    const content = editor.getValue();
     const start = editor.posToOffset(editor.getCursor("from")), end = editor.posToOffset(editor.getCursor("to"));
-    return { path: view.file.path, cursor: { offset: editor.posToOffset(editor.getCursor()), content }, ...(start !== end ? { selection: { start, end, text: content.slice(start, end), content } } : {}) };
+    this.lastReference = { path: file.path, cursor: { offset: editor.posToOffset(editor.getCursor()), content },
+      ...(start !== end ? { selection: { start, end, text: content.slice(start, end), content } } : {}) };
+  }
+  private referenceFromView(view: MarkdownView): NoteReference | null {
+    if (!view.file) return null;
+    if (view.getMode() !== "source") return { path: view.file.path };
+    this.rememberEditor(view.editor, view.file);
+    return this.lastReference;
+  }
+  captureCurrent(): NoteReference | null {
+    const foreground = this.app.workspace.getActiveViewOfType(MarkdownView);
+    const reference = foreground ? this.referenceFromView(foreground) : this.lastReference;
+    return reference ? JSON.parse(JSON.stringify(reference)) : null;
+  }
+  /** An Agent action uses its conversation's primary target after focus leaves the editor. */
+  captureTaskReference(): NoteReference | null {
+    if (this.app.workspace.getActiveViewOfType(MarkdownView)) return this.captureCurrent();
+    const reference = this.active?.references[0];
+    return reference ? JSON.parse(JSON.stringify(reference)) : this.captureCurrent();
+  }
+  setInsertionReference(id: string, reference: NoteReference): void {
+    const s = this.sessions.find(s => s.id === id);
+    if (!s || s.archived) throw new Error("会话不可用");
+    if (this.isRunning(id)) throw new Error("请在生成结束后调整插入位置");
+    if (s.references.length >= 8 && !s.references.some(r => r.path === reference.path)) throw new Error("每个会话最多引用8篇笔记，请先移除一个引用");
+    if (!reference.cursor || !Number.isInteger(reference.cursor.offset) || reference.cursor.offset < 0 || reference.cursor.offset > reference.cursor.content.length) throw new Error("插入位置无效");
+    const captured = JSON.parse(JSON.stringify(reference)) as NoteReference;
+    delete captured.selection;
+    s.references = [captured, ...s.references.filter(r => r.path !== captured.path)];
+    this.touch(s);
   }
   get isApplying(): boolean { return this.applying; }
   isRunning(id: string): boolean { return this.running.has(id); }
@@ -80,6 +110,72 @@ export class AgentController {
     Object.assign(s, change); this.touch(s);
   }
   updateDraft(id: string, draft: string): void { const s = this.sessions.find(s => s.id === id); if (s) { s.draft = draft; s.updatedAt = Date.now(); this.saveSoon(); } }
+  prepareTask(task: AgentTask, references: NoteReference[]): AgentSession {
+    this.ready();
+    // A button starts an isolated task; preserve any existing draft or running conversation.
+    const current = this.active;
+    const s = current && !current.archived && !current.messages.length && !current.draft && !current.pendingTask && !this.isRunning(current.id) ? current : this.create();
+    s.references = JSON.parse(JSON.stringify(references));
+    s.mode = task.mode;
+    s.pendingTask = JSON.parse(JSON.stringify(task));
+    s.title = AGENT_TASKS[task.actionId].label;
+    this.touch(s);
+    return s;
+  }
+  updateTaskArgs(id: string, key: string, value: string | number | boolean): void {
+    const s = this.sessions.find(s => s.id === id), task = s?.pendingTask;
+    if (!s || !task || this.isRunning(id)) return;
+    if (!AGENT_TASKS[task.actionId].fields.some(field => field.key === key)) throw new Error("不支持的任务参数");
+    task.args[key] = value;
+    this.touch(s);
+  }
+  cancelTask(id: string): void {
+    const s = this.sessions.find(s => s.id === id);
+    if (s && !this.isRunning(id)) { delete s.pendingTask; this.touch(s); }
+  }
+  submitTask(id: string): Promise<void> {
+    const s = this.sessions.find(s => s.id === id), task = s?.pendingTask;
+    if (!s || !task) return Promise.reject(new Error("没有待执行的助手任务"));
+    validateTaskFields(task);
+    if (this.isRunning(id)) throw new Error("本会话正在生成，请等待或停止后重试");
+    s.mode = task.mode;
+    return this.track(this.runTurn(id, taskDescription(task), undefined, JSON.parse(JSON.stringify(task))));
+  }
+  /** Native wizards call a recorded task and consume its result, without a second LLM workflow. */
+  async executeTask(task: AgentTask, sessionId?: string, signal?: AbortSignal): Promise<{ sessionId: string; message: AgentMessage }> {
+    this.ready();
+    if (signal?.aborted) throw new Error("任务已停止");
+    validateTaskFields(task);
+    let session = sessionId ? this.sessions.find(s => s.id === sessionId) : undefined;
+    if (sessionId && (!session || session.archived)) throw new Error("导入会话已关闭，请重新打开导入向导");
+    if (session && (session.draft || session.pendingTask || this.isRunning(session.id))) throw new Error("导入会话中已有未完成任务，请稍候重试");
+    if (!session) session = this.prepareTask(task, []);
+    else { session.pendingTask = JSON.parse(JSON.stringify(task)); session.mode = task.mode; this.touch(session); }
+    const id = session.id;
+    const stop = () => this.stop(id);
+    signal?.addEventListener("abort", stop, { once: true });
+    try {
+      await this.submitTask(id);
+      const message = session.messages[session.messages.length - 1];
+      if (signal?.aborted || message?.status !== "completed") throw new Error(message?.error || "Agent 任务未完成");
+      return { sessionId: id, message };
+    } finally { signal?.removeEventListener("abort", stop); }
+  }
+
+  updateStoryConfig(id: string, config: StoryConfig): void {
+    this.ready(); const s = this.sessions.find(s => s.id === id); if (!s) return;
+    if (this.isRunning(id)) throw new Error("请等待本轮结束后修改参演设置");
+    if (![1, 2, 3].includes(config.rounds) || config.characterPaths.length > 4 || new Set(config.characterPaths).size !== config.characterPaths.length) throw new Error("请选择1–4名角色，演绎1–3轮");
+    s.storyConfig = { rounds: config.rounds, characterPaths: [...config.characterPaths] }; this.touch(s);
+  }
+  async storyCharacters(id: string): Promise<{ path: string; name: string }[]> {
+    this.ready(); const s = this.sessions.find(s => s.id === id);
+    const file = s?.references[0] && this.app.vault.getAbstractFileByPath(s.references[0].path);
+    if (!(file instanceof TFile)) throw new Error("请先将小说章节作为第一篇引用");
+    const scope = await resolveWritingScope(this.app, file);
+    if (scope?.genre !== "novel" || file.parent?.path !== scope.projectPath) throw new Error("请引用小说项目内的章节，再设置参演角色");
+    return new WritingProjectManager(this.app, this.plugin.settings).getProjectCharacters(file);
+  }
   attach(reference: NoteReference, replace = false): void {
     const s = this.active; if (!s) return;
     if (this.isRunning(s.id)) throw new Error("请等待本轮结束后修改引用");
@@ -118,11 +214,13 @@ export class AgentController {
     const copy: AgentSession = JSON.parse(JSON.stringify(source));
     const fresh = newSession(copy.references);
     fresh.title = `${source.title} · 分支`; fresh.parentId = source.id; fresh.mode = source.mode; fresh.searchVault = source.searchVault;
+    fresh.storyConfig = copy.storyConfig;
     fresh.messages = copy.messages.slice(0, index + 1);
     fresh.summary = copy.summary && fresh.messages.some(m => m.id === copy.summary?.through) ? copy.summary : undefined;
     for (const m of fresh.messages) {
       delete m.checkpoint;
       if (m.status === "running") { m.status = "interrupted"; m.error = "从运行中的会话分支，请继续提问"; }
+      if (m.story?.evolution?.status === "running") m.story.evolution = { status: "error", content: "", error: "分支未继承运行中的角色推演，可重试推演" };
       for (const p of m.proposals ?? []) if (p.status === "pending" || p.status === "applying") p.status = "rejected";
     }
     this.sessions.push(fresh); this.store.data.activeId = fresh.id; this.touch(fresh); return fresh;
@@ -146,17 +244,18 @@ export class AgentController {
     void task.then(() => this.pending.delete(task), () => this.pending.delete(task));
     return task;
   }
-  private async runTurn(id: string, text: string, resume?: AgentMessage): Promise<void> {
+  private async runTurn(id: string, text: string, resume?: AgentMessage, task?: AgentTask): Promise<void> {
     this.ready(); const s = this.sessions.find(s => s.id === id); if (!s || (!text.trim() && !resume)) return;
     if (text.length > 20000) throw new Error("消息过长，请拆分任务");
     if (s.archived) throw new Error("请先恢复会话");
     if (this.running.has(id)) throw new Error("本会话正在生成，请等待或停止后重试");
     if (this.running.size >= 2) throw new Error("已有两个会话正在生成，请稍候再发送");
     const abort = new AbortController(); this.running.set(id, abort);
-    const user: AgentMessage | undefined = resume ? [...s.messages.slice(0, s.messages.indexOf(resume))].reverse().find(m => m.role === "user") : { id: agentId(), role: "user", content: text.trim(), createdAt: Date.now() };
+    const user: AgentMessage | undefined = resume ? [...s.messages.slice(0, s.messages.indexOf(resume))].reverse().find(m => m.role === "user") : { id: agentId(), role: "user", content: text.trim(), createdAt: Date.now(), task, taskReferences: task ? JSON.parse(JSON.stringify(s.references)) : undefined };
     if (!user) { this.running.delete(id); throw new Error("任务缺少原始用户消息"); }
     if (!resume) {
       s.messages.push(user); s.draft = "";
+      if (task) delete s.pendingTask;
       if (s.messages.filter(m => m.role === "user").length === 1) s.title = text.trim().slice(0, 24);
     }
     this.touch(s);
@@ -165,7 +264,7 @@ export class AgentController {
     try {
       await this.persist();
       const saved = resume?.checkpoint;
-      const references = saved ? saved.notes : JSON.parse(JSON.stringify(s.references)) as NoteReference[];
+      const references = saved ? saved.notes : user.taskReferences ?? JSON.parse(JSON.stringify(s.references)) as NoteReference[];
       const notes = new Map<string, NoteSnapshot>();
       for (const reference of references) {
         if (saved) {
@@ -182,19 +281,37 @@ export class AgentController {
       const primary = saved ? (saved.primaryPath ? notes.get(saved.primaryPath) : undefined) : user.references?.[0];
       const file = primary ? this.app.vault.getAbstractFileByPath(primary.path) : null;
       const scope = saved ? saved.scope : await abortable(resolveWritingScope(this.app, file instanceof TFile ? file : null), abort.signal);
-      const writing = saved ? saved.writing : scope && file instanceof TFile ? await abortable(new WritingProjectManager(this.app, this.plugin.settings).loadContext(file), abort.signal) : null;
+      const contextScope = task?.args.contextScope === "nearby" ? "nearby" : task?.args.contextScope === "full" ? "full" : this.plugin.settings.writingContextScope;
+      const writing = saved ? saved.writing : scope && file instanceof TFile ? await abortable(new WritingProjectManager(this.app, this.plugin.settings).loadContext(file, contextScope), abort.signal) : null;
       const skills = selectSkills(await abortable(this.plugin.skillRegistry.ensureLoaded(), abort.signal), { feature: scope ? "writing" : "assistant", userPrompt: user.content, writingScope: scope }, this.plugin.settings.skills);
       const context: AgentRunContext = { sessionId: id, mode: saved?.mode ?? s.mode, notes, primary, scope, writing, searchVault: saved?.searchVault ?? s.searchVault, signal: abort.signal, sources: new Set(saved ? resume?.sources ?? [] : (user.references ?? []).map(n => n.path)) };
       const settings = { ...this.plugin.settings, agent: { ...this.plugin.settings.agent } };
       const client = new LLMClient(settings, { signal: abort.signal, skills, skillContext: { ...scope, useActiveFile: false } });
       const tools = new AgentTools(this.app, settings, this.plugin.knowledgeIndex, client);
+      if (context.mode === "story") {
+        if (!context.primary || !context.scope || context.writing?.genre !== "novel") throw new Error("小说演绎需要作品角色卡。请将小说项目的章节作为第一篇引用，并在「参演设置」中选择角色。");
+        if (s.messages.some(m => m.story?.confirmedAt !== undefined && m.story.projectPath === context.scope!.projectPath && m.story.evolution?.status !== "completed")) throw new Error("已有已确认剧情尚未完成角色推演，请先点击「重试角色推演」");
+        const available = await abortable(this.storyCharacters(id), abort.signal);
+        const config = s.storyConfig ?? { characterPaths: [], rounds: 1 };
+        const paths = config.characterPaths.length ? config.characterPaths : available.map(c => c.path);
+        if (!paths.length || paths.length > 4) throw new Error("请在「参演设置」中选择1–4名角色；没有角色卡时，请先提取或创建角色卡。");
+        if (paths.some(path => !available.some(c => c.path === path))) throw new Error("参演角色不属于当前小说项目，请重新选择角色");
+        this.checkStoryDrafts(s, paths);
+        const cast: NoteSnapshot[] = [];
+        for (const path of paths) { cast.push(await abortable(snapshotReference(this.app, { path }), abort.signal)); context.sources.add(path); }
+        const result = await new StoryRunner(client, settings.agent.contextChars).run(s, context, settings.agent, cast, config, () => {
+          s.messages[s.messages.length - 1].skills = skills.map(skill => skill.name); this.emit(); this.saveSoon();
+        }, () => this.persist());
+        if (timedOut) { result.status = "error"; result.error = "本轮演绎超过5分钟，已停止。请减少参演角色或演绎轮数后重试。"; }
+        return;
+      }
       let checkpoint = "";
       const result = await new AgentRunner(client, tools.registry).run(s, context, settings.agent, () => {
         const reply = s.messages[s.messages.length - 1]; reply.skills = skills.map(skill => skill.name);
         const next = `${reply.status}/${reply.steps?.map(step => step.status).join(",")}/${reply.proposals?.length}`;
         if (next !== checkpoint) { checkpoint = next; this.saveSoon(); }
         this.emit();
-      }, { resume, save: () => this.persist() });
+      }, { resume, task: user.task, save: () => this.persist() });
       if (timedOut) { result.status = "error"; result.error = "本轮任务超过5分钟，已停止。可缩小任务范围后重试。"; }
     } catch (error) {
       const failed: AgentMessage = resume ?? { id: agentId(), role: "assistant", content: "", createdAt: Date.now() };
@@ -209,8 +326,62 @@ export class AgentController {
     const s = this.sessions.find(s => s.id === sessionId); if (!s) return;
     const index = s.messages.findIndex(m => m.id === messageId);
     if (index !== s.messages.length - 1) throw new Error("较早的消息请使用「从此处分支」");
+    if (s.messages[index]?.story?.confirmedAt !== undefined) throw new Error("已确认剧情请通过新一轮演绎继续，角色推演失败可单独重试");
     const user = [...s.messages.slice(0, index)].reverse().find(m => m.role === "user");
-    if (user) await this.send(s.id, user.content);
+    if (user?.task) {
+      if (this.isRunning(s.id)) throw new Error("本会话正在生成，请等待或停止后重试");
+      // Regeneration uses the original task, references and fixed editor positions.
+      if (user.taskReferences) s.references = JSON.parse(JSON.stringify(user.taskReferences));
+      else if (user.references) s.references = user.references.map(({ content: _content, ...ref }) => ref);
+      s.mode = user.task.mode;
+      await this.track(this.runTurn(s.id, user.content, undefined, user.task));
+    } else if (user) await this.send(s.id, user.content);
+  }
+  private checkStoryDrafts(session: AgentSession, paths: string[]): void {
+    if (session.messages.some(m => m.proposals?.some(p => ["pending", "applying"].includes(p.status) && p.changes.some(c => paths.includes(c.path))))) throw new Error("参演角色还有待处理的修改，请先应用或放弃角色卡更新，再继续演绎或推演");
+  }
+  confirmStory(sessionId: string, messageId: string, content?: string): Promise<void> {
+    return this.track(this.evolveStory(sessionId, messageId, content));
+  }
+  private async evolveStory(sessionId: string, messageId: string, content?: string): Promise<void> {
+    this.ready(); const s = this.sessions.find(s => s.id === sessionId);
+    const message = s?.messages.find(m => m.id === messageId), story = message?.story;
+    if (!s || !message || !story) throw new Error("演绎场景不存在");
+    if (s.archived || s.mode !== "story") throw new Error("请恢复会话并切回小说演绎与进化模式");
+    if (this.applying || this.isRunning(s.id)) throw new Error("请等待当前任务完成");
+    if (this.running.size >= 2) throw new Error("已有两个会话正在生成，请稍后再试");
+    if (story.confirmedAt === undefined && (s.messages[s.messages.length - 1] !== message || message.status !== "completed")) throw new Error("只能确认最新一轮已完成的演绎，较早的剧情请先创建会话分支");
+    if (story.evolution?.status === "completed") throw new Error("本场角色推演已完成，请检查角色卡更新预览");
+    const scene = story.confirmedAt === undefined ? (content ?? message.content).trim() : message.content;
+    if (!scene || scene.length > 24000) throw new Error("请确认1–24,000字符的场景正文");
+    this.checkStoryDrafts(s, story.cast.map(c => c.path));
+    const abort = new AbortController(); this.running.set(s.id, abort);
+    let timedOut = false;
+    const timer = window.setTimeout(() => { timedOut = true; abort.abort(); }, 300000);
+    try {
+      // Persist canon before any role analysis. Failed saves must not start a model request.
+      const previousContent = message.content;
+      const previousConfirmedAt = story.confirmedAt;
+      message.content = scene; story.confirmedAt = story.confirmedAt ?? Date.now(); s.updatedAt = Date.now();
+      try { await this.persist(); }
+      catch (error) { message.content = previousContent; story.confirmedAt = previousConfirmedAt; throw error; }
+      story.evolution = { status: "running", content: "" }; message.status = "running"; message.error = undefined; this.emit();
+      const cards: NoteSnapshot[] = [];
+      for (const card of story.cast) cards.push(await abortable(snapshotReference(this.app, { path: card.path }), abort.signal));
+      const scope = { genre: "novel", projectPath: story.projectPath, projectTitle: s.title };
+      const skills = selectSkills(await abortable(this.plugin.skillRegistry.ensureLoaded(), abort.signal), { feature: "writing", userPrompt: "根据已确认剧情推演角色变化", writingScope: scope }, this.plugin.settings.skills);
+      const client = new LLMClient(this.plugin.settings, { signal: abort.signal, skills, skillContext: { ...scope, useActiveFile: false } });
+      const context: AgentRunContext = { sessionId: s.id, mode: "story", notes: new Map(), scope, searchVault: false, signal: abort.signal, sources: new Set(cards.map(c => c.path)) };
+      await new StoryRunner(client, this.plugin.settings.agent.contextChars).evolve(message, cards, context, () => this.emit());
+      message.status = "completed";
+    } catch (error) {
+      const detail = timedOut ? "角色推演超过5分钟，请重试" : abort.signal.aborted ? "角色推演已停止，可重试" : error instanceof Error ? error.message : "角色推演失败";
+      if (story.confirmedAt !== undefined) story.evolution = { status: "error", content: "", error: detail };
+      message.status = story.confirmedAt === undefined ? "completed" : abort.signal.aborted ? "cancelled" : "error"; message.error = detail;
+    } finally {
+      window.clearTimeout(timer); this.running.delete(s.id); s.updatedAt = Date.now(); this.emit();
+      await this.persist(); await this.pushSharedHistory();
+    }
   }
   async apply(proposal: ChangeProposal, session: AgentSession): Promise<void> {
     if (this.applying) throw new Error("正在应用另一份修改，请稍候");
@@ -237,7 +408,7 @@ export class AgentController {
     if (this.applying || this.isRunning(session.id)) throw new Error("请等待本轮处理结束后放弃修改");
     if (proposal.status === "pending") { proposal.status = "rejected"; this.touch(session); }
   }
-  offerAnswer(session: AgentSession, message: AgentMessage, mode: "save" | "append" | "insert", title = "AI 笔记"): void {
+  offerAnswer(session: AgentSession, message: AgentMessage, mode: "save" | "append" | "insert" | "insert-target", title = "AI 笔记"): void {
     if (this.isRunning(session.id)) throw new Error("请等待本轮结束");
     let change;
     if (mode === "save") {
@@ -246,8 +417,9 @@ export class AgentController {
     } else {
       const index = session.messages.indexOf(message);
       const user = [...session.messages.slice(0, index)].reverse().find(m => m.role === "user");
-      const note = user?.references?.[0];
-      if (!note) throw new Error("本轮没有引用目标笔记，请添加引用后重新生成");
+      const target = session.references[0];
+      const note = mode === "insert-target" && target?.cursor ? { ...target, content: target.cursor.content } : mode === "insert-target" ? undefined : user?.references?.[0];
+      if (!note) throw new Error(mode === "insert-target" ? "请先点击「设置插入位置」确认目标" : "本轮没有引用目标笔记，请添加引用后重新生成，或设置插入位置后使用「插入到已设置位置」");
       const offset = mode === "append" ? note.content.length : note.cursor?.offset;
       if (offset === undefined) throw new Error("本轮没有固定的光标位置");
       change = { path: note.path, before: note.content, after: note.content.slice(0, offset) + `\n\n${message.content}\n` + note.content.slice(offset) };

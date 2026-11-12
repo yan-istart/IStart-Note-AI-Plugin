@@ -36,11 +36,12 @@ export class AIAssistant {
   constructor(
     private settings: DeepSeekSettings,
     private outputStyle: OutputStyle = "knowledge-base",
-    private knownConcepts: string[] = []
+    private knownConcepts: string[] = [],
+    client?: LLMClient
   ) {
     this.classifier = new ContentClassifier();
     this.promptBuilder = new StructuredPromptBuilder(outputStyle);
-    this.llm = new LLMClient(settings);
+    this.llm = client ?? new LLMClient(settings);
   }
 
   async run(instruction: string, ctx: AssistantContext): Promise<AssistantResult> {

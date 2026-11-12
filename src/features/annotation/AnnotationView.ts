@@ -10,16 +10,15 @@ import {
   setIcon,
 } from "obsidian";
 import type DeepSeekPlugin from "../../main";
+import { renderWorkbenchNav } from "../workbench/WorkbenchNav";
+import { WORKBENCH_VIEWS } from "../workbench/WorkbenchController";
 import type { AnnotationCommentStyle, AnnotationRecord } from "../../core/annotations/AnnotationParser";
 import { parseAnnotations } from "../../core/annotations/AnnotationParser";
 import { locateSourceRange } from "../../core/annotations/AnnotationNavigation";
-import { resolveWritingScope } from "../../core/skills/WritingScope";
-import { draftAnnotation, suggestFromAnnotation } from "../../ai/AnnotationAssistant";
-import { AssistantResultModal } from "../assistant/AssistantModal";
 import { AnnotationDeleteModal, AnnotationModal } from "./AnnotationModal";
 import { AnnotationService } from "./AnnotationService";
 
-export const ANNOTATION_VIEW_TYPE = "istart-annotations-view";
+export const ANNOTATION_VIEW_TYPE = WORKBENCH_VIEWS.annotations;
 
 type AnnotationScope = "current" | "vault";
 type AnnotationTypeFilter = "all" | "highlight" | "note";
@@ -56,15 +55,14 @@ export class AnnotationView extends ItemView {
   private statusEl: HTMLElement | null = null;
   private countEl: HTMLElement | null = null;
   private opened = false;
-  private suggestionJobs = new Set<string>();
 
   constructor(leaf: WorkspaceLeaf, private plugin: DeepSeekPlugin) {
     super(leaf);
   }
 
   getViewType(): string { return ANNOTATION_VIEW_TYPE; }
-  getDisplayText(): string { return "IStart 批注"; }
-  getIcon(): string { return "highlighter"; }
+  getDisplayText(): string { return "IStart 工作台"; }
+  getIcon(): string { return "istart-assistant"; }
 
   onOpen(): Promise<void> {
     this.opened = true;
@@ -74,6 +72,7 @@ export class AnnotationView extends ItemView {
     this.statusEl = null;
     this.countEl = null;
     if (Platform.isMobile) this.contentEl.addClass("istart-annotations-mobile");
+    renderWorkbenchNav(this.contentEl, this.plugin, "annotations");
     this.bindEvents();
     void this.reload();
     return Promise.resolve();
@@ -286,6 +285,7 @@ export class AnnotationView extends ItemView {
     this.contentEl.empty();
     this.contentEl.addClass("istart-annotations-root");
     if (Platform.isMobile) this.contentEl.addClass("istart-annotations-mobile");
+    renderWorkbenchNav(this.contentEl, this.plugin, "annotations");
 
     const header = this.contentEl.createDiv({ cls: "istart-annotations-header" });
     const tabs = header.createDiv({ cls: "istart-annotations-tabs" });
@@ -674,7 +674,7 @@ export class AnnotationView extends ItemView {
       initialComment,
       allowStyle: !hasComment,
       allowEmptyComment: hasComment,
-      draft: (currentComment) => this.draftForAnnotation(annotation, currentComment || initialComment),
+      onAgentDraft: (comment) => this.runAnnotationTask(annotation, "annotation-rewrite", comment || initialComment),
       onSubmit: async (comment, chosenStyle) => {
         if (!hasComment && !comment) throw new Error("请输入批注内容");
         const changed = await new AnnotationService(this.app).updateComment(
@@ -689,122 +689,18 @@ export class AnnotationView extends ItemView {
     }).open();
   }
 
-  private async draftForAnnotation(annotation: AnnotationItem, existingComment: string): Promise<string> {
-    const context = await this.readAnnotationContext(annotation);
-    return draftAnnotation(this.plugin.settings, {
-      fileName: annotation.title,
-      heading: annotation.heading,
-      selection: annotation.text,
-      before: context.before,
-      after: context.after,
-      existingComment: existingComment || undefined,
-      skillContext: await this.skillContextFor(annotation),
-    });
-  }
-
   private async requestSuggestion(annotation: AnnotationItem): Promise<void> {
-    if (this.suggestionJobs.has(annotation.id)) {
-      new Notice("正在分析这条批注，请稍候");
-      return;
-    }
-    this.suggestionJobs.add(annotation.id);
-    const notice = new Notice("AI 正在分析这条批注…", 0);
-    try {
-      const context = await this.readAnnotationContext(annotation);
-      const suggestion = await suggestFromAnnotation(this.plugin.settings, {
-        fileName: annotation.title,
-        heading: annotation.heading,
-        selection: annotation.text,
-        comment: this.commentText(annotation),
-        before: context.before,
-        after: context.after,
-        skillContext: await this.skillContextFor(annotation),
-      });
-      notice.hide();
-      if (!this.opened) return;
-      new AssistantResultModal(
-        this.app,
-        { mode: "show", content: suggestion, explanation: "AI 批注建议" },
-        () => this.appendSuggestion(annotation, suggestion),
-        () => { void this.requestSuggestion(annotation); },
-        undefined,
-        undefined,
-        {
-          primaryLabel: "追加到批注",
-          modeHint: `根据「${annotation.title}」中的高亮文字、现有批注和上下文生成`,
-        }
-      ).open();
-    } catch (error) {
-      notice.hide();
-      if (this.opened) new Notice(`AI 建议失败：${(error as Error).message}`);
-    } finally {
-      this.suggestionJobs.delete(annotation.id);
-    }
+    try { await this.runAnnotationTask(annotation, "annotation-suggest", this.commentText(annotation)); }
+    catch (error) { new Notice(`无法获取批注建议：${(error as Error).message}`); }
   }
 
-  private async appendSuggestion(annotation: AnnotationItem, suggestion: string): Promise<void> {
-    const addition = suggestion.trim();
-    if (!addition) throw new Error("AI 没有返回可追加的内容");
-    const existing = this.commentText(annotation).trim();
-    const part = annotation.commentParts[0];
-    let style = this.plugin.settings.annotationCommentStyle;
-    let inlineOutput = style === "inline";
-    if (part) {
-      if (part.source === "footnote") {
-        style = "footnote";
-        inlineOutput = false;
-      } else if (part.source === "obsidian-comment") {
-        style = "inline";
-        inlineOutput = false;
-      } else {
-        style = "inline";
-        inlineOutput = true;
-      }
-    } else if (addition.includes("\n")) {
-      style = "footnote";
-      inlineOutput = false;
-    }
-    const normalized = inlineOutput ? compactInlineSuggestion(addition) : addition;
-    const comment = existing
-      ? inlineOutput ? `${existing}；${normalized}` : `${existing}\n\n${normalized}`
-      : normalized;
-    const changed = await new AnnotationService(this.app).updateComment(
-      annotation.path,
-      annotation,
-      comment,
-      style
-    );
-    if (!changed) throw new Error("没有可写入的批注");
-    new Notice("已追加到批注");
-    this.refreshAfterWrite(annotation.path);
-  }
-
-  private async readAnnotationContext(annotation: AnnotationItem): Promise<{ before: string; after: string }> {
+  private async runAnnotationTask(annotation: AnnotationItem, actionId: string, comment: string): Promise<void> {
     const file = this.app.vault.getAbstractFileByPath(annotation.path);
     if (!(file instanceof TFile)) throw new Error("找不到原文件");
     const content = await this.readFreshFile(file);
     const range = locateSourceRange(content, annotation);
-    const start = range?.start ?? annotation.contentStart;
-    const end = range?.end ?? annotation.contentEnd;
-    return {
-      before: content.slice(Math.max(0, start - 600), start),
-      after: content.slice(end, end + 600),
-    };
-  }
-
-  private async skillContextFor(annotation: AnnotationItem): Promise<{
-    genre: string;
-    projectTitle: string;
-    projectPath: string;
-  } | undefined> {
-    const file = this.app.vault.getAbstractFileByPath(annotation.path);
-    if (!(file instanceof TFile)) return undefined;
-    const scope = await resolveWritingScope(this.app, file);
-    return scope ? {
-      genre: scope.genre,
-      projectTitle: scope.projectTitle,
-      projectPath: scope.projectPath,
-    } : undefined;
+    if (!range || !parseAnnotations(content).some(item => item.id === annotation.id)) throw new Error("批注位置已变化，请刷新后重试");
+    await this.plugin.startAgentTask(actionId, { path: annotation.path, selection: { ...range, text: content.slice(range.start, range.end), content }, annotation: comment }, { annotationId: annotation.id, comment });
   }
 
   private refreshAfterWrite(path: string): void {

@@ -7,6 +7,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 ## [Unreleased]
 
 ### Added
+- Complete Agent migration for document beautification, readonly proofreading with durable source locations, knowledge-debt statistics, existing annotation rewriting/suggestions, and manuscript classification/analysis. Remove the separate All features panel; keep existing command IDs as assistant aliases and provide inline task shortcuts.
+- Copy messages, tool results, role turns, complete previews and entire conversations; preserve text selection while streaming. Stable editor snapshots and an inline source-position picker keep insertion usable after switching focus, including inserting an existing answer at an explicitly chosen location.
+- AI typo checking for the current note or selection, with a right-sidebar original/correction list, verified source positions, click-to-select navigation, chunked long-note checking, cancellation, and stale-result protection. Available in the command palette, editor menu, and Agent shortcuts; suggestions do not modify notes.
 - Durable Agent task continuation from saved tool checkpoints, with explicit Continue versus Regenerate actions, restored source/project snapshots, and protection when source content or execution scope changes. Completed tool steps and drafts are reused after interruption.
 - Cross-turn draft revision and coalesced shared-index changes; full reading project continuation with preserved handwritten questions and progress; shared Mermaid question graph rendering; paged long-note reads; and template-plus-daily-run previews with usage/evidence options.
 - Persistent multi-session Agent sidebar with independent drafts, explicit references, Ask / Agent modes, bounded tool execution, source citations, previewed changes, cancellation, retry, branching, searchable/pinned/archived conversations, and Markdown export. Reuses existing AI generators and can continue quick-dialog results in the sidebar.
@@ -43,6 +46,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - `PlanExecutor.ts`: applies plans to the vault and persists execution logs under `Knowledge/_Executions/`.
 
 ### Changed
+- Agent response parsing tolerates literal newlines inside JSON strings and redundant closing braces, preserves embedded Markdown code fences, and limits format correction to two retries without consuming tool steps. Tool arguments and mode permissions remain validated.
+- Generation actions now launch existing Agent tools directly from the feature panel, commands, editor menus, floating toolbar, and writing status bar. Shared inline task cards replace separate parameter flows for projects, questions, templates, and writing settings; previews, follow-up draft revisions, regeneration, and interrupted-task recovery stay in the conversation.
+- Consolidated the panel, AI assistant, annotations, and sync ribbon entries into one IStart workbench. Assistant/Agent, annotations, and sync share one sidebar with persistent navigation; duplicate legacy sidebars are merged while existing commands and hotkeys remain available.
+- Renamed the synchronization feature to IStart Data Sync, with a dedicated settings tab separating shared sync options from Baidu Pan storage configuration. Existing saved settings, credentials, command IDs, and workspace views remain compatible.
 - The Baidu sync sidebar shows the active synchronization mode and refreshes immediately when sync settings change, including switching between file and Git modes.
 - Git sync preserves existing special-character filenames instead of applying Windows filename restrictions to every device. Windows checks incompatible names before applying any note changes.
 - Baidu directory traversal now paginates; Git operations fail on listing errors instead of treating an unavailable cloud as empty. File sync excludes the separate Git bundle directory.

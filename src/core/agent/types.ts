@@ -1,7 +1,26 @@
 import type { WritingScopeInfo } from "../skills/types";
 import type { WritingContext } from "../../features/writing/types";
 
-export type AgentMode = "ask" | "agent";
+export type AgentMode = "ask" | "agent" | "story";
+export interface StoryConfig {
+  /** Empty means all project characters, up to four. */
+  characterPaths: string[];
+  rounds: number;
+}
+export interface StoryTurn {
+  name: string;
+  path?: string;
+  round: number;
+  content: string;
+}
+export interface StoryScene {
+  projectPath: string;
+  chapterPath: string;
+  cast: NoteSnapshot[];
+  turns: StoryTurn[];
+  confirmedAt?: number;
+  evolution?: { status: "running" | "completed" | "error"; content: string; error?: string };
+}
 export type RunStatus = "idle" | "running" | "completed" | "cancelled" | "error" | "interrupted";
 export interface NoteReference {
   path: string;
@@ -11,6 +30,12 @@ export interface NoteReference {
   annotation?: string;
 }
 export interface NoteSnapshot extends NoteReference { content: string }
+export interface AgentTask {
+  actionId: string;
+  tool: string;
+  args: Record<string, string | number | boolean>;
+  mode: "ask" | "agent";
+}
 export interface AgentStep {
   id: string;
   tool: string;
@@ -40,6 +65,14 @@ export interface AgentCheckpoint {
   scope: WritingScopeInfo | null;
   writing?: WritingContext | null;
   pendingTool?: { stepId: string; name: string; args: unknown };
+  task?: AgentTask;
+  taskResult?: string;
+}
+export interface ProofreadingReport {
+  path: string;
+  content: string;
+  selected: boolean;
+  result: import("../../ai/TypoChecker").TypoCheckResult;
 }
 export interface AgentMessage {
   id: string;
@@ -54,6 +87,10 @@ export interface AgentMessage {
   skills?: string[];
   error?: string;
   checkpoint?: AgentCheckpoint;
+  story?: StoryScene;
+  proofreading?: ProofreadingReport;
+  task?: AgentTask;
+  taskReferences?: NoteReference[];
 }
 export interface AgentSession {
   id: string;
@@ -69,6 +106,8 @@ export interface AgentSession {
   messages: AgentMessage[];
   summary?: { content: string; through: string };
   parentId?: string;
+  storyConfig?: StoryConfig;
+  pendingTask?: AgentTask;
 }
 export interface SessionData { version: 1; activeId: string | null; sessions: AgentSession[]; deleted?: Record<string, number> }
 export interface AgentSettings { streaming: boolean; maxSteps: number; contextChars: number; syncHistory: boolean }

@@ -18,11 +18,12 @@ export class BaiduSyncModal extends Modal {
     private onSaveToken: (accessToken: string, expiresAt: string) => Promise<void>
   ) {
     super(app);
-    this.titleEl.setText("百度网盘同步");
+    this.titleEl.setText("IStart 数据同步");
   }
 
   onOpen() {
     const { contentEl } = this;
+    contentEl.createEl("p", { text: "存储服务：百度网盘 · 文件备份与同步", cls: "istart-sync-hint" });
 
     new Setting(contentEl)
       .setName("操作模式")

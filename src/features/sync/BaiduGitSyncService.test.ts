@@ -91,6 +91,53 @@ function device() {
 beforeEach(() => { cloud.files.clear(); cloud.failList = false; cloud.downloadHook = undefined; Platform.isWin = false; });
 
 describe("mobile adapter and live-vault application", () => {
+  it("reports local additions, modifications, deletions and diffs without committing or using cloud", async () => {
+    const a = device();
+    await a.note("edit.md", "old\n"); await a.note("delete.md", "removed\n");
+    await a.note("same.md", "same\n");
+    await a.service().sync();
+    const history = await a.service().history();
+    await a.note("edit.md", "new\n"); await a.adapter.remove("delete.md");
+    await a.note("new.md", "added\n");
+    const cloudBefore = [...cloud.files.keys()]; cloud.failList = true;
+    expect(await a.service().localStatus()).toMatchObject({ base: history[0].oid, recoveryPending: false, changes: [
+      { path: "delete.md", status: "deleted" }, { path: "edit.md", status: "modified" }, { path: "new.md", status: "added" },
+    ] });
+    const diff = await a.service().localDiff("edit.md");
+    expect(decode(diff.before!)).toBe("old\n"); expect(decode(diff.after!)).toBe("new\n");
+    expect((await a.service().localDiff("delete.md")).after).toBeUndefined();
+    expect((await a.service().localDiff("new.md")).before).toBeUndefined();
+    expect(await a.service().history()).toEqual(history);
+    expect([...cloud.files.keys()]).toEqual(cloudBefore);
+    await a.note("edit.md", "old\n");
+    expect((await a.service().localStatus()).changes.some(c => c.path === "edit.md")).toBe(false);
+  });
+
+  it("applies ignore and size protections to local status, including missing tracked files", async () => {
+    const a = device();
+    await a.note("secret.md", "secret"); await a.note("large.md", "x".repeat(100));
+    await a.service().sync();
+    await a.adapter.remove("large.md"); await a.note("secret.md", "edited");
+    await a.note("new-large.md", "x".repeat(100)); await a.note(".hidden.md", "private");
+    await a.note("ok.md", "ok");
+    a.config.ignorePattern = "secret"; a.config.fileSizeLimitMB = 0.00001;
+    expect((await a.service().localStatus()).changes).toEqual([{ path: "ok.md", status: "added" }]);
+    await expect(a.service().localDiff("secret.md")).rejects.toThrow("不在同步范围");
+    await expect(a.service().localDiff("large.md")).rejects.toThrow("超过大小限制");
+    a.config.ignorePattern = "[";
+    await expect(a.service().localStatus()).rejects.toThrow();
+  });
+
+  it("shows first-sync files as added and preserves binary diff bytes", async () => {
+    const a = device(); await a.note("new.md", "first");
+    await a.adapter.writeBinary("image.png", new Uint8Array([0, 1, 255]).buffer);
+    expect((await a.service().localStatus()).changes).toHaveLength(2);
+    expect(await a.service().history()).toEqual([]);
+    expect((await a.service().localDiff("image.png")).after).toEqual(new Uint8Array([0, 1, 255]));
+    await a.service().sync();
+    expect((await a.service().localStatus()).changes).toEqual([]);
+  });
+
   it("syncs every project directory regardless of the active document", async () => {
     const a = device(), b = device();
     await a.note("current.md", "active");

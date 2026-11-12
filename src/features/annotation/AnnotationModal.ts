@@ -1,4 +1,4 @@
-import { App, ButtonComponent, Notice, Platform, Setting } from "obsidian";
+import { App, ButtonComponent, Notice, Setting } from "obsidian";
 import { ActionModal } from "../../ui/ActionModal";
 import type { AnnotationCommentStyle, AnnotationRecord } from "../../core/annotations/AnnotationParser";
 
@@ -15,7 +15,7 @@ export interface AnnotationModalOptions {
   allowStyle?: boolean;
   /** When false, an empty textarea cannot be submitted (used when adding a comment to an existing highlight). */
   allowEmptyComment?: boolean;
-  draft: (currentComment: string) => Promise<string>;
+  onAgentDraft: (currentComment: string) => void | Promise<void>;
   onSubmit: (comment: string, style: AnnotationCommentStyle) => void | Promise<void>;
 }
 
@@ -28,7 +28,6 @@ export class AnnotationModal extends ActionModal {
   private style: AnnotationCommentStyle;
   private draftButton: HTMLButtonElement | null = null;
   private saveButton: ButtonComponent | null = null;
-  private drafting = false;
   private submitting = false;
 
   constructor(app: App, private options: AnnotationModalOptions) {
@@ -56,7 +55,7 @@ export class AnnotationModal extends ActionModal {
     this.draftButton.setText(this.options.mode === "edit" ? "AI 重写批注" : "AI 草拟批注");
     this.draftButton.addEventListener("click", () => { void this.generateDraft(false); });
     draftRow.createSpan({
-      text: "会发送选中文字和少量上下文",
+      text: "在 Agent 中生成，预览后应用",
       cls: "istart-annotation-draft-hint",
     });
 
@@ -120,30 +119,11 @@ export class AnnotationModal extends ActionModal {
   }
 
   private async generateDraft(onlyWhenEmpty: boolean): Promise<void> {
-    if (this.drafting) return;
     if (onlyWhenEmpty && this.textareaEl.value.trim()) return;
-    this.drafting = true;
-    if (this.draftButton) {
-      this.draftButton.disabled = true;
-      this.draftButton.setText("AI 正在草拟…");
-    }
-    try {
-      const draft = await this.options.draft(this.textareaEl.value.trim());
-      if (!this.textareaEl.value.trim() || !onlyWhenEmpty) {
-        this.textareaEl.value = draft;
-        this.updateSaveLabel();
-        this.textareaEl.setSelectionRange(draft.length, draft.length);
-        if (!Platform.isMobile) this.textareaEl.focus();
-      }
-    } catch (error) {
-      new Notice(`AI 草拟失败：${(error as Error).message}`);
-    } finally {
-      this.drafting = false;
-      if (this.draftButton) {
-        this.draftButton.disabled = false;
-        this.draftButton.setText("AI 草拟批注");
-      }
-    }
+    const comment = this.textareaEl.value.trim();
+    this.close();
+    try { await this.options.onAgentDraft(comment); }
+    catch (error) { new Notice(`无法打开助手：${(error as Error).message}`); }
   }
 
   private async submit(): Promise<void> {

@@ -1,10 +1,14 @@
-import { ActionDef } from "./types";
+import { ActionDef, ActionContext } from "./types";
+
+const agentTask = (actionId: string) => (ctx: ActionContext) => {
+  void ctx.plugin.startAgentAction(actionId, undefined, ctx.targetFile);
+};
 
 /**
  * All actions, organized by domain: Knowledge / Execution / Auxiliary.
  *
  * The "AI 助手" is placed in Auxiliary as a cross-cutting entry point.
- * The command panel renders it as a pinned top-level button above the grouped actions.
+ * Commands and contextual menus share the Agent task entry points.
  *
  * Icons use Obsidian's Lucide names and locally registered Phosphor icons.
  */
@@ -34,7 +38,7 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "question",
     when: { always: true },
     showIn: ["panel"],
-    run: (ctx) => { ctx.plugin.openQuestionWithGraph(); },
+    run: agentTask("question-with-graph"),
   },
   {
     id: "complete-current-concept",
@@ -46,19 +50,19 @@ export const ALL_ACTIONS: ActionDef[] = [
     when: { always: true },
     showIn: ["panel", "editor-menu"],
     experimental: true,
-    run: (ctx) => { ctx.plugin.openCompleteCurrentConcept(); },
+    run: agentTask("complete-current-concept"),
   },
   {
     id: "scan-empty-concepts",
     label: "扫描空概念页",
     icon: "scan-search",
-    description: "扫描 Vault 中所有空概念页，批量补全",
+    description: "在助手中扫描空概念页，可继续指定页面或分批补全",
     domain: "knowledge",
     section: "concept",
     when: { always: true },
     showIn: ["panel"],
     experimental: true,
-    run: (ctx) => { ctx.plugin.openScanEmptyConcepts(); },
+    run: agentTask("scan-empty-concepts"),
   },
   {
     id: "new-reading-project",
@@ -69,7 +73,7 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "reading",
     when: { always: true },
     showIn: ["panel"],
-    run: (ctx) => { ctx.plugin.openNewReadingProject(); },
+    run: agentTask("new-reading-project"),
   },
   {
     id: "create-artifact",
@@ -80,11 +84,11 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "retrieval",
     when: { always: true },
     showIn: ["panel", "editor-menu"],
-    run: (ctx) => { ctx.plugin.openArtifactBuilder(); },
+    run: agentTask("create-artifact"),
   },
   {
     id: "knowledge-debt",
-    label: "知识债务看板",
+    label: "检查知识债务",
     icon: "activity",
     description: "空概念、孤立问题、未完成阅读、长期草稿",
     domain: "knowledge",
@@ -92,7 +96,7 @@ export const ALL_ACTIONS: ActionDef[] = [
     when: { always: true },
     showIn: ["panel"],
     experimental: true,
-    run: (ctx) => { ctx.plugin.openKnowledgeDebt(); },
+    run: agentTask("knowledge-debt"),
   },
 
   // ══════════════════════════════════════════════════════════════
@@ -108,7 +112,7 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "writing-project",
     when: { always: true },
     showIn: ["panel"],
-    run: (ctx) => { ctx.plugin.openNewWritingProject(); },
+    run: agentTask("new-writing-project"),
   },
   {
     id: "import-novel",
@@ -130,7 +134,7 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "writing-chapter",
     when: { hasEditor: true, noSelection: true },
     showIn: ["panel", "editor-menu"],
-    run: (ctx) => { void ctx.plugin.continueWriting(); },
+    run: agentTask("continue-writing"),
   },
   {
     id: "insert-writing",
@@ -141,7 +145,7 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "writing-chapter",
     when: { hasEditor: true, noSelection: true },
     showIn: ["panel", "editor-menu"],
-    run: (ctx) => { void ctx.plugin.insertWriting(); },
+    run: agentTask("insert-writing"),
   },
   {
     id: "insert-writing-settings",
@@ -152,7 +156,7 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "writing-chapter",
     when: { hasEditor: true, noSelection: true },
     showIn: ["panel", "editor-menu"],
-    run: (ctx) => { void ctx.plugin.insertWriting(true); },
+    run: agentTask("insert-writing-settings"),
   },
   {
     id: "continue-writing-settings",
@@ -163,7 +167,7 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "writing-chapter",
     when: { hasEditor: true, noSelection: true },
     showIn: ["panel", "editor-menu"],
-    run: (ctx) => { void ctx.plugin.continueWriting(true); },
+    run: agentTask("continue-writing-settings"),
   },
   {
     id: "generate-next-chapter",
@@ -174,7 +178,7 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "writing-chapter",
     when: { fileType: ["chapter"] },
     showIn: ["panel"],
-    run: (ctx) => { void ctx.plugin.generateNextChapter(); },
+    run: agentTask("generate-next-chapter"),
   },
   {
     id: "polish-writing",
@@ -185,7 +189,7 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "writing-chapter",
     when: { hasEditor: true, hasSelection: true },
     showIn: ["panel", "editor-menu"],
-    run: (ctx) => { void ctx.plugin.polishWriting(); },
+    run: agentTask("polish-writing"),
   },
   {
     id: "expand-selection",
@@ -196,7 +200,7 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "document",
     when: { hasEditor: true, hasSelection: true },
     showIn: ["panel", "editor-menu"],
-    run: (ctx) => { void ctx.plugin.runQuickAction("expand"); },
+    run: agentTask("expand-selection"),
   },
   {
     id: "explain-selection",
@@ -207,7 +211,7 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "document",
     when: { hasEditor: true, hasSelection: true },
     showIn: ["panel", "editor-menu"],
-    run: (ctx) => { void ctx.plugin.runQuickAction("explain"); },
+    run: agentTask("explain-selection"),
   },
   {
     id: "summarize-note",
@@ -218,7 +222,7 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "document",
     when: { hasEditor: true },
     showIn: ["panel", "editor-menu"],
-    run: (ctx) => { void ctx.plugin.runQuickAction("summarize"); },
+    run: agentTask("summarize-note"),
   },
   {
     id: "extract-characters",
@@ -229,13 +233,24 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "writing-project",
     when: { fileType: ["chapter"] },
     showIn: ["panel", "editor-menu"],
-    run: (ctx) => { void ctx.plugin.extractCharacters(); },
+    run: agentTask("extract-characters"),
   },
 
   // ══════════════════════════════════════════════════════════════
   //  AUXILIARY
   // ══════════════════════════════════════════════════════════════
 
+  {
+    id: "check-typos",
+    label: "错别字甄别",
+    icon: "spell-check",
+    description: "检查选区或全文，列出错误与更正，点击定位原文",
+    domain: "auxiliary",
+    section: "document",
+    when: { hasEditor: true },
+    showIn: ["panel", "editor-menu"],
+    run: agentTask("check-typos"),
+  },
   {
     id: "add-annotation",
     label: "添加批注",
@@ -256,13 +271,13 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "document",
     when: { hasEditor: true, hasSelection: true },
     showIn: ["panel", "editor-menu"],
-    run: (ctx) => { ctx.plugin.addAnnotation(true); },
+    run: agentTask("ai-annotation"),
   },
   {
     id: "open-annotations",
-    label: "批注侧边栏",
+    label: "批注",
     icon: "highlighter",
-    description: "查看当前笔记或全库的高亮与批注",
+    description: "在工作台查看当前笔记或全库的高亮与批注",
     domain: "auxiliary",
     section: "document",
     when: { always: true },
@@ -273,7 +288,7 @@ export const ALL_ACTIONS: ActionDef[] = [
     id: "ai-assistant",
     label: "AI 助手",
     icon: "istart-assistant",
-    description: "多会话 Agent 对话、检索与修改预览",
+    description: "工作台内切换问答 / Agent，支持多会话、检索与修改预览",
     domain: "auxiliary",
     section: "assistant",
     when: { always: true },
@@ -289,17 +304,17 @@ export const ALL_ACTIONS: ActionDef[] = [
     section: "document",
     when: { always: true },
     showIn: ["panel", "editor-menu", "file-menu"],
-    run: (ctx) => { void ctx.plugin.beautifyCurrentNote(); },
+    run: agentTask("beautify-note"),
   },
   {
-    id: "baidu-sync",
-    label: "百度云同步",
+    id: "baidu-sync", // Keep the existing command ID for user hotkeys.
+    label: "IStart 数据同步",
     icon: "cloud-upload",
-    description: "备份 / 恢复 / 同步",
+    description: "同步 / 备份 / 恢复，当前存储服务为百度网盘",
     domain: "auxiliary",
     section: "sync",
     when: { always: true },
     showIn: ["panel"],
-    run: (ctx) => { ctx.plugin.openBaiduSyncModal(); },
+    run: (ctx) => { void ctx.plugin.activateSyncView(); },
   },
 ];

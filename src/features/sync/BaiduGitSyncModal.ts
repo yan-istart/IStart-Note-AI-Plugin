@@ -33,7 +33,8 @@ export class BaiduGitSyncModal extends Modal {
   }
 
   onOpen() {
-    this.titleEl.setText("百度网盘 Git 整库同步");
+    this.titleEl.setText("IStart 数据同步");
+    this.contentEl.createEl("p", { text: "存储服务：百度网盘 · Git 整库同步", cls: "istart-sync-hint" });
     this.contentEl.createEl("p", { text: `同步范围：整个笔记库「${this.app.vault.getName()}」，包括所有子目录中的笔记与附件。每个提交保存整个同步范围的版本。` });
     try {
       const scope = new BaiduGitSyncService(this.app, this.config).scope();

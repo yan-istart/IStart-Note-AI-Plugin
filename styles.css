@@ -1537,7 +1537,42 @@ button.istart-import-merge {
   height: 20px;
 }
 
+/* Shared IStart workbench navigation. */
+.istart-workbench-nav {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  flex: 0 0 auto;
+  padding: 10px;
+  background: var(--background-primary);
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+.istart-workbench-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.istart-workbench-heading strong { font-size: var(--font-ui-small); }
+.istart-workbench-heading button { font-size: var(--font-ui-smaller); }
+.istart-workbench-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px; }
+.istart-workbench-nav .istart-workbench-tab { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 36px; padding: 6px 4px; height: auto; font-size: var(--font-ui-small); white-space: normal; box-shadow: none; border: 1px solid transparent; background: transparent; }
+.istart-workbench-tab svg { width: 16px; height: 16px; vertical-align: middle; }
+.istart-workbench-nav .istart-workbench-tab.is-active { color: var(--text-accent); background: var(--background-modifier-hover); border-color: var(--interactive-accent); }
+.istart-workbench-nav button:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.is-mobile .istart-workbench-nav button { min-height: 44px; }
+
 /* Multi-session AI sidebar. All colors inherit the Obsidian theme. */
+.istart-agent-task { max-height: 40vh; overflow-y: auto; padding: 8px; border: 1px solid var(--background-modifier-border); border-radius: 8px; }
+.istart-agent-task-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.istart-agent-task-field { display: flex; flex-direction: column; gap: 4px; margin-top: 8px; font-size: var(--font-ui-small); }
+.istart-agent-task-field input:not([type="checkbox"]), .istart-agent-task-field select, .istart-agent-task-field textarea { width: 100%; min-width: 0; }
+.istart-agent-task-field input[type="checkbox"] { align-self: flex-start; }
+.istart-agent-task .istart-agent-task-field textarea { resize: vertical; min-height: 64px; }
+.istart-agent-task-active .istart-agent-messages { display: none; }
+.istart-agent-task-active .istart-agent-composer { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+.istart-agent-task-active .istart-agent-task { flex: 1; min-height: 0; max-height: none; }
+.istart-agent-task-active .istart-agent-composer-actions, .istart-agent-task-active .istart-agent-composer-meta { flex-shrink: 0; }
+.istart-agent-task-active.istart-agent-keyboard-visible .istart-agent-header,
+.istart-agent-task-active.istart-agent-keyboard-visible .istart-agent-sessionbar,
+.istart-agent-task-active.istart-agent-keyboard-visible .istart-agent-context,
+.istart-agent-task-active.istart-agent-keyboard-visible .istart-agent-composer-meta,
+.istart-agent-task-active.istart-agent-keyboard-visible .istart-workbench-heading { display: none; }
 .istart-agent-root { display:flex; flex-direction:column; height:100%; min-height:0; min-width:0; padding:0 !important; overflow:hidden; }
 .istart-agent-header,.istart-agent-sessionbar,.istart-agent-composer-actions,.istart-agent-composer-meta { display:flex; align-items:center; gap:8px; }
 .istart-agent-header { justify-content:space-between; padding:10px 12px; border-bottom:1px solid var(--background-modifier-border); }
@@ -1615,3 +1650,74 @@ button.istart-import-merge {
   .istart-agent-root button,.istart-agent-root select { min-height:44px; }
   .istart-agent-root .istart-agent-context-chip .istart-agent-icon-button { min-width:44px; }
 }
+
+.istart-agent-story-hint { flex-basis:100%; color:var(--text-muted); font-size:var(--font-smallest); padding-top:4px; }
+.istart-agent-story { margin:8px 0; padding:10px; border:1px solid var(--background-modifier-border); border-radius:8px; }
+.istart-agent-story > button { margin-top:8px; }
+.istart-agent-story-editor { width:100%; min-height:240px; resize:vertical; }
+
+/* Local Git changes: words and signs keep status readable without color. */
+.istart-git-file-badge {
+  flex-shrink: 0;
+  margin-inline-start: auto;
+  padding: 0 5px;
+  border-radius: 4px;
+  background: var(--background-modifier-hover);
+  font-size: var(--font-smallest);
+}
+.istart-git-file-badge[data-status="added"], .istart-git-change-label.is-added { color: var(--text-success); }
+.istart-git-file-badge[data-status="modified"], .istart-git-change-label.is-modified { color: var(--text-warning); }
+.istart-git-change-label.is-deleted { color: var(--text-error); }
+.istart-git-change-label { flex-shrink: 0; font-size: var(--font-smaller); }
+.istart-git-status-bar { cursor: pointer; }
+.istart-git-diff-modal { width: min(1000px, 95vw); }
+.istart-git-diff {
+  overflow: auto;
+  max-height: 65vh;
+  font-family: var(--font-monospace);
+  font-size: var(--font-smaller);
+  border: 1px solid var(--background-modifier-border);
+}
+.istart-git-diff-line { display: flex; min-width: max-content; padding-inline-end: 8px; }
+.istart-git-diff-line.is-added { background: var(--background-modifier-success); }
+.istart-git-diff-line.is-deleted { background: var(--background-modifier-error); }
+.istart-git-diff-number { width: 4em; text-align: right; padding-inline-end: 8px; color: var(--text-muted); user-select: none; flex-shrink: 0; }
+.istart-git-diff-sign { width: 2em; text-align: center; user-select: none; flex-shrink: 0; }
+.istart-git-diff-text { white-space: pre; tab-size: 4; }
+.istart-git-change-filters .setting-item { display: block; border: 0; padding: 8px 0; }
+.istart-git-change-filters .setting-item-control { flex-wrap: wrap; justify-content: flex-start; gap: 6px; }
+.istart-git-change-filters input { min-width: 0; width: 100%; }
+/* Typo review sidebar */
+.istart-typo-root { padding: 12px; overflow-y: auto; }
+.istart-typo-root h4 { margin: 0 0 12px; }
+.istart-typo-toolbar { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.istart-typo-source { color: var(--text-muted); overflow-wrap: anywhere; font-size: var(--font-smallest); }
+.istart-typo-status { margin: 12px 0 8px; }
+.istart-typo-hint { color: var(--text-muted); font-size: var(--font-smallest); margin-bottom: 12px; }
+.istart-typo-list { display: flex; flex-direction: column; gap: 8px; }
+.istart-typo-list .istart-typo-item {
+  display: block; height: auto; width: 100%; padding: 12px; text-align: left;
+  white-space: normal; overflow-wrap: anywhere; box-shadow: none;
+  border: 1px solid var(--background-modifier-border); border-radius: 8px;
+  background: var(--background-primary); line-height: 1.6;
+}
+.istart-typo-item:hover { background: var(--background-modifier-hover); }
+.istart-typo-item:focus-visible { outline: 2px solid var(--interactive-accent); outline-offset: 2px; }
+.istart-typo-original { color: var(--text-error); }
+.istart-typo-correction { color: var(--text-success); font-weight: var(--font-semibold); }
+.istart-typo-arrow { color: var(--text-muted); }
+.istart-typo-location, .istart-typo-reason { display: block; color: var(--text-muted); font-size: var(--font-smallest); }
+.is-mobile .istart-typo-toolbar button { min-height: 44px; }
+
+/* Agent output remains selectable in the sidebar, including paths and previews. */
+.istart-agent-messages, .istart-agent-message-body, .istart-agent-user-text,
+.istart-agent-message pre, .istart-agent-message blockquote, .istart-agent-error,
+.istart-agent-context-chip, .istart-agent-context-chip button, .istart-agent-sources button {
+  -webkit-user-select: text;
+  user-select: text;
+}
+.istart-agent-shortcuts { flex-shrink: 0; font-size: var(--font-ui-small); }
+.istart-agent-shortcuts summary { cursor: pointer; padding: 4px 0; }
+.istart-agent-shortcut-list { display: flex; flex-wrap: wrap; gap: 4px; max-height: 120px; overflow-y: auto; padding: 6px 0; }
+.istart-agent-position-editor { width: 100%; min-height: 200px; max-height: 45vh; resize: vertical; font-family: var(--font-text); }
+.istart-agent-position-editor { -webkit-user-select: text; user-select: text; }

@@ -179,110 +179,7 @@ export class AnnotationService {
 
     const editor = this.editorFor(file);
     const content = editor ? editor.getValue() : await this.app.vault.read(file);
-    const current = findCurrentAnnotation(content, annotation);
-    if (!current) throw new Error("批注位置已变化，请刷新侧边栏后重试");
-
-    const comment = rawComment.trim();
-    const parts = current.commentParts;
-
-    const edits: TextEdit[] = [];
-
-    if (parts.length === 0) {
-      if (!comment) return false;
-      if (current.source !== "highlight" && current.source !== "mark") {
-        throw new Error("无法定位可编辑的批注");
-      }
-      const insertAt = closingSyntaxEnd(content, current);
-      if (insertAt === null) throw new Error("无法定位原高亮的结束位置");
-      let suffix = "";
-      let footnoteBlock = "";
-      if (style === "footnote") {
-        const id = nextFootnoteId(content);
-        suffix = `[^${id}]`;
-        footnoteBlock = buildFootnoteBlock(content, id, comment);
-      } else {
-        suffix = formatInlineComment(comment);
-      }
-      if (footnoteBlock && insertAt === content.length) {
-        suffix += footnoteBlock;
-        footnoteBlock = "";
-      }
-      edits.push({ start: insertAt, end: insertAt, text: suffix });
-      if (footnoteBlock) edits.push({ start: content.length, end: content.length, text: footnoteBlock });
-    } else if (!comment) {
-      // Clear all comments, keeping the highlight and removing orphaned definitions.
-      const removedMarkers = parts.map((part) => part.markerRange);
-      for (const part of parts) {
-        edits.push({ ...part.markerRange, text: "" });
-        if (part.source === "footnote" && part.footnoteId && part.definitionRange) {
-          const remaining = countFootnoteReferences(
-            content,
-            { id: part.footnoteId, range: part.definitionRange },
-            removedMarkers
-          );
-          if (remaining === 0) edits.push({ ...part.definitionRange, text: "" });
-        }
-      }
-    } else if (parts.length > 1) {
-      // Normalize multiple manually-attached comments into one editable comment.
-      const removedMarkers = parts.map((part) => part.markerRange);
-      let suffix = "";
-      let footnoteBlock = "";
-      if (style === "footnote") {
-        const id = nextFootnoteId(content);
-        suffix = `[^${id}]`;
-        footnoteBlock = buildFootnoteBlock(content, id, comment);
-      } else {
-        suffix = formatInlineComment(comment);
-      }
-      edits.push({ ...parts[0].markerRange, text: suffix });
-      for (let index = 1; index < parts.length; index++) {
-        edits.push({ ...parts[index].markerRange, text: "" });
-      }
-      const seenDefinitions = new Set<string>();
-      for (const part of parts) {
-        if (part.source !== "footnote" || !part.footnoteId || !part.definitionRange) continue;
-        const key = `${part.definitionRange.start}:${part.definitionRange.end}`;
-        if (seenDefinitions.has(key)) continue;
-        seenDefinitions.add(key);
-        const remaining = countFootnoteReferences(
-          content,
-          { id: part.footnoteId, range: part.definitionRange },
-          removedMarkers
-        );
-        if (remaining === 0) edits.push({ ...part.definitionRange, text: "" });
-      }
-      if (footnoteBlock) edits.push({ start: content.length, end: content.length, text: footnoteBlock });
-    } else {
-      const part = parts[0];
-      if (part.source === "inline-comment") {
-        edits.push({ ...part.markerRange, text: formatInlineComment(comment) });
-      } else if (part.source === "obsidian-comment") {
-        edits.push({ ...part.markerRange, text: formatObsidianComment(comment) });
-      } else if (part.footnoteId && part.definitionRange) {
-        const shared = countFootnoteReferences(
-          content,
-          { id: part.footnoteId, range: part.definitionRange },
-          [part.markerRange]
-        ) > 0;
-        if (shared) {
-          // Another reference owns this footnote: detach a new footnote for this annotation.
-          const id = nextFootnoteId(content);
-          edits.push({ ...part.markerRange, text: `[^${id}]` });
-          edits.push({ start: content.length, end: content.length, text: buildFootnoteBlock(content, id, comment) });
-        } else {
-          const original = content.slice(part.definitionRange.start, part.definitionRange.end);
-          const trailingNewline = original.endsWith("\n");
-          edits.push({
-            ...part.definitionRange,
-            text: `${formatFootnoteDefinition(part.footnoteId, comment)}${trailingNewline ? "\n" : ""}`,
-          });
-        }
-      } else {
-        // Broken footnote data: fall back to an inline comment rather than losing the edit.
-        edits.push({ ...part.markerRange, text: formatInlineComment(comment) });
-      }
-    }
+    const edits = buildAnnotationCommentEdits(content, annotation, rawComment, style);
 
     if (edits.length === 0) return false;
     if (editor) {
@@ -445,4 +342,113 @@ export function rangesToEditorChanges(editor: Editor, ranges: TextRange[]): Edit
       to: editor.offsetToPos(range.end),
       text: "",
     }));
+}
+
+export function buildAnnotationCommentEdits(content: string, annotation: AnnotationRecord, rawComment: string, style: AnnotationCommentStyle): TextEdit[] {
+    const current = findCurrentAnnotation(content, annotation);
+    if (!current) throw new Error("批注位置已变化，请刷新侧边栏后重试");
+
+    const comment = rawComment.trim();
+    const parts = current.commentParts;
+
+    const edits: TextEdit[] = [];
+
+    if (parts.length === 0) {
+      if (!comment) return [];
+      if (current.source !== "highlight" && current.source !== "mark") {
+        throw new Error("无法定位可编辑的批注");
+      }
+      const insertAt = closingSyntaxEnd(content, current);
+      if (insertAt === null) throw new Error("无法定位原高亮的结束位置");
+      let suffix = "";
+      let footnoteBlock = "";
+      if (style === "footnote") {
+        const id = nextFootnoteId(content);
+        suffix = `[^${id}]`;
+        footnoteBlock = buildFootnoteBlock(content, id, comment);
+      } else {
+        suffix = formatInlineComment(comment);
+      }
+      if (footnoteBlock && insertAt === content.length) {
+        suffix += footnoteBlock;
+        footnoteBlock = "";
+      }
+      edits.push({ start: insertAt, end: insertAt, text: suffix });
+      if (footnoteBlock) edits.push({ start: content.length, end: content.length, text: footnoteBlock });
+    } else if (!comment) {
+      // Clear all comments, keeping the highlight and removing orphaned definitions.
+      const removedMarkers = parts.map((part) => part.markerRange);
+      for (const part of parts) {
+        edits.push({ ...part.markerRange, text: "" });
+        if (part.source === "footnote" && part.footnoteId && part.definitionRange) {
+          const remaining = countFootnoteReferences(
+            content,
+            { id: part.footnoteId, range: part.definitionRange },
+            removedMarkers
+          );
+          if (remaining === 0) edits.push({ ...part.definitionRange, text: "" });
+        }
+      }
+    } else if (parts.length > 1) {
+      // Normalize multiple manually-attached comments into one editable comment.
+      const removedMarkers = parts.map((part) => part.markerRange);
+      let suffix = "";
+      let footnoteBlock = "";
+      if (style === "footnote") {
+        const id = nextFootnoteId(content);
+        suffix = `[^${id}]`;
+        footnoteBlock = buildFootnoteBlock(content, id, comment);
+      } else {
+        suffix = formatInlineComment(comment);
+      }
+      edits.push({ ...parts[0].markerRange, text: suffix });
+      for (let index = 1; index < parts.length; index++) {
+        edits.push({ ...parts[index].markerRange, text: "" });
+      }
+      const seenDefinitions = new Set<string>();
+      for (const part of parts) {
+        if (part.source !== "footnote" || !part.footnoteId || !part.definitionRange) continue;
+        const key = `${part.definitionRange.start}:${part.definitionRange.end}`;
+        if (seenDefinitions.has(key)) continue;
+        seenDefinitions.add(key);
+        const remaining = countFootnoteReferences(
+          content,
+          { id: part.footnoteId, range: part.definitionRange },
+          removedMarkers
+        );
+        if (remaining === 0) edits.push({ ...part.definitionRange, text: "" });
+      }
+      if (footnoteBlock) edits.push({ start: content.length, end: content.length, text: footnoteBlock });
+    } else {
+      const part = parts[0];
+      if (part.source === "inline-comment") {
+        edits.push({ ...part.markerRange, text: formatInlineComment(comment) });
+      } else if (part.source === "obsidian-comment") {
+        edits.push({ ...part.markerRange, text: formatObsidianComment(comment) });
+      } else if (part.footnoteId && part.definitionRange) {
+        const shared = countFootnoteReferences(
+          content,
+          { id: part.footnoteId, range: part.definitionRange },
+          [part.markerRange]
+        ) > 0;
+        if (shared) {
+          // Another reference owns this footnote: detach a new footnote for this annotation.
+          const id = nextFootnoteId(content);
+          edits.push({ ...part.markerRange, text: `[^${id}]` });
+          edits.push({ start: content.length, end: content.length, text: buildFootnoteBlock(content, id, comment) });
+        } else {
+          const original = content.slice(part.definitionRange.start, part.definitionRange.end);
+          const trailingNewline = original.endsWith("\n");
+          edits.push({
+            ...part.definitionRange,
+            text: `${formatFootnoteDefinition(part.footnoteId, comment)}${trailingNewline ? "\n" : ""}`,
+          });
+        }
+      } else {
+        // Broken footnote data: fall back to an inline comment rather than losing the edit.
+        edits.push({ ...part.markerRange, text: formatInlineComment(comment) });
+      }
+    }
+
+    return edits;
 }

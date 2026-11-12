@@ -1,6 +1,6 @@
 # Privacy Policy
 
-_Last updated: 2026-11-01. [简体中文版本 →](./PRIVACY.zh-CN.md)_
+_Last updated: 2026-11-12. [简体中文版本 →](./PRIVACY.zh-CN.md)_
 
 This document describes what data IStart-Note-AI handles, where it goes, and how to control it. The plugin runs entirely inside your Obsidian client — there are no plugin-operated servers, no analytics, and no telemetry.
 
@@ -21,6 +21,7 @@ The request body may include:
 | --- | --- | --- |
 | Selection | The currently selected text | Whenever you trigger the AI assistant with a non-empty selection |
 | Annotation context | The highlighted text, current annotation comment, and up to ~600 characters before/after | Annotation drafting, rewriting, or requesting AI suggestions |
+| Typo check | Selected prose or the whole note, in overlapping chunks of up to 6,000 UTF-16 code units; metadata, code, comments, and link destinations are masked | Only when you run typo checking; no writing skills or other notes are attached |
 | Writing skill | The body of enabled local `SKILL.md` files, selected by global/genre/project scope | Writing AI requests while skills are enabled |
 | Active file | The active document content (truncated, typically up to ~2,000 characters) | When the assistant needs context (most actions) |
 | Active file metadata | File name, frontmatter `type` field | Most actions |
@@ -39,6 +40,10 @@ You are subject to the privacy policy of whichever provider you configure. Revie
 
 ## Agent conversation history
 
+Manuscript classification and metadata analysis are also recorded Agent tasks. History includes excerpts from user-selected sources, task parameters and analysis results, without external source paths. Proofreading reports retain source snapshots and verified corrections; chosen insertion positions are saved with the session. Opt-in shared history includes this data. Copy actions write only the selected content to the system clipboard.
+
+Task parameters, unsubmitted task cards, and captured selections/cursors are saved with conversations and included in opt-in shared history. Explicit task actions invoke their tools directly; required source text and parameters are sent to the configured AI service according to that tool's behavior.
+
 Conversations, drafts, source snapshots, tool records, and proposed changes are stored separately from settings in `<vault.configDir>/plugins/istart-note-ai/agent/sessions.json`. Snapshots and previews can include complete note contents. Conversation files do not store provider keys or Baidu credentials; external vault/system backups can still copy the plugin directory.
 
 Task checkpoints in that file include pending tool requests, returned observations, source snapshots, and project context. They are included when shared history is enabled. Continuing a task sends the required restored history to the currently configured model service and checks whether source notes changed.
@@ -49,7 +54,7 @@ Shared history is off by default. Enabling it writes `IStart/Agent Sessions/hist
 
 ## What is sent to Baidu Cloud
 
-Baidu Cloud sync is **disabled by default**. When you enable it under **Settings → IStart-Note-AI → Baidu Cloud Sync**, you supply:
+IStart Data Sync is **disabled by default**. Baidu Pan is the currently supported storage service. When you enable sync under **Settings → IStart-Note-AI → Data Sync** and authorize it under **Baidu Pan configuration**, you supply:
 
 - An **App ID** and **App Secret** from the [Baidu Pan Open Platform](https://pan.baidu.com/union).
 - An OAuth authorization code that the plugin exchanges for an `accessToken` and `refreshToken`.

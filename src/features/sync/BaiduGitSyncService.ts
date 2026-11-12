@@ -16,6 +16,18 @@ export interface GitRestorePreview {
   skipped: number;
 }
 
+export type GitLocalChange = { path: string; status: "added" | "modified" | "deleted" };
+export interface GitLocalStatus { base: string; changes: GitLocalChange[]; recoveryPending: boolean }
+export interface GitLocalDiff { path: string; before?: Uint8Array; after?: Uint8Array }
+
+const changeListeners = new WeakMap<App, Set<() => void>>();
+export function onGitLocalChange(app: App, listener: () => void): () => void {
+  let listeners = changeListeners.get(app);
+  if (!listeners) changeListeners.set(app, listeners = new Set());
+  listeners.add(listener);
+  return () => { listeners!.delete(listener); };
+}
+
 const vaultOperations = new WeakMap<App, Promise<void>>();
 
 /** All live-vault writes happen here, after the Git layer finishes validating and merging. */
@@ -64,6 +76,7 @@ export class BaiduGitSyncService {
     finally {
       if (vaultOperations.get(this.app) === operation) vaultOperations.delete(this.app);
       complete();
+      if (!queue) changeListeners.get(this.app)?.forEach((listener) => listener());
     }
   }
 
@@ -118,7 +131,7 @@ export class BaiduGitSyncService {
   async sync(resolutions = new Map<string, GitResolution>(), onProgress?: (message: string) => void): Promise<GitVaultResult> {
     return this.exclusive(async () => {
       if (!this.config.enabled || !await new BaiduSyncService(this.app, this.config).ensureValidToken()) {
-        throw new Error("请启用百度网盘同步并完成授权");
+        throw new Error("请启用 IStart 数据同步，并在百度网盘配置中完成授权");
       }
       const pending = await this.readJournal();
       // If an application was interrupted, current edits are committed against the original
@@ -205,6 +218,42 @@ export class BaiduGitSyncService {
   }
 
   history() { return this.exclusive(() => this.engine.history(), true); }
+
+  /** Compare without snapshotting, moving HEAD, or contacting the transport. */
+  localStatus(): Promise<GitLocalStatus> {
+    return this.exclusive(async () => {
+      if (this.config.ignorePattern) new RegExp(this.config.ignorePattern);
+      const base = await this.engine.head();
+      const previous = await this.engine.files(base);
+      const local = new Map(this.app.vault.getFiles().map((file) => [file.path, file]));
+      const changes: GitLocalChange[] = [];
+      for (const path of new Set([...previous.keys(), ...local.keys()])) {
+        const file = local.get(path), oid = previous.get(path);
+        if (this.ignored(path, file?.stat.size)) continue;
+        // Match snapshot's protection of previously tracked oversized blobs.
+        if (oid && this.ignored(path, (await this.engine.blob(oid)).length)) continue;
+        if (!file) changes.push({ path, status: "deleted" });
+        else if (!oid) changes.push({ path, status: "added" });
+        else if ((await hashBlob({ object: new Uint8Array(await this.app.vault.readBinary(file)) })).oid !== oid) {
+          changes.push({ path, status: "modified" });
+        }
+      }
+      return { base, changes: changes.sort((a, b) => a.path.localeCompare(b.path)), recoveryPending: !!await this.readJournal() };
+    }, true);
+  }
+
+  localDiff(path: string): Promise<GitLocalDiff> {
+    return this.exclusive(async () => {
+      assertNotePath(path);
+      const file = this.app.vault.getAbstractFileByPath(path);
+      if (this.ignored(path, file instanceof TFile ? file.stat.size : 0)) throw new Error("此文件不在同步范围内");
+      const oid = (await this.engine.files(await this.engine.head())).get(path);
+      const before = oid ? await this.engine.blob(oid) : undefined;
+      if (before && this.ignored(path, before.length)) throw new Error("历史文件超过大小限制");
+      const after = file instanceof TFile ? new Uint8Array(await this.app.vault.readBinary(file)) : undefined;
+      return { path, before, after };
+    }, true);
+  }
 
   versionDetails(oid: string): Promise<GitVersionDetails> {
     return this.exclusive(() => this.engine.versionDetails(oid), true);

@@ -1,11 +1,7 @@
 import { TFile } from "obsidian";
 import { frontmatterOf, fmString } from "../util/frontmatter";
 import type DeepSeekPlugin from "../main";
-import { ActionDef, ActionContext, DOMAIN_TITLES, DOMAIN_ORDER } from "./types";
-import { CommandPanelModal } from "../features/command-panel/CommandPanelModal";
-import type { PanelGroup } from "../features/command-panel/CommandPanelModal";
-import { captureEditorTarget } from "../editor/EditorTarget";
-import { getInsertionContext } from "../editor/InsertionContext";
+import { ActionDef, ActionContext } from "./types";
 
 /**
  * 注册所有 actions 到插件的各个入口
@@ -84,91 +80,19 @@ export function registerAllActions(plugin: DeepSeekPlugin, actions: ActionDef[])
     })
   );
 
-  // 4. 面板命令 + ribbon
+  // 4. 保留旧命令 ID；统一进入助手。
   plugin.addCommand({
     id: "open-panel",
-    name: "打开功能面板",
+    name: "打开 AI 助手（原功能面板）",
     icon: "istart-assistant",
     callback: () => openPanel(plugin, actions),
   });
 
-  plugin.addRibbonIcon("istart-assistant", "IStart-Note-AI", () => {
-    openPanel(plugin, actions);
-  });
+  plugin.addRibbonIcon("istart-assistant", "IStart 工作台", () => plugin.openAssistant());
 }
 
-export function openPanel(plugin: DeepSeekPlugin, actions: ActionDef[]) {
-  const ctx = buildContext(plugin, null);
-  const target = captureEditorTarget(plugin.app);
-  const canInsert = !!target && !!getInsertionContext(target.content, target.editor.posToOffset(target.cursor));
-  const writingId = canInsert ? "insert-writing" : "continue-writing";
-  const settingsId = canInsert ? "insert-writing-settings" : "continue-writing-settings";
-  const quickIds = ctx.selection
-    ? ["polish-writing", "expand-selection", "explain-selection", "add-annotation", "ai-assistant"]
-    : ctx.fileType === "chapter"
-    ? [writingId, "generate-next-chapter", settingsId, "ai-assistant"]
-    : [writingId, settingsId, "summarize-note", "ai-assistant"];
-  const quickActions = quickIds.map((id) => actions.find((action) => action.id === id))
-    .filter((action): action is ActionDef => !!action && evaluateWhen(action.when, ctx));
-  const run = (action: ActionDef) => {
-    const quick = { "continue-writing": "continue", "insert-writing": "insert", "polish-writing": "polish", "expand-selection": "expand", "explain-selection": "explain", "summarize-note": "summarize" } as const;
-    const id = quick[action.id as keyof typeof quick];
-    if (id) { void plugin.runQuickAction(id, target); }
-    else if (action.id === "ai-assistant") plugin.openAssistant(target);
-    else if (action.id === "add-annotation") plugin.addAnnotation(false, target);
-    else if (action.id === "ai-annotation") plugin.addAnnotation(true, target);
-    else if (action.id === "continue-writing-settings") { void plugin.continueWriting(true, target); }
-    else if (action.id === "insert-writing-settings") { void plugin.insertWriting(true, target); }
-    else if (action.id === "generate-next-chapter") { void plugin.generateNextChapter(ctx.activeFile); }
-    else action.run(ctx);
-  };
-
-  // Separate pinned action (AI 助手) from grouped actions
-  const pinnedAction = actions.find((a) => a.id === "ai-assistant");
-  const groupedActions = actions.filter((a) => a.id !== "ai-assistant" &&
-    (!quickIds.includes(a.id) || a.id === "continue-writing" || a.id === "insert-writing"));
-
-  const groups: PanelGroup[] = [];
-
-  // Add pinned as first "group" with a special title
-  if (pinnedAction && evaluateWhen(pinnedAction.when, ctx) && quickActions.length === 0) {
-    groups.push({
-      title: "入口",
-      actions: [{
-        id: pinnedAction.id,
-        icon: pinnedAction.icon,
-        label: pinnedAction.label,
-        description: pinnedAction.description,
-        callback: () => run(pinnedAction),
-      }],
-    });
-  }
-
-  for (const domainId of getDomainOrder(ctx)) {
-    const domainActions = groupedActions.filter(
-      (a) => a.domain === domainId && a.showIn.includes("panel") && evaluateWhen(a.when, ctx)
-    );
-    if (domainActions.length === 0) continue;
-    groups.push({
-      title: DOMAIN_TITLES[domainId],
-      actions: domainActions.map((a) => ({
-        id: a.id,
-        icon: a.icon,
-        label: a.label,
-        description: a.description,
-        callback: () => run(a),
-      })),
-    });
-  }
-
-  const shortLabels: Record<string, string> = {
-    "polish-writing": "润色", "generate-next-chapter": "下一章", "continue-writing-settings": "生成量", "insert-writing-settings": "生成量",
-  };
-  new CommandPanelModal(plugin.app, groups, quickActions.map((action) => ({
-    id: action.id, icon: action.icon, label: shortLabels[action.id] ?? action.label,
-    description: action.description, callback: () => run(action),
-  }))).open();
-}
+/** Compatibility alias for integrations that used the removed panel. */
+export function openPanel(plugin: DeepSeekPlugin, _actions: ActionDef[]) { plugin.openAssistant(); }
 
 export function buildContext(plugin: DeepSeekPlugin, targetFile: TFile | null): ActionContext {
   const activeFile = plugin.app.workspace.getActiveFile();
@@ -199,11 +123,4 @@ export function evaluateWhen(when: ActionDef["when"], ctx: ActionContext): boole
   if (when.filePath && !ctx.filePath.includes(when.filePath)) return false;
   if (when.inSection && !ctx.sectionName) return false;
   return true;
-}
-
-/** 写作文件中时写作域置顶 */
-function getDomainOrder(ctx: ActionContext): typeof DOMAIN_ORDER {
-  const inWriting = ctx.fileType === "chapter" || ctx.fileType === "writing-project";
-  if (!inWriting) return DOMAIN_ORDER;
-  return ["writing", ...DOMAIN_ORDER.filter((d) => d !== "writing")];
 }

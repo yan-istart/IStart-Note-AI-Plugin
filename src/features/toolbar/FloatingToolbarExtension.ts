@@ -2,8 +2,9 @@ import type { Extension } from "@codemirror/state";
 import { EditorView, ViewPlugin, ViewUpdate } from "@codemirror/view";
 import { Platform, editorInfoField, setIcon } from "obsidian";
 import type DeepSeekPlugin from "../../main";
+import { captureEditorTarget } from "../../editor/EditorTarget";
 import { ALL_ACTIONS } from "../../actions/definitions";
-import { buildContext, evaluateWhen, openPanel } from "../../actions/registry";
+import { buildContext, evaluateWhen } from "../../actions/registry";
 import type { ActionDef, ActionContext } from "../../actions/types";
 import { panelIcon } from "../../ui/icons";
 
@@ -146,13 +147,13 @@ class FloatingToolbarView {
     for (const action of actions) this.addActionButton(toolbar, action, ctx);
     const more = toolbar.createEl("button", {
       cls: "istart-floating-toolbar-item is-more",
-      attr: { type: "button", title: "更多功能", "aria-label": "更多功能" },
+      attr: { type: "button", title: "在助手中继续", "aria-label": "在助手中继续" },
     });
     setIcon(more.createSpan({ cls: "istart-floating-toolbar-icon" }), "more-horizontal");
-    more.createSpan({ text: "更多", cls: "istart-floating-toolbar-label" });
+    more.createSpan({ text: "助手", cls: "istart-floating-toolbar-label" });
     this.bindButton(more, () => {
       this.hideAll();
-      openPanel(this.plugin, ALL_ACTIONS);
+      this.plugin.openAssistant(captureEditorTarget(this.plugin.app));
     });
 
     this.toolbar = toolbar;
