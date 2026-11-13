@@ -226,6 +226,7 @@ export class KnowledgeIndexService {
     }
     const meta: CachedMetadata | null = this.app.metadataCache.getFileCache(file);
     const fm = frontmatterOf(meta);
+    if (fm?.type === "publishing-draft") { this.entries.delete(file.path); return; }
 
     const title = meta?.headings?.find((h) => h.level === 1)?.heading ?? file.basename;
     const headings = (meta?.headings ?? [])

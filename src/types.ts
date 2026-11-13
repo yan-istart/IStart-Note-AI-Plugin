@@ -1,5 +1,7 @@
 import { DEFAULT_AGENT_SETTINGS, type AgentSettings } from "./core/agent/types";
+import { DEFAULT_PUBLISHING_SETTINGS, type PublishingSettings } from "./core/publishing/types";
 export interface DeepSeekSettings {
+  publishing: PublishingSettings;
   agent: AgentSettings;
   apiKey: string;
   baseUrl: string;
@@ -140,6 +142,7 @@ export function loadBaiduSyncConfig(saved?: Partial<BaiduSyncConfig>): BaiduSync
 }
 
 export const DEFAULT_SETTINGS: DeepSeekSettings = {
+  publishing: { ...DEFAULT_PUBLISHING_SETTINGS },
   agent: { ...DEFAULT_AGENT_SETTINGS },
   apiKey: "",
   baseUrl: "https://api.deepseek.com",

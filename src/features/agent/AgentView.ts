@@ -1,13 +1,18 @@
 import { Component, FuzzySuggestModal, ItemView, MarkdownRenderer, MarkdownView, Menu, Notice, Platform, Setting, TFile, WorkspaceLeaf, setIcon } from "obsidian";
 import type DeepSeekPlugin from "../../main";
 import { AgentController } from "./AgentController";
-import type { AgentMessage, AgentSession, ChangeProposal, StoryConfig } from "../../core/agent/types";
+import { isLiveStory } from "../../core/agent/types";
+import type { AgentMessage, AgentSession, ChangeProposal, StoryConfig, LiveStoryScene, StoryBlock } from "../../core/agent/types";
+import { StorySceneView } from "./StorySceneView";
+import { storyName } from "../../core/agent/StoryContent";
+import { cloneJson } from "../../util/json";
 import { ActionModal } from "../../ui/ActionModal";
 import { changedRange } from "../../core/agent/Changes";
 import { getMobileViewport } from "../../ui/MobileViewport";
 import { renderWorkbenchNav } from "../workbench/WorkbenchNav";
 import { WORKBENCH_VIEWS } from "../workbench/WorkbenchController";
 import { renderAgentTaskForm } from "./AgentTaskForm";
+import { destructiveButton } from "../../ui/compat";
 import { AgentPositionModal } from "./AgentPositionModal";
 import { messageText, conversationText } from "../../core/agent/ClipboardText";
 
@@ -39,6 +44,7 @@ export class AgentView extends ItemView {
   private cleanupViewport?: () => void;
   private taskEl!: HTMLElement;
   private renderedTask = "";
+  private storyViews = new Map<string, StorySceneView>();
   constructor(leaf: WorkspaceLeaf, private plugin: DeepSeekPlugin) { super(leaf); this.controller = plugin.agent; }
   getViewType(): string { return AGENT_VIEW_TYPE; }
   getDisplayText(): string { return "IStart 工作台"; }
@@ -118,6 +124,7 @@ export class AgentView extends ItemView {
     this.render();
   }
   async onClose(): Promise<void> {
+    this.storyViews.clear();
     this.unsubscribe?.(); this.unsubscribe = undefined;
     this.cleanupViewport?.();
     if (this.frame !== undefined) window.clearTimeout(this.frame);
@@ -169,11 +176,12 @@ export class AgentView extends ItemView {
     this.modelEl.setText(this.plugin.settings.model);
     this.sendButton.disabled = s.archived;
     if (s.archived) this.statusEl.setText("会话已归档，可在会话操作中恢复后继续");
-    this.mode.value = s.mode; this.mode.disabled = busy || !!s.pendingTask; this.search.checked = s.searchVault; this.search.disabled = busy || s.mode === "story";
+    const openStory = this.controller.openStory(s.id);
+    this.mode.value = s.mode; this.mode.disabled = busy || !!s.pendingTask || !!openStory; this.search.checked = s.searchVault; this.search.disabled = busy || s.mode === "story";
     this.search.parentElement?.toggle(s.mode !== "story");
-    this.storySettings.toggle(s.mode === "story"); this.storySettings.disabled = busy || s.archived;
-    this.input.placeholder = s.mode === "story" ? "描述场景、冲突和本场目标，让角色开始演绎…" : "描述任务，或输入 @ 引用笔记…";
-    this.sendButton.empty(); setIcon(this.sendButton.createSpan(), busy ? "square" : "arrow-up"); this.sendButton.setAttribute("aria-label", busy ? "停止生成" : s.pendingTask ? "开始任务" : "发送");
+    this.storySettings.toggle(s.mode === "story"); this.storySettings.disabled = busy || s.archived || !!openStory;
+    this.input.placeholder = openStory ? "输入导演指令，在下一次回应前生效…" : s.mode === "story" ? "描述场景、冲突和本场目标，让角色开始演绎…" : "描述任务，或输入 @ 引用笔记…";
+    this.sendButton.empty(); setIcon(this.sendButton.createSpan(), busy && !openStory ? "square" : "arrow-up"); this.sendButton.setAttribute("aria-label", openStory ? "发送导演指令" : busy ? "停止生成" : s.pendingTask ? "开始任务" : "发送");
     if (s.pendingTask) this.sendButton.createSpan({ text: "开始任务" });
     this.contextEl.empty();
     for (const ref of s.references) {
@@ -181,10 +189,10 @@ export class AgentView extends ItemView {
       const position = ref.cursor ? ref.cursor.content.slice(0, ref.cursor.offset).split("\n") : null;
       const location = position ? ` · 第 ${position.length} 行，第 ${position[position.length - 1].length + 1} 列` : "";
       this.button(chip, `${ref.path}${ref.selection ? " · 选区" : location}`, ref.selection ? "text-select" : "file-text", () => this.openSource(ref.path), true);
-      const remove = this.button(chip, `移除引用 ${ref.path}`, "x", () => this.controller.detach(ref.path)); remove.disabled = busy;
+      const remove = this.button(chip, `移除引用 ${ref.path}`, "x", () => this.controller.detach(ref.path)); remove.disabled = busy || !!openStory;
     }
     if (!s.references.length) this.contextEl.createSpan({ cls: "istart-agent-muted", text: "未引用笔记 · @ 添加上下文" });
-    if (s.mode === "story") this.contextEl.createDiv({ cls: "istart-agent-story-hint", text: `请将小说章节放在首个引用 · ${s.storyConfig?.characterPaths.length ? `${s.storyConfig.characterPaths.length}名角色` : "自动选择角色"} · ${s.storyConfig?.rounds ?? 1}轮 · 剧情确认后推演角色变化` });
+    if (s.mode === "story") this.contextEl.createDiv({ cls: "istart-agent-story-hint", text: `请将小说章节放在首个引用 · ${s.storyConfig?.characterPaths.length ? `${s.storyConfig.characterPaths.length}名角色` : "自动选择角色"} · 每次最多推进${s.storyConfig?.maxTurns ?? 6}次 · 剧情确认后推演角色变化` });
     if (this.historyOpen) this.renderHistory();
     this.renderMessages(s);
   }
@@ -220,22 +228,27 @@ export class AgentView extends ItemView {
   }
   private renderMessages(s: AgentSession): void {
     const selected = this.contentEl.ownerDocument.getSelection();
+    const atLiveBottom = this.messagesEl.scrollHeight - this.messagesEl.clientHeight - this.messagesEl.scrollTop < 90;
+    const previousHeight = this.messagesEl.scrollHeight;
+    for (const message of s.messages) if (isLiveStory(message.story)) this.storyViews.get(message.id)?.patch(message);
+    if (atLiveBottom && (!selected || selected.isCollapsed) && this.messagesEl.scrollHeight !== previousHeight) this.messagesEl.scrollTop = this.messagesEl.scrollHeight;
     // Streaming must not destroy a selection that the user is copying.
     if (this.renderedMessages && selected && !selected.isCollapsed && selected.anchorNode && this.messagesEl.contains(selected.anchorNode)) return;
     // Full source/checkpoint snapshots are durable data, not a rendering dependency.
     const signature = JSON.stringify([s.mode, s.pendingTask?.actionId, s.summary, s.messages.map(m => ({
-      id: m.id, role: m.role, content: m.content, status: m.status, error: m.error, skills: m.skills, sources: m.sources, steps: m.steps,
+      id: m.id, role: m.role, content: isLiveStory(m.story) ? undefined : m.content, status: isLiveStory(m.story) ? undefined : m.status, error: isLiveStory(m.story) ? undefined : m.error, skills: m.skills, sources: m.sources, steps: isLiveStory(m.story) ? undefined : m.steps,
       resumable: !!m.checkpoint, references: m.references?.map(ref => ({ path: ref.path, selection: ref.selection?.text })),
       proposals: m.proposals?.map(p => ({ id: p.id, title: p.title, status: p.status, files: p.changes.map(c => [c.path, c.before?.length, c.after.length]) })),
       proofreading: !!m.proofreading,
-      story: m.story && { turns: m.story.turns, confirmedAt: m.story.confirmedAt, evolution: m.story.evolution },
-    })), this.controller.isRunning(s.id), this.controller.isApplying]);
+      story: isLiveStory(m.story) ? 2 : m.story && { turns: m.story.turns, confirmedAt: m.story.confirmedAt, evolution: m.story.evolution },
+    })), this.controller.openStory(s.id) ? undefined : this.controller.isRunning(s.id), this.controller.isApplying]);
     if (signature === this.renderedMessages) return; this.renderedMessages = signature;
     const scrollTop = this.messagesEl.scrollTop;
     const atBottom = this.messagesEl.scrollHeight - this.messagesEl.clientHeight - scrollTop < 90;
     if (this.markdown) this.removeChild(this.markdown);
     this.markdown = new Component(); this.addChild(this.markdown);
     this.messagesEl.empty();
+    this.storyViews.clear();
     if (s.summary) { const details = this.details(this.messagesEl, `summary-${s.id}`, "较早对话已整理为摘要"); details.createEl("p", { text: s.summary.content }); }
     if (!s.messages.length) {
       if (s.pendingTask) {
@@ -244,7 +257,7 @@ export class AgentView extends ItemView {
         empty.createEl("p", { text: "在下方填写本次任务参数，点击「开始任务」。结果会保留在此会话，可继续追问和调整；文件修改先预览再应用。" });
         return;
       }
-      const empty = this.messagesEl.createDiv({ cls: "istart-agent-empty" }); empty.createEl("h3", { text: s.mode === "story" ? "让角色推动故事" : "从一个问题开始" }); empty.createEl("p", { text: s.mode === "story" ? "引用小说章节，选择参演角色，描述场景。角色分别演绎，旁白整合正文；确认剧情后生成有依据的角色卡更新预览。" : "围绕笔记提问，或让 Agent 帮你完成具体任务。" });
+      const empty = this.messagesEl.createDiv({ cls: "istart-agent-empty" }); empty.createEl("h3", { text: s.mode === "story" ? "让角色推动故事" : "从一个问题开始" }); empty.createEl("p", { text: s.mode === "story" ? "引用小说章节，选择参演角色，描述场景。完整对白与场景叙述实时交错展开；确认剧情后生成有依据的角色卡更新预览。" : "围绕笔记提问，或让 Agent 帮你完成具体任务。" });
       const prompts = s.mode === "story" ? ["在本章的雨夜重逢场景中，让参演角色围绕一封未寄出的信发生冲突；保留各自的动机，结尾留下一个选择。", "承接已确认剧情，让角色就刚才的决定展开对话，表现信任关系的微妙变化。"] : ["总结引用笔记，并指出值得继续研究的问题", "基于引用笔记和知识库生成一份可执行的检查表", "续写当前章节，保持原有文风", "根据选区草拟一条阅读批注"];
       for (const prompt of prompts) this.button(empty, prompt, "arrow-up-right", () => { this.input.value = prompt; this.input.focus(); this.controller.update(s.id, { draft: prompt }); }, true);
     }
@@ -259,6 +272,31 @@ export class AgentView extends ItemView {
   }
   private renderMessage(s: AgentSession, message: AgentMessage): void {
     const row = this.messagesEl.createDiv({ cls: `istart-agent-message is-${message.role}` });
+    if (isLiveStory(message.story)) {
+      const scene = new StorySceneView(row, s, message, this.controller, {
+        perform: action => this.perform(action), copy: text => { void this.copy(text); },
+        confirm: () => {
+          const current = this.controller.sessions.find(session => session.id === s.id)?.messages.find(m => m.id === message.id);
+          if (!current || !isLiveStory(current.story)) return;
+          new StoryBlocksConfirmModal(this.plugin, current.story, blocks => this.perform(() => this.controller.confirmStory(s.id, message.id, blocks))).open();
+        },
+      });
+      this.storyViews.set(message.id, scene);
+      // The same manuscript projection feeds the existing copy/export/save proposal paths.
+      for (const proposal of message.proposals ?? []) this.renderProposal(row, s, proposal);
+      const actions = row.createDiv({ cls: "istart-agent-message-actions" });
+      this.button(actions, "保存或写入回答", "file-output", event => {
+        const current = this.controller.sessions.find(session => session.id === s.id)?.messages.find(m => m.id === message.id);
+        if (!current) return;
+        const menu = new Menu();
+        menu.addItem(i => i.setTitle("保存为新笔记").onClick(() => this.textModal("保存为新笔记", s.title, title => this.controller.offerAnswer(s, current, "save", title))));
+        menu.addItem(i => i.setTitle("追加到本轮引用笔记").onClick(() => this.perform(() => this.controller.offerAnswer(s, current, "append"))));
+        menu.addItem(i => i.setTitle("插入到已设置位置").onClick(() => this.perform(() => this.controller.offerAnswer(s, current, "insert-target"))));
+        menu.showAtMouseEvent(event);
+      });
+      this.button(actions, "从此处分支", "git-branch", () => this.controller.fork(s.id, message.id));
+      return;
+    }
     row.createDiv({ cls: "istart-agent-message-author", text: message.role === "user" ? "我" : "IStart" });
     if (message.role === "user") {
       row.createDiv({ cls: "istart-agent-user-text", text: message.content });
@@ -352,6 +390,10 @@ export class AgentView extends ItemView {
   }
   private send(): void {
     const s = this.controller.active; if (!s) return;
+    if (this.controller.openStory(s.id)) {
+      const text = this.input.value; if (!text.trim()) return;
+      this.input.value = ""; this.perform(() => this.controller.send(s.id, text)); return;
+    }
     if (this.controller.isRunning(s.id)) { this.controller.stop(s.id); return; }
     if (s.pendingTask) { this.perform(() => this.controller.submitTask(s.id)); return; }
     const text = this.input.value; if (!text.trim()) return;
@@ -402,15 +444,45 @@ class StorySettingsModal extends ActionModal {
   constructor(plugin: DeepSeekPlugin, private characters: { path: string; name: string }[], private config: StoryConfig | undefined, private submit: (config: StoryConfig) => void) { super(plugin.app); this.titleEl.setText("小说参演设置"); }
   onOpen(): void {
     super.onOpen();
-    this.bodyEl.createEl("p", { text: "选择1–4名角色，各自使用独立的角色演绎上下文。旁白会整合故事正文。每轮按列表顺序演绎，轮数越多，生成时间越长。" });
+    this.bodyEl.createEl("p", { text: "选择1–4名角色。角色自然接话，对白与场景叙述实时交错展开。达到连续推进上限后暂停，完整台词会保留。" });
     const selected = new Set((this.config?.characterPaths.length ? this.config.characterPaths : this.characters.length <= 4 ? this.characters.map(c => c.path) : []).filter(path => this.characters.some(c => c.path === path)));
     const error = this.bodyEl.createDiv({ cls: "istart-agent-error", attr: { role: "alert" } });
     for (const character of this.characters) new Setting(this.bodyEl).setName(character.name).setDesc(character.path).addToggle(t => t.setValue(selected.has(character.path)).onChange(value => { if (value) selected.add(character.path); else selected.delete(character.path); }));
-    let rounds = this.config?.rounds ?? 1;
-    new Setting(this.bodyEl).setName("演绎轮数").addDropdown(d => d.addOption("1", "1轮").addOption("2", "2轮").addOption("3", "3轮").setValue(String(rounds)).onChange(value => { rounds = Number(value); }));
+    let maxTurns = this.config?.maxTurns ?? 6;
+    let openingTarget = this.config?.openingTarget ?? "auto";
+    new Setting(this.bodyEl).setName("开场方式").addDropdown(d => {
+      d.addOption("auto", "根据场景自然开场").addOption("scene", "先展开场景");
+      for (const character of this.characters) d.addOption(character.path, `由${character.name}先回应`);
+      d.setValue(openingTarget).onChange(value => { openingTarget = value; });
+    });
+    new Setting(this.bodyEl).setName("每次连续推进上限").addDropdown(d => d.addOption("2", "2次").addOption("4", "4次").addOption("6", "6次").addOption("10", "10次").addOption("20", "20次").setValue(String(maxTurns)).onChange(value => { maxTurns = Number(value); }));
     new Setting(this.actionsEl).addButton(b => b.setButtonText("保存").setCta().onClick(() => {
       if (!selected.size || selected.size > 4) { error.setText("请选择1–4名角色"); return; }
-      this.submit({ rounds, characterPaths: this.characters.filter(c => selected.has(c.path)).map(c => c.path) }); this.close();
+      if (openingTarget !== "auto" && openingTarget !== "scene" && !selected.has(openingTarget)) { error.setText("请将开场角色加入参演列表"); return; }
+      this.submit({ rounds: this.config?.rounds ?? 1, maxTurns, openingTarget, characterPaths: this.characters.filter(c => selected.has(c.path)).map(c => c.path) }); this.close();
+    })).addButton(b => b.setButtonText("取消").onClick(() => this.close()));
+  }
+}
+class StoryBlocksConfirmModal extends ActionModal {
+  private revision: StoryBlock[];
+  constructor(plugin: DeepSeekPlugin, private scene: LiveStoryScene, private submit: (blocks: StoryBlock[]) => void) {
+    super(plugin.app); this.titleEl.setText("确认本场剧情"); this.revision = cloneJson(scene.blocks.filter(b => !b.omitted && b.status === "completed"));
+  }
+  onOpen(): void {
+    super.onOpen();
+    this.bodyEl.createEl("p", { text: "逐段修订或取消纳入剧情。对白角色、叙述类型和私有心理的可见范围保持固定，原始演绎记录会保留。" });
+    const error = this.bodyEl.createDiv({ cls: "istart-agent-error", attr: { role: "alert" } });
+    for (const block of this.revision) {
+      const section = this.bodyEl.createDiv({ cls: "istart-story-revision" });
+      const title = block.kind === "dialogue" ? `${storyName(this.scene, block.characterPath!)} · 对白` : block.visibility === "private" ? `${storyName(this.scene, block.ownerPath!)} · 私有心理描写` : "场景／动作叙述";
+      const textarea = section.createEl("textarea", { cls: "istart-agent-story-editor", attr: { "aria-label": title, rows: "3" } }); textarea.value = block.text;
+      textarea.addEventListener("input", () => { block.text = textarea.value; });
+      new Setting(section).setName(title).addToggle(t => t.setValue(true).onChange(value => { block.omitted = !value; textarea.disabled = !value; }));
+    }
+    new Setting(this.actionsEl).addButton(b => b.setButtonText("确认剧情并推演角色").setCta().onClick(() => {
+      const kept = this.revision.filter(block => !block.omitted);
+      if (!kept.length || kept.some(block => !block.text.trim()) || kept.reduce((sum, block) => sum + block.text.length, 0) > 200000) { error.setText("请保留有效的正文段落，并将长篇剧情分场确认"); return; }
+      this.submit(this.revision); this.close();
     })).addButton(b => b.setButtonText("取消").onClick(() => this.close()));
   }
 }
@@ -437,5 +509,5 @@ class AgentTextModal extends ActionModal {
 }
 class AgentConfirmModal extends ActionModal {
   constructor(plugin: DeepSeekPlugin, title: string, private message: string, private confirm: () => void) { super(plugin.app); this.titleEl.setText(title); }
-  onOpen(): void { super.onOpen(); this.bodyEl.createEl("p", { text: this.message }); new Setting(this.actionsEl).addButton(b => b.setButtonText("删除").setWarning().onClick(() => { this.confirm(); this.close(); })).addButton(b => b.setButtonText("取消").onClick(() => this.close())); }
+  onOpen(): void { super.onOpen(); this.bodyEl.createEl("p", { text: this.message }); new Setting(this.actionsEl).addButton(b => destructiveButton(b.setButtonText("删除")).onClick(() => { this.confirm(); this.close(); })).addButton(b => b.setButtonText("取消").onClick(() => this.close())); }
 }

@@ -1,5 +1,7 @@
 import { SessionData } from "./types";
 import { validAgentTask } from "./AgentTasks";
+import { isLiveStory } from "./types";
+import { serializeStory } from "./StoryContent";
 
 export interface SessionStorage {
   exists(path: string): Promise<boolean>;
@@ -10,11 +12,34 @@ export interface SessionStorage {
 const object = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const strings = (v: unknown): boolean => Array.isArray(v) && v.every(x => typeof x === "string");
 function validStoryConfig(v: unknown): boolean {
-  return object(v) && [1, 2, 3].includes(Number(v.rounds)) && typeof v.rounds === "number" && Array.isArray(v.characterPaths) && v.characterPaths.length <= 4 && strings(v.characterPaths) && new Set(v.characterPaths).size === v.characterPaths.length;
+  return object(v) && [1, 2, 3].includes(Number(v.rounds)) && typeof v.rounds === "number" && Array.isArray(v.characterPaths) && v.characterPaths.length <= 4 && strings(v.characterPaths) && new Set(v.characterPaths).size === v.characterPaths.length && (v.maxTurns === undefined || (Number.isInteger(v.maxTurns) && Number(v.maxTurns) >= 1 && Number(v.maxTurns) <= 24)) && (v.openingTarget === undefined || typeof v.openingTarget === "string" && (v.openingTarget === "auto" || v.openingTarget === "scene" || v.characterPaths.includes(v.openingTarget)));
+}
+function validLiveStory(v: Record<string, unknown>, paths: Set<unknown>): boolean {
+  if (v.dismissed !== undefined && typeof v.dismissed !== "boolean") return false;
+  const target = (t: unknown) => t === "scene" || t === "end" || paths.has(t);
+  const block = (b: unknown): b is Record<string, unknown> => object(b) && typeof b.id === "string" && typeof b.turnId === "string" && Number.isInteger(b.seq) && typeof b.text === "string" && ["streaming", "completed", "interrupted"].includes(String(b.status)) && ["dialogue", "narration"].includes(String(b.kind)) && ["public", "private"].includes(String(b.visibility)) && (b.omitted === undefined || typeof b.omitted === "boolean") && (b.kind === "dialogue" ? paths.has(b.characterPath) && b.visibility === "public" && b.ownerPath === undefined : b.characterPath === undefined && (b.visibility === "private" ? paths.has(b.ownerPath) : b.ownerPath === undefined));
+  if (!Array.isArray(v.blocks) || v.blocks.length > 512 || !v.blocks.every(block) || new Set(v.blocks.map(b => b.id)).size !== v.blocks.length || !v.blocks.every((b, index) => b.seq === index) || v.blocks.reduce((n, b) => n + String(b.text).length, 0) > 300000 || !["running", "paused", "review", "confirmed", "interrupted"].includes(String(v.state))) return false;
+  const blocks = v.blocks, r = v.runtime;
+  if (!object(r) || typeof r.task !== "string" || r.task.length > 20000 || !validStoryConfig(r.config) || !Number.isInteger(r.completedTurns) || Number(r.completedTurns) < 0 || (r.next !== undefined && !target(r.next)) || (r.pauseRequested !== undefined && typeof r.pauseRequested !== "boolean") || (r.transport !== undefined && (typeof r.transport !== "string" || !["streaming", "buffered"].includes(r.transport)))) return false;
+  if (!validCheckpoint({ version: 1, mode: "agent", messages: [], notes: r.notes, primaryPath: r.primaryPath, scope: r.scope, writing: r.writing, searchVault: false }) || !object(r.scope) || r.scope.projectPath !== v.projectPath || r.primaryPath !== v.chapterPath) return false;
+  if (!Array.isArray(r.directives) || r.directives.length > 100 || !r.directives.every(d => object(d) && typeof d.id === "string" && typeof d.text === "string" && d.text.length <= 20000 && (d.target === undefined || target(d.target)) && (d.applied === undefined || typeof d.applied === "boolean"))) return false;
+  const request = (p: unknown) => object(p) && typeof p.id === "string" && target(p.target) && typeof p.raw === "string" && p.raw.length <= 200000;
+  if (r.pendingTurn !== undefined && !request(r.pendingTurn)) return false;
+  if (r.failures !== undefined && (!Array.isArray(r.failures) || r.failures.length > 32 || !r.failures.every(f => request(f) && object(f) && typeof f.error === "string"))) return false;
+  if (v.confirmedAt !== undefined && v.state !== "confirmed") return false;
+  if (v.state === "confirmed" && v.confirmedAt === undefined) return false;
+  if (v.confirmedBlocks !== undefined) {
+    const revision = v.confirmedBlocks;
+    if (!Array.isArray(revision) || !revision.every(block)) return false;
+    if (v.confirmedAt === undefined || !revision.length || !revision.every(b => b.status === "completed" && !b.omitted && blocks.some(source => source.id === b.id && source.kind === b.kind && source.visibility === b.visibility && source.ownerPath === b.ownerPath && source.characterPath === b.characterPath)) || new Set(revision.map(b => b.id)).size !== revision.length || revision.reduce((sum, b) => sum + String(b.text).length, 0) > 200000) return false;
+  }
+  return v.confirmedAt === undefined || Array.isArray(v.confirmedBlocks);
 }
 function validStory(v: unknown): boolean {
-  if (!object(v) || typeof v.projectPath !== "string" || typeof v.chapterPath !== "string" || !Array.isArray(v.cast) || !v.cast.length || v.cast.length > 4 || !v.cast.every((c: unknown): c is Record<string, unknown> => object(c) && validReference(c) && typeof c.content === "string" && String(c.path).startsWith(`${v.projectPath}/_角色/`)) || new Set(v.cast.map(c => c.path)).size !== v.cast.length) return false;
+  if (!object(v) || typeof v.projectPath !== "string" || typeof v.chapterPath !== "string" || !Array.isArray(v.cast) || !v.cast.length || v.cast.length > 4 || !v.cast.every((c: unknown): c is Record<string, unknown> => object(c) && validReference(c) && typeof c.content === "string" && String(c.path).startsWith(`${String(v.projectPath)}/_角色/`)) || new Set(v.cast.map(c => c.path)).size !== v.cast.length) return false;
   const cast = v.cast;
+  if (v.version !== undefined && v.version !== 2) return false;
+  if (v.version === 2 && !validLiveStory(v, new Set(cast.map(c => c.path)))) return false;
   if (!Array.isArray(v.turns) || v.turns.length > 15 || !v.turns.every(t => object(t) && typeof t.name === "string" && typeof t.content === "string" && [1, 2, 3].includes(Number(t.round)) && typeof t.round === "number" && (t.path === undefined || cast.some(c => c.path === t.path)))) return false;
   if (v.confirmedAt !== undefined && (typeof v.confirmedAt !== "number" || !Number.isFinite(v.confirmedAt))) return false;
   return v.evolution === undefined || (v.confirmedAt !== undefined && object(v.evolution) && ["running", "completed", "error"].includes(String(v.evolution.status)) && typeof v.evolution.content === "string" && (v.evolution.error === undefined || typeof v.evolution.error === "string"));
@@ -47,7 +72,7 @@ function validMessage(v: unknown): boolean {
   if (!object(v) || typeof v.id !== "string" || !["user", "assistant"].includes(String(v.role)) || typeof v.content !== "string" || !Number.isFinite(v.createdAt)) return false;
   if (v.task !== undefined && (v.role !== "user" || !validAgentTask(v.task))) return false;
   if (v.taskReferences !== undefined && (v.task === undefined || !Array.isArray(v.taskReferences) || v.taskReferences.length > 8 || !v.taskReferences.every(validReference))) return false;
-  if (v.status !== undefined && !["idle", "running", "completed", "cancelled", "error", "interrupted"].includes(String(v.status))) return false;
+  if (v.status !== undefined && (typeof v.status !== "string" || !["idle", "running", "completed", "cancelled", "error", "interrupted"].includes(v.status))) return false;
   if (v.error !== undefined && typeof v.error !== "string") return false;
   if (v.proofreading !== undefined && (v.role !== "assistant" || !validProofreading(v.proofreading))) return false;
   if (v.story !== undefined && (v.role !== "assistant" || !validStory(v.story))) return false;
@@ -67,7 +92,7 @@ function validMessage(v: unknown): boolean {
 }
 export function parseSessionData(raw: string): SessionData {
   const data: unknown = JSON.parse(raw);
-  if (!object(data) || data.version !== 1 || !(data.activeId === null || typeof data.activeId === "string") || !Array.isArray(data.sessions)) throw new Error("会话文件版本或格式无法识别，原文件已保留");
+  if (!object(data) || ![1, 2].includes(Number(data.version)) || typeof data.version !== "number" || !(data.activeId === null || typeof data.activeId === "string") || !Array.isArray(data.sessions)) throw new Error("会话文件版本或格式无法识别，原文件已保留");
   const ids = new Set<string>();
   for (const s of data.sessions) {
     if (object(s) && s.pendingTask !== undefined && !validAgentTask(s.pendingTask)) throw new Error("助手任务数据损坏，原文件已保留");
@@ -75,20 +100,27 @@ export function parseSessionData(raw: string): SessionData {
     ids.add(s.id);
   }
   if (data.deleted !== undefined && (!object(data.deleted) || !Object.values(data.deleted).every(x => typeof x === "number" && Number.isFinite(x)))) throw new Error("会话删除记录损坏");
-  return data as unknown as SessionData;
+  return { ...data as unknown as SessionData, version: 2 };
 }
 
 /** A separate serialized writer prevents conversation saves from overwriting plugin settings. */
 export class SessionStore {
-  data: SessionData = { version: 1, activeId: null, sessions: [] };
+  data: SessionData = { version: 2, activeId: null, sessions: [] };
   private loaded = false;
   private queue: Promise<unknown> = Promise.resolve();
   constructor(private storage: SessionStorage, private directory: string) {}
   async load(): Promise<void> {
     const path = `${this.directory}/sessions.json`;
-    if (await this.storage.exists(path)) this.data = parseSessionData(await this.storage.read(path));
+    if (await this.storage.exists(path)) {
+      const raw = await this.storage.read(path);
+      this.data = parseSessionData(raw);
+      const header = JSON.parse(raw) as { version: number };
+      const backup = `${this.directory}/sessions.v1.backup.json`;
+      if (header.version === 1 && !await this.storage.exists(backup)) await this.storage.write(backup, raw);
+    }
     for (const s of this.data.sessions) for (const m of s.messages) {
       if (m.status === "running") { m.status = "interrupted"; m.error = m.checkpoint ? "上次任务被中断，可点击「继续任务」接着处理" : "上次生成被中断，可重试或从此处分支继续"; }
+      this.recoverStory(m);
       if (m.story?.evolution?.status === "running") m.story.evolution = { status: "error", content: "", error: "角色推演被中断，可重试推演" };
       for (const step of m.steps ?? []) if (step.status === "running") step.status = "error";
       for (const p of m.proposals ?? []) if (p.status === "applying") p.status = "pending";
@@ -110,6 +142,16 @@ export class SessionStore {
     return task;
   }
   flush(): Promise<unknown> { return this.queue; }
+  private recoverStory(message: import("./types").AgentMessage): void {
+    if (!isLiveStory(message.story)) return;
+    const scene = message.story;
+    if (scene.state === "running") { scene.state = "interrupted"; message.status = "interrupted"; message.error = "演绎被中断，已完成内容保留，可继续同一场景"; }
+    for (const b of scene.blocks) if (b.status === "streaming") b.status = "interrupted";
+    const pending = scene.runtime.pendingTurn;
+    if (pending && !(scene.runtime.failures ?? []).some(f => f.id === pending.id)) (scene.runtime.failures ??= []).push({ ...pending, error: "上次请求被中断，保留原始返回" });
+    scene.runtime.pauseRequested = false;
+    message.content = scene.confirmedAt !== undefined ? serializeStory(scene.confirmedBlocks ?? []) : serializeStory(scene.blocks);
+  }
   merge(incoming: SessionData): void {
     const deleted = { ...this.data.deleted };
     for (const [id, time] of Object.entries(incoming.deleted ?? {})) deleted[id] = Math.max(deleted[id] ?? 0, time);
@@ -127,6 +169,7 @@ export class SessionStore {
     }
     for (const s of sessions.values()) for (const m of s.messages) {
       if (m.status === "running") { m.status = "interrupted"; m.error = "另一设备的生成已中断，可继续提问"; }
+      this.recoverStory(m);
       if (m.story?.evolution?.status === "running") m.story.evolution = { status: "error", content: "", error: "另一设备的角色推演已中断，可重试推演" };
       for (const step of m.steps ?? []) if (step.status === "running") step.status = "error";
       for (const p of m.proposals ?? []) if (p.status === "applying") p.status = "pending";

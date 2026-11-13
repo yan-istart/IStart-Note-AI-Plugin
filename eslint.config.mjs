@@ -1,17 +1,10 @@
-import tseslint from "typescript-eslint";
-import obsidianmd from "eslint-plugin-obsidianmd";
-import importPlugin from "eslint-plugin-import";
+import obsidianQuality from "./eslint.obsidian.config.mjs";
 
-// Rules reported by the community plugin scorecard, also enforced locally and in CI.
+// The official Obsidian recommended rules plus the project's stricter source checks.
 export default [
-  { ignores: ["dist/**", "node_modules/**", "**/*.test.ts", "tests/**"] },
+  ...obsidianQuality,
   {
     files: ["src/**/*.ts"],
-    languageOptions: {
-      parser: tseslint.parser,
-      parserOptions: { project: "./tsconfig.json", tsconfigRootDir: import.meta.dirname },
-    },
-    plugins: { "@typescript-eslint": tseslint.plugin, obsidianmd, import: importPlugin },
     rules: {
       "@typescript-eslint/no-unsafe-assignment": "error",
       "@typescript-eslint/no-unsafe-argument": "error",
@@ -24,7 +17,6 @@ export default [
       "no-useless-escape": "error",
       "no-control-regex": "error",
       "prefer-promise-reject-errors": "error",
-      "no-restricted-globals": ["error", { name: "fetch", message: "Use Obsidian requestUrl; streaming requires a documented exception." }],
       "obsidianmd/prefer-create-el": "error",
       "obsidianmd/prefer-instanceof": "error",
       "obsidianmd/settings-tab/prefer-setting-definitions": "error",

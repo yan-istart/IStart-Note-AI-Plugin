@@ -31,6 +31,9 @@ export interface LLMChatOptions {
   signal?: AbortSignal;
   /** Opt-in streaming transport; falls back to requestUrl when browser CORS prevents fetch. */
   onDelta?: (text: string) => void;
+  onTransport?: (transport: "streaming" | "buffered") => void;
+  /** Story protocols must not commit truncated or unterminated responses as completed turns. */
+  requireComplete?: boolean;
   /** Optional system prompt. Sent as the first message when provided. */
   systemPrompt?: string;
   /** Required user prompt. */
@@ -66,7 +69,7 @@ export type LLMResponseErrorCode = "output_limit" | "reasoning_only" | "empty_co
 
 /** Keep response diagnostics without exposing reasoning text or request contents. */
 export class LLMResponseError extends Error {
-  constructor(public code: LLMResponseErrorCode, message: string, public finishReason?: string) {
+  constructor(public code: LLMResponseErrorCode, message: string, public finishReason?: string, public partialContent?: string) {
     super(message);
     this.name = "LLMResponseError";
   }
@@ -130,12 +133,13 @@ export class LLMClient {
     };
     const request = async () => {
       if (options.onDelta) {
-        try { return await streamCompletion(url, headers, payload, options.onDelta, signal); }
+        try { return await streamCompletion(url, headers, payload, options.onDelta, signal, options.onTransport); }
         catch (error) {
           // A fetch/CORS failure before receiving data is safe to retry using Obsidian's transport.
           if (!(error instanceof StreamUnavailable) || signal?.aborted) throw error;
         }
       }
+      options.onTransport?.("buffered");
       const response = await requestUrl({ url, method: "POST", headers, body: JSON.stringify(payload), throw: false });
       return response;
     };
@@ -150,6 +154,9 @@ export class LLMClient {
     const choice = data?.choices?.[0];
     if (!choice?.message) throw new LLMResponseError("invalid_response", "模型服务返回格式异常，未找到生成结果");
     const content = choice.message.content;
+    if (options.requireComplete && choice.finish_reason !== "stop") {
+      throw new LLMResponseError(choice.finish_reason === "length" ? "output_limit" : "interrupted", "本次回应未完整结束，已保留收到的原稿，可继续演绎", choice.finish_reason, typeof content === "string" ? content : undefined);
+    }
     if (content != null && typeof content !== "string") {
       throw new LLMResponseError("invalid_response", "模型服务返回的正文格式无法识别", choice.finish_reason);
     }
@@ -186,20 +193,21 @@ export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise
   });
 }
 
-async function streamCompletion(url: string, headers: Record<string, string>, payload: object, onDelta: (text: string) => void, signal?: AbortSignal): Promise<{ status: number; text: string; json: unknown }> {
+async function streamCompletion(url: string, headers: Record<string, string>, payload: object, onDelta: (text: string) => void, signal?: AbortSignal, onTransport?: LLMChatOptions["onTransport"]): Promise<{ status: number; text: string; json: unknown }> {
   let response: Response;
   try {
     // requestUrl buffers the complete response and cannot deliver SSE deltas.
     // Keep fetch only for opt-in streaming; StreamUnavailable falls back to requestUrl.
-    // eslint-disable-next-line no-restricted-globals -- requestUrl has no streaming reader or AbortSignal support.
-    response = await fetch(url, { method: "POST", headers, body: JSON.stringify({ ...payload, stream: true }), signal });
+    response = await window.fetch(url, { method: "POST", headers, body: JSON.stringify({ ...payload, stream: true }), signal });
   }
   catch (error) { if (signal?.aborted) throw error; throw new StreamUnavailable(); }
   if (!response.ok) return { status: response.status, text: await response.text(), json: null };
   if (!response.headers.get("content-type")?.includes("text/event-stream")) {
+    onTransport?.("buffered");
     const json: unknown = await response.json();
     return { status: response.status, text: "", json };
   }
+  onTransport?.("streaming");
   const reader = response.body?.getReader();
   if (!reader) throw new Error("模型服务没有返回可读取的数据流");
   const decoder = new TextDecoder(); let buffer = "", content = "", finishReason: string | undefined;

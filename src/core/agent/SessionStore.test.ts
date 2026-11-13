@@ -97,3 +97,28 @@ it("rejects corrupted proofreading offsets while restoring a valid report", () =
   session.messages[0].proofreading!.result.issues[0].start = 1;
   expect(() => parseSessionData(JSON.stringify(data))).toThrow("损坏");
 });
+
+describe("versioned live scenes", () => {
+  it("backs up v1 histories before upgrading and preserves legacy prose without guessing blocks", async () => {
+    const { adapter, files } = storage(); const session = newSession();
+    session.messages.push({ id: "old", role: "assistant", content: "旧版完整原文", createdAt: 1, story: { projectPath: "作品", chapterPath: "作品/01.md", cast: [{ path: "作品/_角色/林川.md", content: "角色卡" }], turns: [{ name: "林川", path: "作品/_角色/林川.md", round: 1, content: "原始台词和动作" }] } });
+    const raw = JSON.stringify({ version: 1, activeId: session.id, sessions: [session] }); files.set("agent/sessions.json", raw);
+    const store = new SessionStore(adapter, "agent"); await store.load(); await store.save();
+    expect(files.get("agent/sessions.v1.backup.json")).toBe(raw); expect(store.data.version).toBe(2);
+    expect(store.data.sessions[0].messages[0].content).toBe("旧版完整原文"); expect(store.data.sessions[0].messages[0].story?.blocks).toBeUndefined();
+  });
+  it("recovers partial blocks and rejects forged visibility, duplicate ordering, and corrupt source snapshots", async () => {
+    const { adapter } = storage(); const store = new SessionStore(adapter, "agent"); await store.load();
+    const s = newSession(); s.mode = "story";
+    const path = "作品/_角色/林川.md", note = { path: "作品/01.md", content: "原文" };
+    s.messages.push({ id: "live", role: "assistant", content: "", createdAt: 1, status: "running", story: { version: 2, projectPath: "作品", chapterPath: note.path, cast: [{ path, content: "角色卡" }], turns: [], state: "running", blocks: [{ id: "b", turnId: "t", seq: 0, kind: "dialogue", characterPath: path, text: "还没有说完", visibility: "public", status: "streaming" }], runtime: { task: "演绎", notes: [note], primaryPath: note.path, scope: { projectPath: "作品", projectTitle: "作品", genre: "novel" }, config: { characterPaths: [path], rounds: 1, maxTurns: 6 }, completedTurns: 0, directives: [], pendingTurn: { id: "t", target: path, raw: "partial protocol" } } } });
+    store.data.sessions.push(s); await store.save();
+    const restored = new SessionStore(adapter, "agent"); await restored.load(); const message = restored.data.sessions[0].messages[0];
+    expect(message.story?.state).toBe("interrupted"); expect(message.story?.blocks?.[0].status).toBe("interrupted"); expect(message.content).toBe("还没有说完");
+    const raw = JSON.stringify(store.data);
+    expect(() => parseSessionData(raw.replace('"visibility":"public"', '"visibility":"private"'))).toThrow("损坏");
+    expect(() => parseSessionData(raw.replace('"seq":0', '"seq":5'))).toThrow("损坏");
+    expect(() => parseSessionData(raw.replace('"primaryPath":"作品/01.md"', '"primaryPath":"不存在.md"'))).toThrow("损坏");
+    expect(parseSessionData(raw).sessions[0].messages[0].story?.runtime?.config.maxTurns).toBe(6);
+  });
+});

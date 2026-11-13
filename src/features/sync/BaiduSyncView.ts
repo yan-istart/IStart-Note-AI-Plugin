@@ -8,6 +8,7 @@ import type DeepSeekPlugin from "../../main";
 import { mountGitChangesPanel } from "./GitChangesPanel";
 import { renderWorkbenchNav } from "../workbench/WorkbenchNav";
 import { WORKBENCH_VIEWS } from "../workbench/WorkbenchController";
+import { destructiveButton } from "../../ui/compat";
 
 export const SYNC_VIEW_TYPE = WORKBENCH_VIEWS.sync;
 
@@ -341,7 +342,7 @@ export class BaiduSyncView extends ItemView {
             cls: "istart-sync-modal-warning",
           });
           new Setting(this.contentEl)
-            .addButton((btn) => btn.setButtonText("确认覆盖").setWarning().onClick(() => { this.close(); resolve(true); }))
+            .addButton((btn) => destructiveButton(btn.setButtonText("确认覆盖")).onClick(() => { this.close(); resolve(true); }))
             .addButton((btn) => btn.setButtonText("取消").onClick(() => { this.close(); resolve(false); }));
         }
         onClose() { this.contentEl.empty(); resolve(false); }

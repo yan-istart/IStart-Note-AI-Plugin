@@ -5,6 +5,7 @@ import type DeepSeekPlugin from "../../main";
 import { AgentController, SYNC_HISTORY_PATH } from "./AgentController";
 import { DEFAULT_SETTINGS } from "../../types";
 import { LLMClient } from "../../core/llm";
+import { isLiveStory } from "../../core/agent/types";
 import { createAgentTask } from "../../core/agent/AgentTasks";
 
 function fixture() {
@@ -41,6 +42,7 @@ async function storyFixture() {
   }
   await f.controller.load(); f.controller.attach({ path: "作品/01-重逢.md" });
   f.controller.update(f.controller.active!.id, { mode: "story" });
+  f.controller.updateStoryConfig(f.controller.active!.id, { characterPaths: [], rounds: 1, maxTurns: 2 });
   return f;
 }
 beforeEach(() => vi.stubGlobal("window", { setTimeout, clearTimeout }));
@@ -194,58 +196,93 @@ describe("agent sidebar workflow", () => {
     controller.update(controller.active!.id, { draft: "shared draft" }); await controller.pushSharedHistory();
     const content = files.get(SYNC_HISTORY_PATH)!; expect(content).toContain("shared draft"); expect(content).not.toContain("secret-test-key"); await controller.dispose();
   });
-  it("confirms edited story text, stages character feedback, and uses applied cards in the next performance", async () => {
+  it("confirms block revisions, keeps the source transcript, applies feedback and uses it in a new scene", async () => {
     const { controller, files, writes, plugin } = await storyFixture(); const s = controller.active!;
-    controller.updateStoryConfig(s.id, { characterPaths: ["作品/_角色/林川.md", "作品/_角色/阿宁.md"], rounds: 1 });
+    controller.updateStoryConfig(s.id, { characterPaths: ["作品/_角色/林川.md", "作品/_角色/阿宁.md"], rounds: 1, maxTurns: 2 });
     const originalCard = files.get("作品/_角色/林川.md")!;
-    const chat = vi.spyOn(LLMClient.prototype, "chatMessages").mockResolvedValueOnce("林川攥住钥匙。").mockResolvedValueOnce("阿宁伸手请求同行。").mockResolvedValueOnce(JSON.stringify({ passages: ["", "", "旁白原稿：林川仍有犹豫。"] }));
+    const chat = vi.spyOn(LLMClient.prototype, "chatMessages").mockResolvedValueOnce(JSON.stringify({ kind: "dialogue", visibility: "public", text: "“我还没有决定。”" })).mockResolvedValueOnce('{"target":"end"}');
     await controller.send(s.id, "围绕钥匙发生冲突"); const reply = s.messages[1];
-    expect(reply.status).toBe("completed"); expect(reply.story?.turns).toHaveLength(3); expect(writes).toEqual([]);
-    const approved = "林川把钥匙交给了阿宁，终于愿意让她同行。";
-    chat.mockResolvedValueOnce(JSON.stringify({ updates: [{ path: "作品/_角色/林川.md", insight: "开始试着信任阿宁，依然保持谨慎。", evidence: ["把钥匙交给了阿宁"] }] }));
-    await controller.confirmStory(s.id, reply.id, approved);
-    expect(reply.content).toBe(approved); expect(reply.story?.confirmedAt).toBeTypeOf("number"); expect(reply.story?.evolution?.status).toBe("completed");
-    expect(chat.mock.calls[3][0][0].content).not.toContain("旁白原稿"); expect(files.get("作品/_角色/林川.md")).toBe(originalCard); expect(writes).toEqual([]);
+    expect(reply.status).toBe("completed"); if (!isLiveStory(reply.story)) throw new Error("expected live scene");
+    expect(reply.story.blocks).toHaveLength(1); expect(writes).toEqual([]);
+    const approved = "“林川把钥匙交给了阿宁，终于愿意让她同行。”";
+    const revision = reply.story.blocks.map(b => ({ ...b, text: approved }));
+    chat.mockResolvedValueOnce(JSON.stringify({ updates: [{ path: "作品/_角色/林川.md", insight: "开始试着信任阿宁，依然保持谨慎。", evidence: ["把钥匙交给了阿宁"] }] })).mockResolvedValueOnce('{"updates":[]}');
+    await controller.confirmStory(s.id, reply.id, revision);
+    expect(reply.content).toBe(approved); expect(reply.story.blocks[0].text).toBe("“我还没有决定。”"); expect(reply.story.confirmedBlocks?.[0].text).toBe(approved);
+    expect(reply.story.evolution?.status).toBe("completed"); expect(files.get("作品/_角色/林川.md")).toBe(originalCard); expect(writes).toEqual([]);
     chat.mockClear(); await controller.send(s.id, "继续演绎"); expect(chat).not.toHaveBeenCalled(); expect(s.messages[s.messages.length - 1].error).toContain("先应用或放弃");
-    await controller.apply(reply.proposals![0], s); expect(files.get("作品/_角色/林川.md")).toContain("开始试着信任阿宁");
-    chat.mockImplementation(async (_messages, options) => options?.systemPrompt?.includes("你是旁白 Agent") ? JSON.stringify({ passages: ["", "", ""] }) : "新的场景正文。"); await controller.send(s.id, "继续对话");
-    expect(chat.mock.calls[0][0][0].content).toContain("开始试着信任阿宁"); expect(chat.mock.calls[0][0][0].content).toContain(approved); expect(chat.mock.calls[0][0][0].content).not.toContain("旁白原稿");
-    await controller.dispose();
-    const restored = new AgentController(plugin); await restored.load(); expect(restored.error).toBe("");
-    expect(restored.active!.mode).toBe("story"); expect(restored.active!.storyConfig?.rounds).toBe(1); expect(restored.active!.messages[1].story?.evolution?.status).toBe("completed");
-    await restored.dispose();
+    await controller.apply(reply.proposals![0], s);
+    chat.mockImplementation(async (_messages, options) => options?.systemPrompt?.includes("演绎调度") ? '{"target":"end"}' : JSON.stringify({ kind: "dialogue", visibility: "public", text: "“继续谈。”" }));
+    await controller.send(s.id, "继续对话");
+    expect(chat.mock.calls[0][0][0].content).toContain("开始试着信任阿宁"); expect(chat.mock.calls[0][0][0].content).toContain(approved); expect(chat.mock.calls[0][0][0].content).not.toContain("我还没有决定");
+    await controller.dispose(); const restored = new AgentController(plugin); await restored.load();
+    expect(restored.error).toBe(""); expect(restored.active!.messages[1].story?.confirmedBlocks?.[0].text).toBe(approved); await restored.dispose();
   });
-  it("retains confirmed canon after evolution failure and retries only the character analysis", async () => {
+  it("retains confirmed canon after evolution failure and retries only the analysis", async () => {
     const { controller, writes } = await storyFixture(); const s = controller.active!;
-    const chat = vi.spyOn(LLMClient.prototype, "chatMessages").mockResolvedValueOnce("林川动作。").mockResolvedValueOnce("阿宁台词。").mockResolvedValueOnce(JSON.stringify({ passages: ["", "", "林川把钥匙交给了阿宁。"] }));
+    const chat = vi.spyOn(LLMClient.prototype, "chatMessages").mockResolvedValueOnce(JSON.stringify({ kind: "dialogue", visibility: "public", text: "“把钥匙交给了阿宁。”" })).mockResolvedValueOnce('{"target":"end"}');
     await controller.send(s.id, "演绎"); const reply = s.messages[1];
     chat.mockResolvedValueOnce(JSON.stringify({ updates: [{ path: "作品/_角色/林川.md", insight: "变得暴躁", evidence: ["不存在的事件"] }] }));
-    await controller.confirmStory(s.id, reply.id);
-    expect(reply.story?.evolution?.status).toBe("error"); expect(reply.story?.confirmedAt).toBeDefined(); expect(reply.proposals).toEqual([]);
-    chat.mockClear().mockResolvedValue('{"updates":[]}'); await controller.confirmStory(s.id, reply.id, "重试时不得修改已确认内容");
-    expect(chat).toHaveBeenCalledOnce(); expect(reply.content).toBe("林川动作。\n\n阿宁台词。\n\n林川把钥匙交给了阿宁。"); expect(reply.story?.evolution?.status).toBe("completed"); expect(writes).toEqual([]);
+    await controller.confirmStory(s.id, reply.id); expect(reply.story?.evolution?.status).toBe("error"); expect(reply.story?.confirmedAt).toBeDefined(); expect(reply.proposals).toEqual([]);
+    chat.mockClear().mockResolvedValue('{"updates":[]}'); await controller.confirmStory(s.id, reply.id);
+    expect(chat).toHaveBeenCalledTimes(2); expect(reply.content).toBe("“把钥匙交给了阿宁。”"); expect(reply.story?.evolution?.status).toBe("completed"); expect(writes).toEqual([]);
     await expect(controller.confirmStory(s.id, reply.id)).rejects.toThrow("已完成"); await controller.dispose();
   });
-  it("keeps a scene unconfirmed when saving confirmation fails and permits another confirmation attempt", async () => {
+  it("rolls back canon and its revision if confirmation cannot be saved", async () => {
     const { controller } = await storyFixture(); const s = controller.active!;
-    const chat = vi.spyOn(LLMClient.prototype, "chatMessages").mockResolvedValueOnce("林川动作。").mockResolvedValueOnce("阿宁台词。").mockResolvedValueOnce(JSON.stringify({ passages: ["", "", "原始剧情正文。"] }));
-    await controller.send(s.id, "演绎"); const reply = s.messages[1];
+    const chat = vi.spyOn(LLMClient.prototype, "chatMessages").mockResolvedValueOnce(JSON.stringify({ kind: "narration", visibility: "public", text: "原始剧情正文。" })).mockResolvedValueOnce('{"target":"end"}');
+    await controller.send(s.id, "演绎"); const reply = s.messages[1]; if (!isLiveStory(reply.story)) throw new Error("expected live scene");
+    const revision = reply.story.blocks.map(b => ({ ...b, text: "修订后的剧情正文。" }));
     chat.mockClear(); vi.spyOn(controller, "persist").mockRejectedValueOnce(new Error("disk full"));
-    await controller.confirmStory(s.id, reply.id, "修订后的剧情正文。");
-    expect(chat).not.toHaveBeenCalled(); expect(reply.content).toBe("林川动作。\n\n阿宁台词。\n\n原始剧情正文。"); expect(reply.story?.confirmedAt).toBeUndefined(); expect(reply.status).toBe("completed");
-    chat.mockResolvedValue('{"updates":[]}'); await controller.confirmStory(s.id, reply.id, "修订后的剧情正文。");
-    expect(reply.content).toBe("修订后的剧情正文。"); expect(reply.story?.confirmedAt).toBeDefined(); expect(reply.story?.evolution?.status).toBe("completed");
-    await controller.dispose();
+    await controller.confirmStory(s.id, reply.id, revision);
+    expect(chat).not.toHaveBeenCalled(); expect(reply.content).toBe("原始剧情正文。"); expect(reply.story.confirmedAt).toBeUndefined(); expect(reply.story.confirmedBlocks).toBeUndefined(); expect(reply.story.state).toBe("review");
+    chat.mockResolvedValue('{"updates":[]}'); await controller.confirmStory(s.id, reply.id, revision);
+    expect(reply.content).toBe("修订后的剧情正文。"); expect(reply.story.evolution?.status).toBe("completed"); await controller.dispose();
   });
-  it("cancels character evolution while keeping confirmed text and rejecting late updates", async () => {
-    const { controller, writes } = await storyFixture(); const s = controller.active!;
-    const chat = vi.spyOn(LLMClient.prototype, "chatMessages").mockResolvedValueOnce("林川动作。").mockResolvedValueOnce("阿宁台词。").mockResolvedValueOnce(JSON.stringify({ passages: ["", "", "林川把钥匙交给了阿宁。"] }));
-    await controller.send(s.id, "演绎"); const reply = s.messages[1];
+  it("restores a paused scene and resumes it without another user message or duplicate speech", async () => {
+    const { controller, plugin } = await storyFixture(); const s = controller.active!;
+    controller.updateStoryConfig(s.id, { characterPaths: ["作品/_角色/林川.md"], rounds: 1, maxTurns: 1 });
+    const chat = vi.spyOn(LLMClient.prototype, "chatMessages").mockResolvedValueOnce(JSON.stringify({ kind: "dialogue", visibility: "public", text: "“第一句。”" }));
+    await controller.send(s.id, "演绎"); const id = s.messages[1].id; expect(s.messages[1].story?.state).toBe("paused");
+    expect(() => controller.attach({ path: "b.md" })).toThrow("固定"); await controller.dispose();
+    const restored = new AgentController(plugin); await restored.load(); const rs = restored.active!;
+    chat.mockResolvedValueOnce('{"target":"作品/_角色/林川.md"}').mockResolvedValueOnce(JSON.stringify({ kind: "dialogue", visibility: "public", text: "“第二句。”" }));
+    await restored.continueStory(rs.id, id, true);
+    expect(rs.messages).toHaveLength(2); expect(rs.messages[1].content).toBe("“第一句。”\n\n“第二句。”"); await restored.dispose();
+  });
+  it("queues author instructions and a target during a response, then pauses at the boundary", async () => {
+    const { controller } = await storyFixture(); const s = controller.active!;
+    const chat = vi.spyOn(LLMClient.prototype, "chatMessages").mockImplementationOnce(async () => {
+      const message = s.messages[1]; controller.directStory(s.id, message.id, "让阿宁回应", "作品/_角色/阿宁.md"); controller.pauseStory(s.id, message.id);
+      return JSON.stringify({ kind: "dialogue", visibility: "public", text: "“先听我说完。”" });
+    });
+    await controller.send(s.id, "演绎"); const reply = s.messages[1]; expect(chat).toHaveBeenCalledOnce(); expect(reply.story?.runtime?.next).toBe("作品/_角色/阿宁.md");
+    chat.mockResolvedValueOnce(JSON.stringify({ kind: "dialogue", visibility: "public", text: "“我听着。”" }));
+    await controller.continueStory(s.id, reply.id, true);
+    expect(chat.mock.calls[1][0][0].content).toContain("让阿宁回应"); expect(reply.story?.blocks?.[1].characterPath).toBe("作品/_角色/阿宁.md"); expect(reply.story?.runtime?.directives[0].applied).toBe(true); await controller.dispose();
+  });
+  it("preserves interrupted text, requires its resolution, and refuses stale source continuation", async () => {
+    const { controller, files } = await storyFixture(); const s = controller.active!;
     let finish!: (value: string) => void;
+    const chat = vi.spyOn(LLMClient.prototype, "chatMessages").mockImplementation((_history, options) => {
+      options?.onDelta?.('{"kind":"dialogue","visibility":"public","text":"未说完的原话');
+      return new Promise<string>(resolve => { finish = resolve; });
+    });
+    const job = controller.send(s.id, "演绎"); await vi.waitFor(() => expect(chat).toHaveBeenCalledOnce()); controller.stop(s.id); await job;
+    const reply = s.messages[1]; expect(reply.content).toBe("未说完的原话");
+    await expect(controller.continueStory(s.id, reply.id)).rejects.toThrow("未完成");
+    controller.resolveStoryBlock(s.id, reply.id, reply.story!.blocks![0].id, true);
+    files.set("作品/01-重逢.md", "changed source"); chat.mockClear(); await controller.continueStory(s.id, reply.id);
+    expect(chat).not.toHaveBeenCalled(); expect(reply.error).toContain("来源已变化"); expect(reply.content).toBe("未说完的原话");
+    finish(JSON.stringify({ kind: "dialogue", visibility: "public", text: "迟到的内容" })); await controller.dispose();
+  });
+  it("keeps confirmed text when evolution is cancelled and discards its late result", async () => {
+    const { controller, writes } = await storyFixture(); const s = controller.active!;
+    const chat = vi.spyOn(LLMClient.prototype, "chatMessages").mockResolvedValueOnce(JSON.stringify({ kind: "dialogue", visibility: "public", text: "“把钥匙交给了阿宁。”" })).mockResolvedValueOnce('{"target":"end"}');
+    await controller.send(s.id, "演绎"); const reply = s.messages[1]; let finish!: (value: string) => void;
     chat.mockClear().mockImplementation(() => new Promise<string>(resolve => { finish = resolve; }));
     const job = controller.confirmStory(s.id, reply.id); await vi.waitFor(() => expect(chat).toHaveBeenCalledOnce()); controller.stop(s.id); await job;
-    finish('{"updates":[]}'); expect(reply.story?.confirmedAt).toBeDefined(); expect(reply.story?.evolution?.status).toBe("error"); expect(reply.proposals).toEqual([]); expect(writes).toEqual([]);
-    await controller.dispose();
+    finish('{"updates":[]}'); expect(reply.story?.confirmedAt).toBeDefined(); expect(reply.story?.evolution?.status).toBe("error"); expect(reply.proposals).toEqual([]); expect(writes).toEqual([]); await controller.dispose();
   });
   it("rejects non-novel contexts and roles outside the referenced project before generating", async () => {
     const f = fixture(); await f.controller.load(); const s = f.controller.active!; f.controller.attach({ path: "a.md" }); f.controller.update(s.id, { mode: "story" });

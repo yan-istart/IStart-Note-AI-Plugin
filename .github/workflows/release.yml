@@ -35,13 +35,15 @@ jobs:
             dist/main.js
             dist/manifest.json
             dist/styles.css
+            dist/publishing-service.cjs
+            dist/publishing-mcp.cjs
 
       - name: Create release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           tag="${GITHUB_REF#refs/tags/}"
-          assets="dist/main.js dist/manifest.json"
+          assets="dist/main.js dist/manifest.json dist/publishing-service.cjs dist/publishing-mcp.cjs dist/THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_PUBLISHING_NOTICES.txt"
           if [ -f "dist/styles.css" ]; then
             assets="$assets dist/styles.css"
           fi

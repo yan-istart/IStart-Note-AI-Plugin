@@ -4,6 +4,7 @@ export class TFile {
 }
 
 export const Platform = { isWin: false };
+export function requireApiVersion(): boolean { return false; }
 
 export class Notice {
   setMessage() {}

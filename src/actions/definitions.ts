@@ -13,6 +13,17 @@ const agentTask = (actionId: string) => (ctx: ActionContext) => {
  * Icons use Obsidian's Lucide names and locally registered Phosphor icons.
  */
 export const ALL_ACTIONS: ActionDef[] = [
+  {
+    id: "publish-note",
+    label: "分发图文笔记",
+    icon: "send",
+    description: "预览当前笔记并发送到多平台草稿",
+    domain: "writing",
+    section: "publishing",
+    when: { always: true },
+    showIn: ["panel", "editor-menu", "file-menu"],
+    run: ctx => { void ctx.plugin.activatePublishingView(ctx.targetFile ?? ctx.activeFile); },
+  },
   // ══════════════════════════════════════════════════════════════
   //  KNOWLEDGE
   // ══════════════════════════════════════════════════════════════

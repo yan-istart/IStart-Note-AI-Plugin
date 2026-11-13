@@ -67,6 +67,22 @@ beforeEach(() => {
 });
 
 describe("unified workbench entry points", () => {
+  it("opens publishing without an AI key and preserves the right-click target over the active editor", () => {
+    const doc = setup(); doc.plugin.settings.apiKey = "";
+    const publish = vi.spyOn(doc.plugin, "activatePublishingView").mockResolvedValue(undefined);
+    const commands: any[] = [], handlers = new Map<string, (...args: any[]) => void>();
+    vi.mocked(doc.app.workspace.on).mockImplementation(((event: string, callback: (...args: any[]) => void) => { handlers.set(event, callback); return {}; }) as any);
+    Object.assign(doc.plugin, { addCommand: (command: any) => commands.push(command), registerEvent: vi.fn(), addRibbonIcon: vi.fn() });
+    registerAllActions(doc.plugin, ALL_ACTIONS);
+    commands.find(command => command.id === "publish-note").editorCheckCallback(false);
+    expect(publish).toHaveBeenLastCalledWith(doc.app.workspace.getActiveFile());
+    const other = Object.assign(new TFile(), { path: "other.md", extension: "md", basename: "other" });
+    const callbacks: (() => void)[] = [];
+    const item = { setTitle() { return this; }, setIcon() { return this; }, onClick(callback: () => void) { callbacks.push(callback); return this; } };
+    handlers.get("file-menu")!({ addItem: (build: (value: typeof item) => void) => build(item) }, other);
+    callbacks.forEach(callback => callback());
+    expect(publish).toHaveBeenLastCalledWith(other);
+  });
   it("captures source anchors before the workbench takes focus and immediately runs a configured task", async () => {
     const doc = setup(); doc.select(); const target = captureEditorTarget(doc.app)!;
     const prepareTask = vi.fn((_task: unknown, _refs: unknown) => ({ id: "task-session" }));

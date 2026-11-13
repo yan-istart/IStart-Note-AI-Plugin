@@ -1,5 +1,6 @@
 import { App, ButtonComponent, Notice, Setting } from "obsidian";
 import { ActionModal } from "../../ui/ActionModal";
+import { destructiveButton } from "../../ui/compat";
 import type { AnnotationCommentStyle, AnnotationRecord } from "../../core/annotations/AnnotationParser";
 
 export type AnnotationModalMode = "create" | "edit";
@@ -180,7 +181,7 @@ export class AnnotationDeleteModal extends ActionModal {
     contentEl.createEl("p", { text: detail, cls: "istart-annotation-delete-hint" });
 
     new Setting(this.actionsEl)
-      .addButton((button) => button.setButtonText("移除批注").setWarning().onClick(() => this.confirm()))
+      .addButton((button) => destructiveButton(button.setButtonText("移除批注")).onClick(() => this.confirm()))
       .addButton((button) => button.setButtonText("取消").onClick(() => this.close()));
 
     this.addMobileHeaderAction("移除", () => this.confirm());

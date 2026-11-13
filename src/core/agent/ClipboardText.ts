@@ -1,7 +1,9 @@
 import type { AgentMessage, AgentSession } from "./types";
+import { isLiveStory } from "./types";
+import { serializeStory } from "./StoryContent";
 
 export function messageText(message: AgentMessage): string {
-  const parts = [message.content];
+  const parts = [isLiveStory(message.story) ? serializeStory(message.story.confirmedAt !== undefined ? message.story.confirmedBlocks ?? [] : message.story.blocks) : message.content];
   if (message.error) parts.push(`错误：${message.error}`);
   if (message.skills?.length) parts.push(`技能：${message.skills.join("、")}`);
   if (message.references?.length) parts.push(message.references.map(r => `引用：${r.path}${r.selection ? `\n选区：\n${r.selection.text}` : ""}${r.annotation ? `\n批注：\n${r.annotation}` : ""}`).join("\n\n"));

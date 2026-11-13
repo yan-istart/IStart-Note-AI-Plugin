@@ -29,6 +29,7 @@ describe("IStart workbench routing", () => {
     const assistant = await controller.activate("assistant");
     expect(await controller.activate("annotations")).toBe(assistant);
     expect(await controller.activate("sync")).toBe(assistant);
+    expect(await controller.activate("publishing")).toBe(assistant);
     expect(await controller.activate("assistant")).toBe(assistant);
     expect(leaves).toHaveLength(1);
     expect(workspace.ensureSideLeaf).toHaveBeenCalledTimes(1);

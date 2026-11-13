@@ -199,6 +199,8 @@ npm run build
 # → dist/main.js, dist/manifest.json, dist/styles.css
 ```
 
+Run `npm run check:obsidian` for the official Obsidian recommended quality checks, including source, `manifest.json`, `package.json` and `LICENSE`. Warnings fail the check. `npm run ci` runs these checks, tests, type checking and the production build; GitHub CI and release builds use the same rules. See [quality checks](./docs/quality-checks.md) for scope and compatibility details.
+
 ---
 
 ## Configuration
@@ -207,10 +209,11 @@ Default AI settings: Base URL `https://api.deepseek.com`, model `deepseek-v4-fla
 
 The model dropdown offers `deepseek-v4-flash` and `deepseek-v4-pro`. Compatible endpoints must accept the selected model name; there is no custom-model input or provider manager.
 
-Settings are organized into seven tabs:
+Settings are organized into eight tabs:
 
 | Tab | Key settings |
 | --- | --- |
+| **Publishing** | Device-local service connection, desktop local service management, publishing snapshot folder |
 | **Knowledge** | Q&A path, Concepts path, Questions index path, index status + rebuild |
 | **Writing** | Works path (`Writing`), full document/project context by default; nearby mode uses 2,000 characters per side, continuation target (800 Chinese characters), insertion target (200 Chinese characters) |
 | **Skill** | Enable auto-attach, writing-only scope, skill roots, maximum injected characters, discovered skill list |
@@ -362,6 +365,12 @@ Frontmatter types: `concept` / `question` / `reading-project` / `reading-note` /
 Writing projects live under the configurable `Writing/` root. Vault QA excludes `chapter`, `writing-project`, `character`, `setting`, `outline`, and `snippet` frontmatter types. This filter has no settings toggle and does not exclude an entire directory; untyped notes and imported `reference` notes may still be retrieved.
 
 Annotations do not create a separate folder or index. They live inside the source note as standard Markdown and are parsed live by the sidebar. Removing an annotation deletes its markers and comment text while keeping the annotated prose.
+
+### Multi-platform article distribution
+
+Open **IStart 工作台 → 内容分发** to preview a Markdown note and send image articles to WeChat Official Accounts, Zhihu and Bilibili column drafts through Wechatsync. No AI API key is required. Desktop supports a configured service URL or a locally managed service (Node.js 22+); mobile uses a remote HTTPS service URL. The browser extension and platform logins remain required.
+
+Publishing snapshots and image copies are created on demand under configurable `IStart/Publishing/`, with per-attempt records and recovery after lost responses. Generated publishing drafts are excluded from knowledge retrieval. Connection preferences are device-local; tokens use SecretStorage where supported, with session-only fallback on older Obsidian. Unknown delivery outcomes never trigger automatic resubmission. Setup, remote deployment, limitations and API details: [图文分发说明](./docs/publishing.md).
 
 ---
 

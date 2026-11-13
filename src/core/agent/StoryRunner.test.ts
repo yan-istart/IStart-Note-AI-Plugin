@@ -1,111 +1,123 @@
 import { describe, expect, it, vi } from "vitest";
-import { StoryRunner, composeStoryRound, parseEvolution } from "./StoryRunner";
-import { AgentMessage, AgentRunContext, DEFAULT_AGENT_SETTINGS, newSession, NoteSnapshot } from "./types";
+import { StoryRunner, parseEvolution } from "./StoryRunner";
+import { storyContext } from "./StoryContent";
+import { isLiveStory, DEFAULT_AGENT_SETTINGS, newSession } from "./types";
+import type { AgentMessage, AgentRunContext, LiveStoryScene, NoteSnapshot } from "./types";
+import type { LLMChatOptions, LLMMessage } from "../llm";
 
 const cast: NoteSnapshot[] = [
-  { path: "作品/_角色/林川.md", content: "---\nname: 林川\n---\n谨慎寡言。秘密：藏着一枚蓝色徽章。" },
-  { path: "作品/_角色/阿宁.md", content: "---\nname: 阿宁\n---\n活泼。秘密：其实是北城的信使。" },
+  { path: "作品/_角色/林川.md", content: "---\nname: 林川\n---\n谨慎。秘密：藏着一枚蓝色徽章。" },
+  { path: "作品/_角色/阿宁.md", content: "---\nname: 阿宁\n---\n秘密：其实是北城的信使。" },
 ];
-const scene = "林川把钥匙交给了阿宁，终于愿意让她同行。";
-function context(signal = new AbortController().signal): AgentRunContext {
-  const primary = { path: "作品/01-重逢.md", content: "雨夜，两人在门口重逢。" };
-  return { sessionId: "s", mode: "story", primary, notes: new Map([[primary.path, primary]]), scope: { projectPath: "作品", projectTitle: "重逢", genre: "novel" }, searchVault: false, signal, sources: new Set([primary.path]) };
+const line = (text: string, kind = "dialogue", visibility = "public") => JSON.stringify({ kind, visibility, text });
+const target = (path: string) => JSON.stringify({ target: path });
+function setup(signal = new AbortController().signal) {
+  const session = newSession(); session.mode = "story"; session.messages.push({ id: "u", role: "user", createdAt: 1, content: "围绕钥匙发生冲突" });
+  const primary = { path: "作品/01.md", content: "雨夜，两人重逢。" };
+  const context: AgentRunContext = { sessionId: session.id, mode: "story", primary, notes: new Map([[primary.path, primary]]), scope: { projectPath: "作品", projectTitle: "重逢", genre: "novel" }, searchVault: false, signal, sources: new Set() };
+  return { session, context, config: { characterPaths: [], rounds: 1, maxTurns: 2 } };
 }
-function confirmed(): AgentMessage {
-  return { id: "scene", role: "assistant", createdAt: 1, content: scene, status: "completed", steps: [], proposals: [], story: { projectPath: "作品", chapterPath: "作品/01-重逢.md", cast, turns: [{ name: "林川", path: cast[0].path, round: 1, content: "未确认的演员原稿" }], confirmedAt: 2 } };
-}
+const save = async () => {};
+const live = (message: AgentMessage): LiveStoryScene => { if (!isLiveStory(message.story)) throw new Error("expected live scene"); return message.story; };
 
-describe("novel performance and character evolution", () => {
-  it("runs independent actors in order, sharing only the public performance with the narrator", async () => {
-    const session = newSession(); session.messages.push({ id: "u", role: "user", createdAt: 1, content: "围绕钥匙发生冲突" });
-    const client = { chatMessages: vi.fn().mockResolvedValueOnce("林川握紧钥匙，问她为何而来。").mockResolvedValueOnce("阿宁伸出手，保证会回来。").mockResolvedValueOnce(JSON.stringify({ passages: ["雨声敲着门檐。", "", scene] })) };
-    const save = vi.fn(async () => {});
-    const result = await new StoryRunner(client).run(session, context(), DEFAULT_AGENT_SETTINGS, cast, { characterPaths: [], rounds: 1 }, () => {}, save);
-    expect(client.chatMessages).toHaveBeenCalledTimes(3);
-    const first = client.chatMessages.mock.calls[0][0][0].content;
-    const second = client.chatMessages.mock.calls[1][0][0].content;
-    expect(first).toContain("蓝色徽章"); expect(first).not.toContain("北城的信使");
-    expect(second).toContain("北城的信使"); expect(second).not.toContain("蓝色徽章"); expect(second).toContain("问她为何而来");
-    expect(result.content).toBe(["雨声敲着门檐。", "林川握紧钥匙，问她为何而来。", "阿宁伸出手，保证会回来。", scene].join("\n\n")); expect(result.story!.turns.map(t => t.name)).toEqual(["林川", "阿宁", "旁白"]);
-    expect(result.status).toBe("completed"); expect(result.proposals).toEqual([]); expect(result.story!.confirmedAt).toBeUndefined();
-    expect(save).toHaveBeenCalledTimes(4);
+describe("live story performance", () => {
+  it("streams dialogue and narrative blocks in order, with independent actors and no retrospective rewrite", async () => {
+    const f = setup(); const speech = '“我没有答应。\n\n你听清楚，是没有答应——不是忘了。”';
+    const raw = line("他握紧钥匙。", "narration") + '\n' + line(speech);
+    let visibleBeforeReturn = false;
+    const chat = vi.fn<(history: LLMMessage[], options?: Omit<LLMChatOptions, "userPrompt">) => Promise<string>>()
+      .mockImplementationOnce(async (_history, options) => {
+        for (let i = 0; i < raw.length; i += 3) options?.onDelta?.(raw.slice(i, i + 3));
+        visibleBeforeReturn = live(f.session.messages[1]).blocks[1].text === speech;
+        return raw;
+      }).mockResolvedValueOnce(target(cast[1].path)).mockResolvedValueOnce(line("“那你为什么还留着钥匙？”"));
+    const result = await new StoryRunner({ chatMessages: chat }).run(f.session, f.context, DEFAULT_AGENT_SETTINGS, cast, f.config, () => {}, save);
+    expect(visibleBeforeReturn).toBe(true); expect(result.status).toBe("idle"); expect(live(result).state).toBe("paused");
+    expect(result.content).toBe(`他握紧钥匙。\n\n${speech}\n\n“那你为什么还留着钥匙？”`);
+    expect(live(result).blocks.map(b => b.kind)).toEqual(["narration", "dialogue", "dialogue"]);
+    expect(chat.mock.calls[0][0][0].content).not.toContain("北城的信使");
+    expect(chat.mock.calls[2][0][0].content).toContain(speech); expect(chat.mock.calls[2][0][0].content).not.toContain("蓝色徽章");
+    expect(result.proposals).toEqual([]);
   });
-  it("feeds confirmed scenes into later rounds and excludes unconfirmed scenes and generic summaries", async () => {
-    const session = newSession(); session.messages.push(confirmed(), { ...confirmed(), id: "draft", content: "草稿里的秘密谋杀", story: { ...confirmed().story!, confirmedAt: undefined } }, { id: "u", role: "user", content: "继续相遇", createdAt: 4 });
-    session.summary = { content: "摘要中的未确认背叛", through: "draft" };
-    const client = { chatMessages: vi.fn().mockImplementation(async (_messages, options) => options.systemPrompt.includes("你是旁白 Agent") ? JSON.stringify({ passages: ["", "", ""] }) : "新的动作与台词。") };
-    await new StoryRunner(client).run(session, context(), DEFAULT_AGENT_SETTINGS, cast, { characterPaths: [], rounds: 2 }, () => {}, async () => {});
-    expect(client.chatMessages).toHaveBeenCalledTimes(6);
-    for (const call of client.chatMessages.mock.calls) {
-      expect(call[0][0].content).toContain(scene);
-      expect(call[0][0].content).not.toContain("秘密谋杀"); expect(call[0][0].content).not.toContain("未确认背叛");
-    }
-    expect(client.chatMessages.mock.calls[3][0][0].content).toContain("第1轮 · 旁白");
+  it("isolates private psychology from other actors, the scene generator and the director, including confirmed history", async () => {
+    const f = setup();
+    const chat = vi.fn().mockResolvedValueOnce(line("暗号是七只蓝鸟", "narration", "private") + '\n' + line("“请进。”")).mockResolvedValueOnce(target(cast[1].path)).mockResolvedValueOnce(line("“谢谢。”"));
+    const first = await new StoryRunner({ chatMessages: chat }).run(f.session, f.context, DEFAULT_AGENT_SETTINGS, cast, f.config, () => {}, save);
+    expect(chat.mock.calls[1][0][0].content).not.toContain("七只蓝鸟"); expect(chat.mock.calls[2][0][0].content).not.toContain("七只蓝鸟");
+    const scene = live(first); expect(storyContext(f.session, scene, cast[0].path)).toContain("七只蓝鸟");
+    scene.confirmedAt = 2; scene.confirmedBlocks = structuredClone(scene.blocks); scene.state = "confirmed";
+    f.session.messages.push({ id: "u2", role: "user", content: "继续", createdAt: 3 });
+    chat.mockReset().mockResolvedValueOnce(line("“继续说。”")).mockResolvedValueOnce(target(cast[1].path)).mockResolvedValueOnce(line("“好。”"));
+    await new StoryRunner({ chatMessages: chat }).run(f.session, f.context, DEFAULT_AGENT_SETTINGS, cast, f.config, () => {}, save);
+    expect(chat.mock.calls[0][0][0].content).toContain("七只蓝鸟"); expect(chat.mock.calls[2][0][0].content).not.toContain("七只蓝鸟");
+    chat.mockReset().mockResolvedValue('{"updates":[]}');
+    await new StoryRunner({ chatMessages: chat }).evolve(first, cast, f.context, () => {});
+    expect(chat.mock.calls[0][0][0].content).toContain("七只蓝鸟");
+    expect(chat.mock.calls[1][0][0].content).not.toContain("七只蓝鸟");
+    expect(chat.mock.calls[1][0][0].content).not.toContain("蓝色徽章");
   });
-  it("does not generate evolution before confirmation and uses the approved text instead of actor drafts", async () => {
-    const client = { chatMessages: vi.fn().mockResolvedValue(JSON.stringify({ updates: [{ path: cast[0].path, insight: "开始试着信任阿宁，仍保持谨慎。", evidence: ["把钥匙交给了阿宁"] }] })) };
-    const result = confirmed(); delete result.story!.confirmedAt;
-    await expect(new StoryRunner(client).evolve(result, cast, context(), () => {})).rejects.toThrow("先确认");
-    expect(client.chatMessages).not.toHaveBeenCalled(); result.story!.confirmedAt = 1;
-    await new StoryRunner(client).evolve(result, cast, context(), () => {});
-    expect(client.chatMessages.mock.calls[0][0][0].content).not.toContain("未确认的演员原稿");
-    expect(result.proposals![0].changes[0].before).toBe(cast[0].content);
-    expect(result.proposals![0].changes[0].after).toContain(cast[0].content);
-    expect(result.proposals![0].changes[0].after).toContain("开始试着信任阿宁"); expect(result.proposals![0].status).toBe("pending");
+  it("pauses after a complete response and resumes the same scene without duplicating completed dialogue", async () => {
+    const f = setup();
+    const chat = vi.fn().mockImplementationOnce(async () => { live(f.session.messages[1]).runtime.pauseRequested = true; return line("“第一句原话。”"); });
+    const runner = new StoryRunner({ chatMessages: chat });
+    const result = await runner.run(f.session, f.context, DEFAULT_AGENT_SETTINGS, cast, f.config, () => {}, save);
+    expect(chat).toHaveBeenCalledOnce(); const originalId = live(result).blocks[0].id;
+    chat.mockResolvedValueOnce(target(cast[1].path)).mockResolvedValueOnce(line("“第二句回应。”"));
+    await runner.run(f.session, f.context, DEFAULT_AGENT_SETTINGS, cast, f.config, () => {}, save, { resume: result, singleStep: true });
+    expect(f.session.messages).toHaveLength(2); expect(live(result).blocks[0].id).toBe(originalId);
+    expect(result.content).toBe("“第一句原话。”\n\n“第二句回应。”");
   });
-  it("allows a scene with no lasting personality change", async () => {
-    const result = confirmed();
-    await new StoryRunner({ chatMessages: vi.fn().mockResolvedValue('{"updates":[]}') }).evolve(result, cast, context(), () => {});
-    expect(result.proposals).toEqual([]); expect(result.story!.evolution?.content).toContain("保留现有角色设定");
+  it("allows consecutive responses by the same role and public scene events without forcing a round robin", async () => {
+    const f = setup(); f.config.maxTurns = 3;
+    const chat = vi.fn().mockResolvedValueOnce(line("“等等。”")).mockResolvedValueOnce(target(cast[0].path)).mockResolvedValueOnce(line("“我还有一句。”")).mockResolvedValueOnce(target("scene")).mockResolvedValueOnce(line("门外传来脚步声。", "narration"));
+    const result = await new StoryRunner({ chatMessages: chat }).run(f.session, f.context, DEFAULT_AGENT_SETTINGS, cast, f.config, () => {}, save);
+    expect(live(result).blocks.map(b => b.characterPath)).toEqual([cast[0].path, cast[0].path, undefined]);
+    expect(result.content).toContain("脚步声");
   });
-  it("keeps every actor passage verbatim and in order when narration is added", async () => {
-    const first = '林川低声说：“我没有答应。\n\n你听清楚，是没有答应——不是忘了。”\n\n' + '“这句话我还要再说一次，不能省略。”\n'.repeat(80);
-    const second = '阿宁摇头。“我听清了。你没有答应。”\n\n“那你为什么还留着钥匙？”';
-    const session = newSession(); session.messages.push({ id: "u", role: "user", content: "完整演绎这场争执", createdAt: 1 });
-    const client = { chatMessages: vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second).mockResolvedValueOnce(JSON.stringify({ passages: ["雨声渐密。", "门外传来脚步声。", "两人都没有离开。"] })) };
-    const result = await new StoryRunner(client).run(session, context(), DEFAULT_AGENT_SETTINGS, cast, { characterPaths: [], rounds: 1 }, () => {}, async () => {});
-    expect(result.status).toBe("completed");
-    expect(result.content).toBe(["雨声渐密。", first.trim(), "门外传来脚步声。", second, "两人都没有离开。"].join("\n\n"));
-    expect(client.chatMessages.mock.calls[1][0][0].content).toContain(first.trim());
-    expect(result.content.match(/这句话我还要再说一次，不能省略。/g)).toHaveLength(80);
-    expect(result.story!.turns[2].content).toBe(result.content);
+  it("lets the director select the opening role from the author's scene request", async () => {
+    const f = setup();
+    const chat = vi.fn().mockResolvedValueOnce(target(cast[1].path)).mockResolvedValueOnce(line("“这次由我先说。”"));
+    const result = await new StoryRunner({ chatMessages: chat }).run(f.session, f.context, DEFAULT_AGENT_SETTINGS, cast, { ...f.config, characterPaths: cast.map(c => c.path), maxTurns: 1, openingTarget: "auto" }, () => {}, save);
+    expect(live(result).blocks[0].characterPath).toBe(cast[1].path); expect(chat.mock.calls[0][1].systemPrompt).toContain("演绎调度");
   });
-  it("retains the full actor transcript when the narrator returns a summary instead of valid connecting passages", async () => {
-    const session = newSession(); session.messages.push({ id: "u", role: "user", content: "完整演绎对话", createdAt: 1 });
-    const first = '林川说：“今天、明天，还是下一次见面？请你说清楚。”';
-    const second = '阿宁说：“明天。不是下一次，是明天。”';
-    const client = { chatMessages: vi.fn().mockResolvedValueOnce(first).mockResolvedValueOnce(second).mockResolvedValueOnce("两人商定了下次见面的时间。") };
-    const result = await new StoryRunner(client).run(session, context(), DEFAULT_AGENT_SETTINGS, cast, { characterPaths: [], rounds: 1 }, () => {}, async () => {});
-    expect(result.status).toBe("completed"); expect(result.error).toContain("角色原稿已完整保留");
-    expect(result.steps![result.steps!.length - 1].status).toBe("error");
-    expect(result.content).toBe(`${first}\n\n${second}`); expect(result.content).not.toContain("两人商定");
-    expect(result.story!.turns).toHaveLength(2);
-    expect(() => composeStoryRound('{"passages":["省略其他角色"]}', result.story!.turns)).toThrow("旁白衔接格式无效");
+  it("rejects scene impersonation and preserves the protocol response for diagnosis", async () => {
+    const f = setup(); const chat = vi.fn().mockResolvedValueOnce(line("“等等。”")).mockResolvedValueOnce(target("scene")).mockResolvedValueOnce(line("“他替我答应了。”"));
+    const result = await new StoryRunner({ chatMessages: chat }).run(f.session, f.context, DEFAULT_AGENT_SETTINGS, cast, f.config, () => {}, save);
+    expect(result.error).toContain("不得代写"); expect(live(result).blocks).toHaveLength(1); expect(live(result).runtime.failures?.[0].raw).toContain("替我答应");
   });
-  it("rejects fabricated evidence, duplicate roles, and paths outside the cast before staging any changes", () => {
-    const update = { path: cast[0].path, insight: "更加信任同伴", evidence: ["把钥匙交给了阿宁"] };
-    expect(parseEvolution(JSON.stringify({ updates: [update] }), cast, scene)).toHaveLength(1);
-    for (const updates of [[{ ...update, evidence: ["他决定永远背叛"] }], [{ ...update, path: "其他作品/角色.md" }], [update, update], [{ ...update, evidence: [] }]]) expect(() => parseEvolution(JSON.stringify({ updates }), cast, scene)).toThrow();
+  it("keeps streamed fragments after cancellation and ignores late tokens", async () => {
+    const abort = new AbortController(), f = setup(abort.signal); let finish!: (value: string) => void;
+    let delta: LLMChatOptions["onDelta"];
+    const chat = vi.fn().mockImplementation((_history: LLMMessage[], options?: Omit<LLMChatOptions, "userPrompt">) => {
+      delta = options?.onDelta; delta?.('{"kind":"dialogue","visibility":"public","text":"没有说完');
+      return new Promise<string>(resolve => { finish = resolve; });
+    });
+    const job = new StoryRunner({ chatMessages: chat }).run(f.session, f.context, DEFAULT_AGENT_SETTINGS, cast, f.config, () => {}, save);
+    await vi.waitFor(() => expect(chat).toHaveBeenCalledOnce()); abort.abort(); const result = await job; delta?.('的迟到内容"}'); finish(line("迟到的完整内容"));
+    expect(result.content).toBe("没有说完"); expect(live(result).blocks[0].status).toBe("interrupted"); expect(chat).toHaveBeenCalledOnce();
+    await expect(new StoryRunner({ chatMessages: chat }).run(f.session, setup().context, DEFAULT_AGENT_SETTINGS, cast, f.config, () => {}, save, { resume: result })).rejects.toThrow("未完成片段");
   });
-  it("stops cancelled generations without accepting late actor output or invoking another actor", async () => {
-    const abort = new AbortController(); let finish!: (value: string) => void;
-    const client = { chatMessages: vi.fn().mockImplementation(() => new Promise<string>(resolve => { finish = resolve; })) };
-    const session = newSession(); session.messages.push({ id: "u", role: "user", content: "继续", createdAt: 1 });
-    const job = new StoryRunner(client).run(session, context(abort.signal), DEFAULT_AGENT_SETTINGS, cast, { characterPaths: [], rounds: 1 }, () => {}, async () => {});
-    await vi.waitFor(() => expect(client.chatMessages).toHaveBeenCalledOnce()); abort.abort(); const result = await job; finish("迟到的行为");
-    expect(result.status).toBe("cancelled"); expect(result.story!.turns).toEqual([]); expect(result.proposals).toEqual([]); expect(client.chatMessages).toHaveBeenCalledOnce();
+  it("retains repeated long speeches and stops on context budget rather than summarizing", async () => {
+    const f = setup(); const speech = '“每一句话都必须保留。”'.repeat(800);
+    const chat = vi.fn().mockResolvedValueOnce(line(speech));
+    const result = await new StoryRunner({ chatMessages: chat }, 8000).run(f.session, f.context, { ...DEFAULT_AGENT_SETTINGS, contextChars: 8000 }, cast, f.config, () => {}, save);
+    expect(chat).toHaveBeenCalledOnce(); expect(result.error).toContain("预算"); expect(result.content).toBe(speech);
   });
-  it("enforces the context budget before sending oversized character cards to the model", async () => {
-    const client = { chatMessages: vi.fn() }; const session = newSession(); session.messages.push({ id: "u", role: "user", content: "继续", createdAt: 1 });
-    const result = await new StoryRunner(client, 8000).run(session, context(), { ...DEFAULT_AGENT_SETTINGS, contextChars: 8000 }, [{ ...cast[0], content: "过长设定".repeat(5000) }], { characterPaths: [], rounds: 1 }, () => {}, async () => {});
-    expect(client.chatMessages).not.toHaveBeenCalled(); expect(result.error).toContain("超过上下文预算");
+  it("uses only confirmed v2 revisions and ignores drafts, legacy prose and summaries for shared scene knowledge", async () => {
+    const f = setup(); f.session.summary = { content: "未确认背叛", through: "old" };
+    f.session.messages.unshift({ id: "old", role: "assistant", content: "旧版秘密谋杀", createdAt: 0, story: { projectPath: "作品", chapterPath: "作品/01.md", cast, turns: [], confirmedAt: 1 } });
+    const chat = vi.fn().mockResolvedValueOnce(line("“你好。”")).mockResolvedValueOnce(target("end"));
+    const result = await new StoryRunner({ chatMessages: chat }).run(f.session, f.context, DEFAULT_AGENT_SETTINGS, cast, f.config, () => {}, save);
+    expect(result.status).toBe("completed"); expect(live(result).state).toBe("review");
+    expect(chat.mock.calls[0][0][0].content).not.toContain("秘密谋杀"); expect(chat.mock.calls[0][0][0].content).not.toContain("未确认背叛");
   });
-  it("keeps a completed long speech intact when it exceeds the next actor's context budget", async () => {
-    const speech = '“每一句话都必须保留。”'.repeat(800);
-    const client = { chatMessages: vi.fn().mockResolvedValueOnce(speech) };
-    const session = newSession(); session.messages.push({ id: "u", role: "user", content: "继续完整谈话", createdAt: 1 });
-    const result = await new StoryRunner(client, 8000).run(session, context(), { ...DEFAULT_AGENT_SETTINGS, contextChars: 8000 }, cast, { characterPaths: [], rounds: 1 }, () => {}, async () => {});
-    expect(client.chatMessages).toHaveBeenCalledOnce(); expect(result.error).toContain("超过上下文预算");
-    expect(result.content).toBe(speech); expect(result.story!.turns[0].content).toBe(speech);
+  it("requires confirmation before evolving and validates original evidence and cast paths", async () => {
+    const f = setup(); const chat = vi.fn().mockResolvedValueOnce(line("“把钥匙交给阿宁。”")).mockResolvedValueOnce(target("end"));
+    const runner = new StoryRunner({ chatMessages: chat }), result = await runner.run(f.session, f.context, DEFAULT_AGENT_SETTINGS, cast, f.config, () => {}, save);
+    await expect(runner.evolve(result, cast, f.context, () => {})).rejects.toThrow("先确认");
+    live(result).confirmedAt = 1; live(result).state = "confirmed"; live(result).confirmedBlocks = structuredClone(live(result).blocks);
+    chat.mockResolvedValueOnce(JSON.stringify({ updates: [{ path: cast[0].path, insight: "愿意让同伴参与，仍保留谨慎。", evidence: ["把钥匙交给阿宁"] }] })).mockResolvedValueOnce('{"updates":[]}');
+    await runner.evolve(result, cast, f.context, () => {}); expect(result.proposals![0].changes[0].after).toContain(cast[0].content); expect(result.proposals![0].status).toBe("pending");
+    expect(() => parseEvolution(JSON.stringify({ updates: [{ path: cast[1].path, insight: "任意改变", evidence: ["不存在的事件"] }] }), cast, result.content)).toThrow();
   });
 });

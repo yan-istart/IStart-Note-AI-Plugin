@@ -4,10 +4,13 @@ import type DeepSeekPlugin from "../main";
 import type { DeepSeekSettings } from "../types";
 import type { SkillDefinition } from "../core/skills/types";
 import { BaiduAuthModal } from "../features/sync/BaiduAuthModal";
+import { renderPublishingConnection } from "../features/publishing/PublishingSettings";
+import { publishingFolder } from "../core/publishing/types";
 
-type SettingsSection = "knowledge" | "writing" | "skill" | "annotation" | "interface" | "sync" | "auxiliary";
+type SettingsSection = "knowledge" | "writing" | "skill" | "annotation" | "interface" | "sync" | "publishing" | "auxiliary";
 
 const SETTINGS_SECTIONS: { id: SettingsSection; label: string; aliases: string[] }[] = [
+  { id: "publishing", label: "内容分发", aliases: ["远程服务地址", "本地安装并启动", "分发目录", "Wechatsync", "图文分发"] },
   { id: "knowledge", label: "知识", aliases: ["知识路径", "Q&A 笔记目录", "问题索引目录", "概念页目录", "知识索引", "索引状态", "生成笔记后自动打开图谱"] },
   { id: "writing", label: "写作", aliases: ["写作路径", "作品目录", "续写与插写", "写作上下文范围", "上下文长度", "默认续写字数", "默认插写字数"] },
   { id: "skill", label: "Skill", aliases: ["写作 Skill", "启用自动附带", "仅在写作场景注入", "Skill 根目录", "最大注入字符", "已发现 Skill"] },
@@ -18,6 +21,7 @@ const SETTINGS_SECTIONS: { id: SettingsSection; label: string; aliases: string[]
 ];
 
 export class DeepSeekSettingsTab extends PluginSettingTab {
+  private publishingUnsubscribe: (() => void) | null = null;
   private activeSection: SettingsSection = "auxiliary"; // start with AI setup
   private skillListGeneration = 0;
 
@@ -85,6 +89,9 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
 
   private renderSection(container: HTMLElement): void {
     switch (this.activeSection) {
+      case "publishing":
+        this.renderPublishing(container);
+        break;
       case "knowledge":
         this.renderKnowledge(container);
         break;
@@ -108,6 +115,25 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         break;
     }
   }
+
+  private renderPublishing(el: HTMLElement): void {
+    new Setting(el).setName("分发目录").setDesc("保存稿件和图片快照、逐次发送记录，首次保存时创建。")
+      .addText(input => input.setValue(this.plugin.settings.publishing.folder)
+        .setDisabled(this.plugin.publishing.busy || this.plugin.publishing.records.some(record => record.job.state === "sending"))
+        .onChange(async value => {
+        try {
+          this.plugin.settings.publishing.folder = publishingFolder(value);
+          this.plugin.publishing.snapshot = null;
+          await this.plugin.saveSettings(); this.plugin.knowledgeIndex?.rebuild();
+        } catch { /* Keep the last valid folder while typing. */ }
+      }));
+    renderPublishingConnection(el, this.plugin, () => this.refresh());
+    const status = el.createEl("p", { text: this.plugin.publishing.message, attr: { role: "status" } });
+    this.publishingUnsubscribe?.();
+    this.publishingUnsubscribe = this.plugin.publishing.onChange(() => { if (status.isConnected) status.setText(this.plugin.publishing.message); });
+  }
+
+  hide(): void { this.publishingUnsubscribe?.(); this.publishingUnsubscribe = null; }
 
   // ══════════════════════════════════════════════════════════════
   //  知识
@@ -529,7 +555,11 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
     new Setting(el).setName("流式输出").setDesc("逐步显示回答。服务不支持浏览器跨域请求时，自动回退为完整回复。")
       .addToggle(t => t.setValue(this.plugin.settings.agent.streaming).onChange(async value => { this.plugin.settings.agent.streaming = value; await this.plugin.saveSettings(); }));
     new Setting(el).setName("每轮工具步数上限").setDesc("2–20 步，默认 8 步。复杂任务可以拆分到后续消息。")
-      .addSlider(s => s.setLimits(2, 20, 1).setValue(this.plugin.settings.agent.maxSteps).setDynamicTooltip().onChange(async value => { this.plugin.settings.agent.maxSteps = value; await this.plugin.saveSettings(); }));
+      .addSlider(s => {
+        s.setLimits(2, 20, 1).setValue(this.plugin.settings.agent.maxSteps);
+        s.sliderEl.title = String(this.plugin.settings.agent.maxSteps);
+        return s.onChange(async value => { s.sliderEl.title = String(value); this.plugin.settings.agent.maxSteps = value; await this.plugin.saveSettings(); });
+      });
     new Setting(el).setName("上下文资料预算").setDesc("引用笔记、对话历史和工具结果的字符预算，不含工具说明和技能。")
       .addDropdown(d => d.addOption("12000", "精简 · 12,000 字符").addOption("30000", "标准 · 30,000 字符").addOption("60000", "扩展 · 60,000 字符").setValue(String(this.plugin.settings.agent.contextChars)).onChange(async value => { this.plugin.settings.agent.contextChars = Number(value); await this.plugin.saveSettings(); }));
     new Setting(el).setName("共享会话历史").setDesc("默认仅存本机插件目录。启用后将对话内容与引用快照写入 IStart/Agent Sessions/history.json，可由 Vault 同步服务同步；API Key 不写入会话文件。关闭后保留已有共享文件。")

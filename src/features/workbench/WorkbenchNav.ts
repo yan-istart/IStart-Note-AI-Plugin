@@ -12,6 +12,7 @@ export function renderWorkbenchNav(root: HTMLElement, plugin: DeepSeekPlugin, ac
     { id: "assistant", label: "AI 助手", icon: "messages-square", open: () => plugin.activateAgentView() },
     { id: "annotations", label: "批注", icon: "highlighter", open: () => plugin.activateAnnotationView() },
     { id: "sync", label: "数据同步", icon: "cloud", open: () => plugin.activateSyncView() },
+    { id: "publishing", label: "内容分发", icon: "send", open: () => plugin.activatePublishingView() },
   ];
   for (const section of sections) {
     const button = tabs.createEl("button", {

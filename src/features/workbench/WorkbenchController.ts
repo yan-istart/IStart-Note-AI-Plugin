@@ -5,6 +5,7 @@ export const WORKBENCH_VIEWS = {
   assistant: "istart-agent-view",
   annotations: "istart-annotations-view",
   sync: "istart-baidu-sync-view",
+  publishing: "istart-publishing-view",
 } as const;
 
 export type WorkbenchSection = keyof typeof WORKBENCH_VIEWS;

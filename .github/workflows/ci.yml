@@ -25,8 +25,8 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
-      - name: Check community scorecard rules
-        run: npm run lint
+      - name: Check official Obsidian plugin guidelines
+        run: npm run check:obsidian
 
       - name: Build
         run: npm run build

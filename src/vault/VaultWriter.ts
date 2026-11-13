@@ -107,8 +107,8 @@ ${tagLine || "暂无标签"}
 
   private async appendBacklink(sourceNotePath: string, qaFilePath: string, question: string): Promise<void> {
     if (!sourceNotePath) return;
-    const sourceFile = this.app.vault.getAbstractFileByPath(sourceNotePath) as TFile | null;
-    if (!sourceFile) return;
+    const sourceFile = this.app.vault.getAbstractFileByPath(sourceNotePath);
+    if (!(sourceFile instanceof TFile)) return;
 
     const content = await this.app.vault.read(sourceFile);
     const backlinkSection = "## 相关问答";

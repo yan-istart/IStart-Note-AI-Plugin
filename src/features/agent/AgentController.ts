@@ -4,6 +4,7 @@ import type DeepSeekPlugin from "../../main";
 import { SessionStore, parseSessionData } from "../../core/agent/SessionStore";
 import { AgentRunner } from "../../core/agent/AgentRunner";
 import { StoryRunner } from "../../core/agent/StoryRunner";
+import { serializeStory, validStoryTarget } from "../../core/agent/StoryContent";
 import { AgentTools } from "../../core/agent/AgentTools";
 import { LLMClient } from "../../core/llm";
 import { abortable } from "../../core/llm/LLMClient";
@@ -12,7 +13,7 @@ import { resolveWritingScope } from "../../core/skills/WritingScope";
 import { applyChanges, changedRange, noteName } from "../../core/agent/Changes";
 import { WritingProjectManager } from "../writing/WritingProjectManager";
 import { readNote, snapshotReference, writeChange, ensureNoteFolder } from "../../core/agent/Context";
-import { AgentSession, AgentMessage, AgentRunContext, ChangeProposal, NoteReference, NoteSnapshot, StoryConfig, AgentTask, newSession, agentId } from "../../core/agent/types";
+import { AgentSession, AgentMessage, AgentRunContext, ChangeProposal, NoteReference, NoteSnapshot, StoryConfig, AgentTask, StoryBlock, StoryTarget, isLiveStory, newSession, agentId } from "../../core/agent/types";
 import { AGENT_TASKS, validateTaskFields, taskDescription } from "../../core/agent/AgentTasks";
 
 export const SYNC_HISTORY_PATH = "IStart/Agent Sessions/history.json";
@@ -74,7 +75,7 @@ export class AgentController {
   setInsertionReference(id: string, reference: NoteReference): void {
     const s = this.sessions.find(s => s.id === id);
     if (!s || s.archived) throw new Error("会话不可用");
-    if (this.isRunning(id)) throw new Error("请在生成结束后调整插入位置");
+    if (this.isRunning(id) || this.openStory(id)) throw new Error("请在本场演绎确认或另起一场后调整插入位置");
     if (s.references.length >= 8 && !s.references.some(r => r.path === reference.path)) throw new Error("每个会话最多引用8篇笔记，请先移除一个引用");
     if (!reference.cursor || !Number.isInteger(reference.cursor.offset) || reference.cursor.offset < 0 || reference.cursor.offset > reference.cursor.content.length) throw new Error("插入位置无效");
     const captured = cloneJson(reference);
@@ -108,6 +109,7 @@ export class AgentController {
   update(id: string, change: Partial<Pick<AgentSession, "title" | "draft" | "mode" | "searchVault" | "pinned">>): void {
     const s = this.sessions.find(s => s.id === id); if (!s) return;
     if (this.isRunning(id) && (change.mode !== undefined || change.searchVault !== undefined)) throw new Error("请在本轮生成结束后修改执行模式和检索范围");
+    if (this.openStory(id) && (change.mode !== undefined && change.mode !== s.mode || change.searchVault !== undefined)) throw new Error("请先确认本场剧情，或保留草稿并另起一场，再修改模式");
     Object.assign(s, change); this.touch(s);
   }
   updateDraft(id: string, draft: string): void { const s = this.sessions.find(s => s.id === id); if (s) { s.draft = draft; s.updatedAt = Date.now(); this.saveSoon(); } }
@@ -166,8 +168,11 @@ export class AgentController {
   updateStoryConfig(id: string, config: StoryConfig): void {
     this.ready(); const s = this.sessions.find(s => s.id === id); if (!s) return;
     if (this.isRunning(id)) throw new Error("请等待本轮结束后修改参演设置");
+    if (this.openStory(id)) throw new Error("本场角色与资料已固定，请确认剧情或另起一场后调整");
     if (![1, 2, 3].includes(config.rounds) || config.characterPaths.length > 4 || new Set(config.characterPaths).size !== config.characterPaths.length) throw new Error("请选择1–4名角色，演绎1–3轮");
-    s.storyConfig = { rounds: config.rounds, characterPaths: [...config.characterPaths] }; this.touch(s);
+    if (config.maxTurns !== undefined && (!Number.isInteger(config.maxTurns) || config.maxTurns < 1 || config.maxTurns > 24)) throw new Error("连续推进次数应为1–24次");
+    if (config.openingTarget !== undefined && config.openingTarget !== "auto" && config.openingTarget !== "scene" && !config.characterPaths.includes(config.openingTarget)) throw new Error("开场角色必须属于参演列表");
+    s.storyConfig = { rounds: config.rounds, characterPaths: [...config.characterPaths], maxTurns: config.maxTurns, openingTarget: config.openingTarget }; this.touch(s);
   }
   async storyCharacters(id: string): Promise<{ path: string; name: string }[]> {
     this.ready(); const s = this.sessions.find(s => s.id === id);
@@ -180,13 +185,14 @@ export class AgentController {
   attach(reference: NoteReference, replace = false): void {
     const s = this.active; if (!s) return;
     if (this.isRunning(s.id)) throw new Error("请等待本轮结束后修改引用");
+    if (this.openStory(s.id)) throw new Error("本场引用已固定，请确认剧情或另起一场后调整");
     if (replace) s.references = [];
     const index = s.references.findIndex(r => r.path === reference.path);
     if (index >= 0) s.references[index] = reference;
     else { if (s.references.length >= 8) throw new Error("每个会话最多引用8篇笔记"); s.references.push(reference); }
     this.touch(s);
   }
-  detach(path: string): void { const s = this.active; if (!s || this.isRunning(s.id)) return; s.references = s.references.filter(r => r.path !== path); this.touch(s); }
+  detach(path: string): void { const s = this.active; if (!s || this.isRunning(s.id) || this.openStory(s.id)) return; s.references = s.references.filter(r => r.path !== path); this.touch(s); }
   archive(id: string): void {
     if (this.applying) throw new Error("请等待当前修改应用完成后归档会话");
     const s = this.sessions.find(s => s.id === id); if (!s) return;
@@ -222,23 +228,109 @@ export class AgentController {
       delete m.checkpoint;
       if (m.status === "running") { m.status = "interrupted"; m.error = "从运行中的会话分支，请继续提问"; }
       if (m.story?.evolution?.status === "running") m.story.evolution = { status: "error", content: "", error: "分支未继承运行中的角色推演，可重试推演" };
+      if (isLiveStory(m.story)) {
+        if (m.story.state === "running") m.story.state = "interrupted";
+        for (const block of m.story.blocks) if (block.status === "streaming") block.status = "interrupted";
+        m.story.runtime.pauseRequested = false;
+      }
       for (const p of m.proposals ?? []) if (p.status === "pending" || p.status === "applying") p.status = "rejected";
     }
     this.sessions.push(fresh); this.store.data.activeId = fresh.id; this.touch(fresh); return fresh;
   }
   stop(id: string): void { this.running.get(id)?.abort(); }
   send(id: string, text: string): Promise<void> {
+    const scene = this.openStory(id);
+    if (scene && text.trim()) {
+      this.directStory(id, scene.id, text.trim());
+      return this.isRunning(id) ? Promise.resolve() : this.continueStory(id, scene.id);
+    }
     return this.track(this.runTurn(id, text));
   }
   canResume(session: AgentSession, message: AgentMessage): boolean {
+    if (isLiveStory(message.story)) return message.story.confirmedAt === undefined && !message.story.dismissed && message.story.state !== "running" && !session.archived && !this.isRunning(session.id);
     return message.role === "assistant" && !!message.checkpoint && ["cancelled", "error", "interrupted"].includes(message.status ?? "") && session.messages[session.messages.length - 1] === message && !session.archived && !this.isRunning(session.id);
   }
   resume(sessionId: string, messageId: string): Promise<void> {
     const session = this.sessions.find(s => s.id === sessionId);
     const message = session?.messages.find(m => m.id === messageId);
+    if (message && isLiveStory(message.story)) return this.continueStory(sessionId, messageId);
     if (!session || !message || !this.canResume(session, message)) return Promise.reject(new Error("此消息没有可继续的任务断点；较早的任务请重新发起"));
     if (message.checkpoint!.mode !== session.mode || message.checkpoint!.searchVault !== session.searchVault) return Promise.reject(new Error("执行模式或检索范围已改变，请切回原设置后继续任务，或按当前设置重新生成"));
     return this.track(this.runTurn(sessionId, "", message));
+  }
+  openStory(sessionId: string): AgentMessage | undefined {
+    return [...(this.sessions.find(s => s.id === sessionId)?.messages ?? [])].reverse().find(m => isLiveStory(m.story) && m.story.confirmedAt === undefined && !m.story.dismissed);
+  }
+  private storyMessage(sessionId: string, messageId: string): { session: AgentSession; message: AgentMessage } {
+    this.ready(); const session = this.sessions.find(s => s.id === sessionId), message = session?.messages.find(m => m.id === messageId);
+    if (!session || !message || !isLiveStory(message.story) || session.archived || session.mode !== "story" || message.story.confirmedAt !== undefined || message.story.dismissed) throw new Error("此场景不可继续，请切回小说演绎模式或另起一场");
+    return { session, message };
+  }
+  pauseStory(sessionId: string, messageId: string): void {
+    const { session, message } = this.storyMessage(sessionId, messageId);
+    message.story!.runtime!.pauseRequested = true; this.touch(session);
+  }
+  endStory(sessionId: string, messageId: string): void {
+    const { session, message } = this.storyMessage(sessionId, messageId);
+    const story = message.story!;
+    story.runtime!.next = "end"; story.runtime!.pauseRequested = true;
+    if (!this.isRunning(sessionId)) { story.state = "review"; message.status = "completed"; }
+    this.touch(session);
+  }
+  dismissStory(sessionId: string, messageId: string): void {
+    const { session, message } = this.storyMessage(sessionId, messageId);
+    if (this.isRunning(sessionId)) throw new Error("请先暂停或打断本场演绎");
+    message.story!.dismissed = true; message.story!.state = "review"; message.status = "completed"; this.touch(session);
+  }
+  directStory(sessionId: string, messageId: string, text: string, target?: StoryTarget): void {
+    const { session, message } = this.storyMessage(sessionId, messageId), story = message.story!;
+    if (this.applying) throw new Error("请等待修改应用完成");
+    if (text.length > 20000 || story.runtime!.directives.length >= 100) throw new Error("导演指令过长或过多，请确认本场后继续");
+    if (target !== undefined && !validStoryTarget(story, target)) throw new Error("目标不属于当前场景");
+    story.runtime!.directives.push({ id: agentId(), text, target });
+    if (target !== undefined) story.runtime!.next = target;
+    session.draft = ""; this.touch(session);
+  }
+  resolveStoryBlock(sessionId: string, messageId: string, blockId: string, keep: boolean): void {
+    const { session, message } = this.storyMessage(sessionId, messageId);
+    if (this.isRunning(sessionId)) throw new Error("请先打断当前请求");
+    const block = message.story!.blocks!.find(b => b.id === blockId);
+    if (!block || block.status === "completed" || block.omitted) throw new Error("此片段无需处理");
+    if (keep && !block.text.trim()) throw new Error("空片段只能跳过");
+    if (keep) block.status = "completed"; else block.omitted = true;
+    message.content = serializeStory(message.story!.blocks!); this.touch(session);
+  }
+  continueStory(sessionId: string, messageId: string, singleStep = false): Promise<void> {
+    return this.track(this.continueStoryRun(sessionId, messageId, singleStep));
+  }
+  private async continueStoryRun(sessionId: string, messageId: string, singleStep: boolean): Promise<void> {
+    const { session, message } = this.storyMessage(sessionId, messageId);
+    const scene = message.story!;
+    if (!isLiveStory(scene)) return;
+    if (this.isRunning(sessionId) || this.applying) throw new Error("请等待当前任务完成");
+    if (this.running.size >= 2) throw new Error("已有两个会话正在生成，请稍后再试");
+    if (scene.blocks.some(b => b.status !== "completed" && !b.omitted)) throw new Error("请先保留或跳过未完成片段");
+    if (scene.state === "review" && scene.runtime.next === "end") scene.runtime.next = undefined;
+    const abort = new AbortController(); this.running.set(sessionId, abort);
+    let timedOut = false;
+    const timer = window.setTimeout(() => { timedOut = true; abort.abort(); }, 300000);
+    try {
+      this.checkStoryDrafts(session, scene.cast.map(c => c.path));
+      for (const note of [...scene.runtime.notes, ...scene.cast]) {
+        if (await abortable(readNote(this.app, note.path), abort.signal) !== note.content) throw new Error(`场景来源已变化：${note.path}。已有内容保留，请另起一场使用新资料。`);
+      }
+      const skills = selectSkills(await abortable(this.plugin.skillRegistry.ensureLoaded(), abort.signal), { feature: "writing", userPrompt: scene.runtime.task, writingScope: scene.runtime.scope }, this.plugin.settings.skills);
+      const context: AgentRunContext = { sessionId, mode: "story", notes: new Map(scene.runtime.notes.map(n => [n.path, n])), primary: scene.runtime.notes.find(n => n.path === scene.chapterPath), scope: scene.runtime.scope, writing: scene.runtime.writing, searchVault: false, signal: abort.signal, sources: new Set(message.sources) };
+      const settings = { ...this.plugin.settings, agent: { ...this.plugin.settings.agent } };
+      const client = new LLMClient(settings, { signal: abort.signal, skills, skillContext: { ...scene.runtime.scope, useActiveFile: false } });
+      await new StoryRunner(client, settings.agent.contextChars).run(session, context, settings.agent, scene.cast, scene.runtime.config, () => this.emit(), () => this.persist(), { resume: message, singleStep });
+      if (timedOut) message.error = "本次演绎超过5分钟，原稿已保留，可继续本场";
+    } catch (error) {
+      scene.state = "interrupted"; message.status = "error"; message.error = error instanceof Error ? error.message : "无法继续演绎";
+    } finally {
+      window.clearTimeout(timer); this.running.delete(sessionId); session.updatedAt = Date.now(); this.emit();
+      await this.persist(); await this.pushSharedHistory();
+    }
   }
   private track(task: Promise<void>): Promise<void> {
     this.pending.add(task);
@@ -293,7 +385,7 @@ export class AgentController {
         if (!context.primary || !context.scope || context.writing?.genre !== "novel") throw new Error("小说演绎需要作品角色卡。请将小说项目的章节作为第一篇引用，并在「参演设置」中选择角色。");
         if (s.messages.some(m => m.story?.confirmedAt !== undefined && m.story.projectPath === context.scope!.projectPath && m.story.evolution?.status !== "completed")) throw new Error("已有已确认剧情尚未完成角色推演，请先点击「重试角色推演」");
         const available = await abortable(this.storyCharacters(id), abort.signal);
-        const config = s.storyConfig ?? { characterPaths: [], rounds: 1 };
+        const config = s.storyConfig ?? { characterPaths: [], rounds: 1, maxTurns: 6, openingTarget: "auto" };
         const paths = config.characterPaths.length ? config.characterPaths : available.map(c => c.path);
         if (!paths.length || paths.length > 4) throw new Error("请在「参演设置」中选择1–4名角色；没有角色卡时，请先提取或创建角色卡。");
         if (paths.some(path => !available.some(c => c.path === path))) throw new Error("参演角色不属于当前小说项目，请重新选择角色");
@@ -315,9 +407,11 @@ export class AgentController {
       }, { resume, task: user.task, save: () => this.persist() });
       if (timedOut) { result.status = "error"; result.error = "本轮任务超过5分钟，已停止。可缩小任务范围后重试。"; }
     } catch (error) {
-      const failed: AgentMessage = resume ?? { id: agentId(), role: "assistant", content: "", createdAt: Date.now() };
+      const latest = s.messages[s.messages.length - 1];
+      const existing = latest?.role === "assistant" ? latest : undefined;
+      const failed: AgentMessage = resume ?? existing ?? { id: agentId(), role: "assistant", content: "", createdAt: Date.now() };
       failed.status = abort.signal.aborted ? "cancelled" : "error"; failed.error = error instanceof Error ? error.message : "生成失败";
-      if (!resume) s.messages.push(failed);
+      if (!resume && !existing) s.messages.push(failed);
     } finally {
       window.clearTimeout(timer); this.running.delete(id); s.updatedAt = Date.now(); this.emit();
       await this.persist(); await this.pushSharedHistory();
@@ -341,20 +435,39 @@ export class AgentController {
   private checkStoryDrafts(session: AgentSession, paths: string[]): void {
     if (session.messages.some(m => m.proposals?.some(p => ["pending", "applying"].includes(p.status) && p.changes.some(c => paths.includes(c.path))))) throw new Error("参演角色还有待处理的修改，请先应用或放弃角色卡更新，再继续演绎或推演");
   }
-  confirmStory(sessionId: string, messageId: string, content?: string): Promise<void> {
+  confirmStory(sessionId: string, messageId: string, content?: string | StoryBlock[]): Promise<void> {
     return this.track(this.evolveStory(sessionId, messageId, content));
   }
-  private async evolveStory(sessionId: string, messageId: string, content?: string): Promise<void> {
+  skipStoryEvolution(sessionId: string, messageId: string): void {
+    const session = this.sessions.find(s => s.id === sessionId), message = session?.messages.find(m => m.id === messageId);
+    if (!session || message?.story?.confirmedAt === undefined || this.isRunning(sessionId) || message.story.evolution?.status === "completed") throw new Error("此场景当前不能跳过推演");
+    message.story.evolution = { status: "completed", content: "作者选择保留已确认剧情，暂不更新角色卡。" }; message.status = "completed"; message.error = undefined; this.touch(session);
+  }
+  private async evolveStory(sessionId: string, messageId: string, content?: string | StoryBlock[]): Promise<void> {
     this.ready(); const s = this.sessions.find(s => s.id === sessionId);
     const message = s?.messages.find(m => m.id === messageId), story = message?.story;
     if (!s || !message || !story) throw new Error("演绎场景不存在");
     if (s.archived || s.mode !== "story") throw new Error("请恢复会话并切回小说演绎与进化模式");
     if (this.applying || this.isRunning(s.id)) throw new Error("请等待当前任务完成");
     if (this.running.size >= 2) throw new Error("已有两个会话正在生成，请稍后再试");
-    if (story.confirmedAt === undefined && (s.messages[s.messages.length - 1] !== message || message.status !== "completed")) throw new Error("只能确认最新一轮已完成的演绎，较早的剧情请先创建会话分支");
+    const live = isLiveStory(story);
+    if (story.dismissed) throw new Error("此场景已保留为草稿，请从消息创建分支后继续");
+    if (story.confirmedAt === undefined && (s.messages[s.messages.length - 1] !== message || (live ? story.state === "running" : message.status !== "completed"))) throw new Error("请暂停并确认最新场景，较早的剧情请先创建会话分支");
     if (story.evolution?.status === "completed") throw new Error("本场角色推演已完成，请检查角色卡更新预览");
-    const scene = story.confirmedAt === undefined ? (content ?? message.content).trim() : message.content;
-    if (!scene || scene.length > 24000) throw new Error("请确认1–24,000字符的场景正文");
+    let revision: StoryBlock[] | undefined;
+    if (live && story.confirmedAt === undefined) {
+      if (typeof content === "string") throw new Error("新版场景请按内容块修订，保留对白身份与信息可见性");
+      if (story.blocks.some(b => b.status !== "completed" && !b.omitted)) throw new Error("请先处理未完成片段，再确认剧情");
+      const requested = content ?? story.blocks;
+      if (new Set(requested.map(b => b.id)).size !== requested.length) throw new Error("修订包含重复的内容块");
+      revision = requested.filter(b => !b.omitted).map(b => {
+        const original = story.blocks.find(source => source.id === b.id);
+        if (!original || original.omitted || original.status !== "completed" || typeof b.text !== "string" || !b.text.trim() || b.text.length > 100000) throw new Error("修订包含无效或未完成的内容块");
+        return { ...cloneJson(original), text: b.text, status: "completed" as const };
+      }).sort((a, b) => a.seq - b.seq);
+    }
+    const scene = story.confirmedAt === undefined ? revision ? serializeStory(revision) : (typeof content === "string" ? content : message.content).trim() : message.content;
+    if (!scene || scene.length > (live ? 200000 : 24000)) throw new Error("正文为空或过长，请按场景分段确认");
     this.checkStoryDrafts(s, story.cast.map(c => c.path));
     const abort = new AbortController(); this.running.set(s.id, abort);
     let timedOut = false;
@@ -363,9 +476,11 @@ export class AgentController {
       // Persist canon before any role analysis. Failed saves must not start a model request.
       const previousContent = message.content;
       const previousConfirmedAt = story.confirmedAt;
+      const previousBlocks = story.confirmedBlocks, previousState = story.state;
       message.content = scene; story.confirmedAt = story.confirmedAt ?? Date.now(); s.updatedAt = Date.now();
+      if (live) { story.confirmedBlocks = revision ?? story.confirmedBlocks; story.state = "confirmed"; }
       try { await this.persist(); }
-      catch (error) { message.content = previousContent; story.confirmedAt = previousConfirmedAt; throw error; }
+      catch (error) { message.content = previousContent; story.confirmedAt = previousConfirmedAt; story.confirmedBlocks = previousBlocks; story.state = previousState; throw error; }
       story.evolution = { status: "running", content: "" }; message.status = "running"; message.error = undefined; this.emit();
       const cards: NoteSnapshot[] = [];
       for (const card of story.cast) cards.push(await abortable(snapshotReference(this.app, { path: card.path }), abort.signal));
@@ -435,7 +550,7 @@ export class AgentController {
     this.touch(s); return s;
   }
   async export(session: AgentSession): Promise<void> {
-    const content = `# ${session.title}\n\n${session.messages.map(m => `## ${m.role === "user" ? "我" : "AI 助手"}\n\n${m.content}${m.error ? `\n\n> ${m.error}` : ""}${m.sources?.length ? `\n\n来源：${m.sources.map(p => `[[${p}]]`).join("、")}` : ""}${m.proposals?.length ? `\n\n${m.proposals.map(p => `### ${p.title} · ${p.status}\n\n${p.changes.map(c => `文件：${c.path}\n\n\`\`\`markdown\n${c.after}\n\`\`\``).join("\n\n")}`).join("\n\n")}` : ""}`).join("\n\n---\n\n")}`;
+    const content = `# ${session.title}\n\n${session.messages.map(m => `## ${m.role === "user" ? "我" : "AI 助手"}\n\n${isLiveStory(m.story) ? serializeStory(m.story.confirmedAt !== undefined ? m.story.confirmedBlocks ?? [] : m.story.blocks) : m.content}${m.error ? `\n\n> ${m.error}` : ""}${m.sources?.length ? `\n\n来源：${m.sources.map(p => `[[${p}]]`).join("、")}` : ""}${m.proposals?.length ? `\n\n${m.proposals.map(p => `### ${p.title} · ${p.status}\n\n${p.changes.map(c => `文件：${c.path}\n\n\`\`\`markdown\n${c.after}\n\`\`\``).join("\n\n")}`).join("\n\n")}` : ""}`).join("\n\n---\n\n")}`;
     let path = `IStart/Conversations/${noteName(session.title)}.md`, index = 2;
     while (this.app.vault.getAbstractFileByPath(path)) path = `IStart/Conversations/${noteName(session.title)}-${index++}.md`;
     await ensureNoteFolder(this.app, path);

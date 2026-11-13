@@ -41,6 +41,7 @@ export type ActionSection =
   | "debt"
   | "writing-project"
   | "writing-chapter"
+  | "publishing"
   | "sync"
   | "assistant"
   | "document"

@@ -23,6 +23,7 @@ const requestBody = (index = 0) => {
 };
 
 beforeEach(() => {
+  vi.stubGlobal("window", globalThis);
   request.mockReset();
   setSkillProvider(null);
 });
@@ -174,5 +175,22 @@ describe("writing responses from DeepSeek", () => {
     expect(body.messages[0].content).toContain("writing-craft");
     expect(body.messages[0].content).toContain("段落要短");
     expect(body.messages[1]).toEqual({ role: "user", content: "继续写" });
+  });
+});
+
+describe("complete story transport", () => {
+  it("reports buffered fallback and retains its partial content without committing a truncated story response", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError("CORS"); }));
+    request.mockResolvedValue(response({ choices: [{ message: { content: '部分可保留原稿' }, finish_reason: "length" }] }));
+    const transport = vi.fn();
+    await expect(new LLMClient(settings).chatMessages([{ role: "user", content: "演绎" }], { onDelta: () => {}, onTransport: transport, requireComplete: true })).rejects.toMatchObject({ code: "output_limit", partialContent: "部分可保留原稿" });
+    expect(transport).toHaveBeenCalledWith("buffered"); expect(request).toHaveBeenCalledOnce();
+  });
+  it("does not accept EOF without a terminal finish reason as a completed story", async () => {
+    const body = new ReadableStream({ start(c) { c.enqueue(new TextEncoder().encode('data: {"choices":[{"delta":{"content":"已显示台词"}}]}\n\n')); c.close(); } });
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(body, { headers: { "content-type": "text/event-stream" } })));
+    const delta = vi.fn(), transport = vi.fn();
+    await expect(new LLMClient(settings).chatMessages([{ role: "user", content: "演绎" }], { onDelta: delta, onTransport: transport, requireComplete: true })).rejects.toMatchObject({ code: "interrupted", partialContent: "已显示台词" });
+    expect(delta).toHaveBeenCalledWith("已显示台词"); expect(transport).toHaveBeenCalledWith("streaming"); expect(request).not.toHaveBeenCalled();
   });
 });

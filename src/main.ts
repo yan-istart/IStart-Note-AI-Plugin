@@ -36,8 +36,12 @@ import { setResultConversationHandler } from "./features/agent/ResultConversatio
 import { TypoCheckView, TYPO_CHECK_VIEW_TYPE } from "./features/proofreading/TypoCheckView";
 import { WorkbenchController, WorkbenchSection } from "./features/workbench/WorkbenchController";
 import { AGENT_TASKS, createAgentTask } from "./core/agent/AgentTasks";
+import { PublishingController } from "./features/publishing/PublishingController";
+import { PublishingView, PUBLISHING_VIEW_TYPE } from "./features/publishing/PublishingView";
+import { loadPublishingSettings } from "./core/publishing/types";
 
 export default class DeepSeekPlugin extends Plugin {
+  publishing!: PublishingController;
   settings!: DeepSeekSettings;
   /** In-memory vault knowledge index, rebuilt on load, updated incrementally. */
   knowledgeIndex!: KnowledgeIndexService;
@@ -51,6 +55,8 @@ export default class DeepSeekPlugin extends Plugin {
 
   async onload() {
     await this.loadSettings();
+    this.publishing = new PublishingController(this);
+    await this.publishing.load();
 
     this.skillRegistry = new SkillRegistry(this.app, () => this.settings.skills);
     void this.skillRegistry.refresh();
@@ -78,7 +84,7 @@ export default class DeepSeekPlugin extends Plugin {
     this.addCommand({ id: "vault-qa-quick", name: "打开知识库问答（兼容快捷命令）", callback: () => this.openVaultQAQuick() });
 
     // Build knowledge index
-    this.knowledgeIndex = new KnowledgeIndexService(this.app, (path) => this.skillRegistry.isSkillPath(path));
+    this.knowledgeIndex = new KnowledgeIndexService(this.app, (path) => this.skillRegistry.isSkillPath(path) || this.publishing.store.inside(path));
     this.app.workspace.onLayoutReady(() => {
       this.knowledgeIndex.rebuild();
     });
@@ -113,6 +119,7 @@ export default class DeepSeekPlugin extends Plugin {
     this.gitChanges = new GitChangesController(this);
     this.addChild(this.gitChanges);
     this.registerView(SYNC_VIEW_TYPE, (leaf) => new BaiduSyncView(leaf, this));
+    this.registerView(PUBLISHING_VIEW_TYPE, leaf => new PublishingView(leaf, this));
     this.registerView(ANNOTATION_VIEW_TYPE, (leaf) => new AnnotationView(leaf, this));
     this.registerView(TYPO_CHECK_VIEW_TYPE, (leaf) => new TypoCheckView(leaf, this));
     this.app.workspace.onLayoutReady(() => {
@@ -152,6 +159,7 @@ export default class DeepSeekPlugin extends Plugin {
   }
 
   onunload(): void {
+    this.publishing?.dispose();
     setSkillProvider(null);
     setResultConversationHandler(null);
     void this.agent?.dispose().catch(error => new Notice(`会话保存失败：${(error as Error).message}`));
@@ -338,7 +346,7 @@ export default class DeepSeekPlugin extends Plugin {
   private async runAutomaticGitSync() {
     const cfg = this.settings.baiduSync;
     if (!cfg.enabled || cfg.syncEngine !== "git" || !cfg.autoSync || !cfg.accessToken
-      || document.visibilityState !== "visible" || this.automaticSyncRunning) return;
+      || activeDocument.visibilityState !== "visible" || this.automaticSyncRunning) return;
     this.automaticSyncRunning = true;
     try {
       const result = await new BaiduGitSyncService(this.app, cfg).sync();
@@ -357,6 +365,11 @@ export default class DeepSeekPlugin extends Plugin {
     await this.activateWorkbench("sync");
   }
 
+  async activatePublishingView(file?: TFile | null): Promise<void> {
+    await this.activateWorkbench("publishing");
+    if (file) await this.publishing.action(() => this.publishing.prepare(file));
+  }
+
   async beautifyCurrentNote() { await this.startAgentAction("beautify-note"); }
 
   // ── 执行模块入口已移除(v3.0)——原 ExecutionPlan 管线失效,详见 docs/design-writing-scenario.md
@@ -371,6 +384,7 @@ export default class DeepSeekPlugin extends Plugin {
     this.settings.floatingToolbar = loadFloatingToolbarSettings(saved?.floatingToolbar);
     this.settings.baiduSync = loadBaiduSyncConfig(saved?.baiduSync);
     this.settings.agent = loadAgentSettings(saved?.agent);
+    this.settings.publishing = loadPublishingSettings(saved?.publishing);
     if (this.settings.baiduSync.enabled && this.settings.baiduSync.accessToken && this.settings.baiduSync.autoPullConfig) {
       void this.pullConfig(true);
     }

@@ -6,6 +6,39 @@ export interface StoryConfig {
   /** Empty means all project characters, up to four. */
   characterPaths: string[];
   rounds: number;
+  maxTurns?: number;
+  openingTarget?: string;
+}
+export interface StoryBlock {
+  id: string;
+  turnId: string;
+  seq: number;
+  kind: "dialogue" | "narration";
+  characterPath?: string;
+  text: string;
+  status: "streaming" | "completed" | "interrupted";
+  visibility: "public" | "private";
+  ownerPath?: string;
+  omitted?: boolean;
+}
+/** A cast note path, or the reserved scene/end targets. */
+export type StoryTarget = string;
+export type StoryState = "running" | "paused" | "review" | "confirmed" | "interrupted";
+export interface StoryDirective { id: string; text: string; target?: StoryTarget; applied?: boolean }
+export interface StoryRuntime {
+  task: string;
+  notes: NoteSnapshot[];
+  primaryPath: string;
+  scope: WritingScopeInfo;
+  writing?: WritingContext | null;
+  config: StoryConfig;
+  completedTurns: number;
+  next?: StoryTarget;
+  pendingTurn?: { id: string; target: StoryTarget; raw: string };
+  failures?: { id: string; target: StoryTarget; raw: string; error: string }[];
+  directives: StoryDirective[];
+  pauseRequested?: boolean;
+  transport?: "streaming" | "buffered";
 }
 export interface StoryTurn {
   name: string;
@@ -20,7 +53,20 @@ export interface StoryScene {
   turns: StoryTurn[];
   confirmedAt?: number;
   evolution?: { status: "running" | "completed" | "error"; content: string; error?: string };
+  version?: 2;
+  blocks?: StoryBlock[];
+  state?: StoryState;
+  runtime?: StoryRuntime;
+  confirmedBlocks?: StoryBlock[];
+  dismissed?: boolean;
 }
+export interface LiveStoryScene extends StoryScene {
+  version: 2;
+  blocks: StoryBlock[];
+  state: StoryState;
+  runtime: StoryRuntime;
+}
+export function isLiveStory(scene?: StoryScene): scene is LiveStoryScene { return scene?.version === 2; }
 export type RunStatus = "idle" | "running" | "completed" | "cancelled" | "error" | "interrupted";
 export interface NoteReference {
   path: string;
@@ -109,7 +155,7 @@ export interface AgentSession {
   storyConfig?: StoryConfig;
   pendingTask?: AgentTask;
 }
-export interface SessionData { version: 1; activeId: string | null; sessions: AgentSession[]; deleted?: Record<string, number> }
+export interface SessionData { version: 1 | 2; activeId: string | null; sessions: AgentSession[]; deleted?: Record<string, number> }
 export interface AgentSettings { streaming: boolean; maxSteps: number; contextChars: number; syncHistory: boolean }
 export const DEFAULT_AGENT_SETTINGS: AgentSettings = { streaming: false, maxSteps: 8, contextChars: 30000, syncHistory: false };
 export function loadAgentSettings(value?: Partial<AgentSettings>): AgentSettings {
