@@ -48,5 +48,4 @@ jobs:
           gh release create "$tag" \
             --title="$tag" \
             --generate-notes \
-            --draft \
             $assets

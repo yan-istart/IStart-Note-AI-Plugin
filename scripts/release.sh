@@ -159,8 +159,8 @@ get_gh_repo() {
 show_release_workflow() {
   local gh_repo
   gh_repo=$(get_gh_repo)
-  info "GitHub Actions will build, attest, and upload the release assets."
-  info "Review and publish the draft after the workflow succeeds:"
+  info "GitHub Actions will build, attest, and publish the release with its assets."
+  info "Follow the release workflow progress:"
   echo "  https://github.com/${gh_repo}/actions/workflows/release.yml"
 }
 
