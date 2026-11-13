@@ -91,6 +91,42 @@ function device() {
 beforeEach(() => { cloud.files.clear(); cloud.failList = false; cloud.downloadHook = undefined; Platform.isWin = false; });
 
 describe("mobile adapter and live-vault application", () => {
+  it("applies a confirmed batch only while both local and cloud snapshots still match", async () => {
+    const a = device(), b = device();
+    await a.note("a.md", "base\n"); await a.note("b.md", "base\n");
+    await a.service().sync(); await b.service().sync();
+    await a.note("a.md", "cloud a\n"); await a.note("b.md", "cloud b\n"); await a.service().sync();
+    await b.note("a.md", "local a\n"); await b.note("b.md", "local b\n");
+    const preview = await b.service().sync();
+    expect(preview.conflicts).toHaveLength(2);
+    const choices = new Map(preview.conflicts.map(conflict => [conflict.key, { choice: "remote" as const }]));
+    const result = await b.service().sync(choices, undefined, preview);
+    expect(result.conflicts).toEqual([]);
+    expect(await b.content("a.md")).toBe("cloud a\n"); expect(await b.content("b.md")).toBe("cloud b\n");
+  });
+
+  it.each(["local", "cloud"])("rejects a confirmed batch when the %s snapshot changed after preview", async side => {
+    const a = device(), b = device();
+    await a.note("note.md", "base\n"); await a.service().sync(); await b.service().sync();
+    await a.note("note.md", "cloud\n"); await a.service().sync(); await b.note("note.md", "local\n");
+    const preview = await b.service().sync();
+    const choices = new Map(preview.conflicts.map(conflict => [conflict.key, { choice: "remote" as const }]));
+    if (side === "local") await b.note("note.md", "new local\n");
+    else { await a.note("note.md", "new cloud\n"); await a.service().sync(); }
+    await expect(b.service().sync(choices, undefined, preview)).rejects.toThrow("发生变化");
+    expect(await b.content("note.md")).toBe(side === "local" ? "new local\n" : "local\n");
+  });
+
+  it("invalidates a conflict preview when the sync scope changes", async () => {
+    const a = device(), b = device();
+    await a.note("note.md", "base"); await a.service().sync(); await b.service().sync();
+    await a.note("note.md", "cloud"); await a.service().sync(); await b.note("note.md", "local");
+    const preview = await b.service().sync();
+    b.config.ignorePattern = "ignored";
+    await expect(b.service().sync(new Map([[preview.conflicts[0].key, { choice: "remote" }]]), undefined, preview)).rejects.toThrow("同步设置已变化");
+    expect(await b.content("note.md")).toBe("local");
+  });
+
   it("reports local additions, modifications, deletions and diffs without committing or using cloud", async () => {
     const a = device();
     await a.note("edit.md", "old\n"); await a.note("delete.md", "removed\n");

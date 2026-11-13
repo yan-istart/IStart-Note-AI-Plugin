@@ -1,22 +1,31 @@
 import { App, ButtonComponent, Modal, Notice, Setting, TFile } from "obsidian";
 import type { BaiduSyncConfig } from "../../types";
-import { GitConflict, GitResolution, GitVersionFile, textOf } from "../../core/sync/GitSyncEngine";
-import { BaiduGitSyncService, GitRestorePreview, GitVaultResult } from "./BaiduGitSyncService";
+import { GitResolution, GitVersionFile, textOf } from "../../core/sync/GitSyncEngine";
+import { BaiduGitSyncService, GitConflictExpectation, GitRestorePreview, GitVaultResult } from "./BaiduGitSyncService";
+import { SyncConflictModal } from "./SyncConflictModal";
 
 export async function runGitSync(
   app: App, config: BaiduSyncConfig, saveSettings: () => Promise<void>,
   resolutions = new Map<string, GitResolution>()
 ): Promise<void> {
+  try { await performGitSync(app, config, saveSettings, resolutions); }
+  catch (error) { new Notice(`Git 同步失败：${(error as Error).message}`); }
+}
+
+async function performGitSync(
+  app: App, config: BaiduSyncConfig, saveSettings: () => Promise<void>,
+  resolutions: Map<string, GitResolution>, expected?: GitConflictExpectation
+): Promise<void> {
   const notice = new Notice("Git 整库同步中...", 0);
   try {
-    const result = await new BaiduGitSyncService(app, config).sync(resolutions, (message) => notice.setMessage(message));
+    const result = await new BaiduGitSyncService(app, config).sync(resolutions, message => notice.setMessage(message), expected);
     await saveSettings();
     showResult(result);
-    if (result.conflicts.length) new GitConflictModal(app, result.conflicts, resolutions, async (choices) => {
-      await runGitSync(app, config, saveSettings, choices);
+    if (result.conflicts.length) new SyncConflictModal(app, {
+      mode: "git", conflicts: result.conflicts, previous: resolutions,
+      apply: choices => performGitSync(app, config, saveSettings, choices, result),
     }).open();
-  } catch (error) { new Notice(`Git 同步失败：${(error as Error).message}`); }
-  finally { notice.hide(); }
+  } finally { notice.hide(); }
 }
 
 function showResult(result: GitVaultResult): void {
@@ -53,59 +62,6 @@ export class BaiduGitSyncModal extends Modal {
       .addButton((btn) => btn.setButtonText("整库版本历史").onClick(() => {
         this.close(); new GitHistoryModal(this.app, this.config).open();
       }));
-  }
-
-  onClose() { this.contentEl.empty(); }
-}
-
-class GitConflictModal extends Modal {
-  private readonly choices: Map<string, GitResolution>;
-
-  constructor(app: App, private readonly conflicts: GitConflict[], previous: Map<string, GitResolution>,
-    private readonly resolve: (choices: Map<string, GitResolution>) => Promise<void>) {
-    super(app); this.choices = new Map(previous);
-  }
-
-  onOpen() {
-    this.titleEl.setText("处理同步冲突");
-    this.contentEl.createEl("p", { text: "本地内容尚未被覆盖。为每个文件选择处理方式，关闭窗口可稍后再同步。" });
-    for (const conflict of this.conflicts) {
-      const box = this.contentEl.createDiv({ cls: "istart-git-conflict" });
-      box.createEl("h4", { text: conflict.path });
-      if (conflict.binary) box.createEl("p", { text: "附件内容冲突，请选择保留哪个版本。" });
-      else {
-        const previews = box.createDiv({ cls: "istart-git-comparison" });
-        this.preview(previews, "本地版本", conflict.local);
-        this.preview(previews, "云端版本", conflict.remote);
-      }
-      const manual = box.createEl("textarea", { cls: "istart-git-editor" });
-      manual.value = conflict.local ?? "";
-      manual.hidden = true;
-      manual.addEventListener("input", () => this.choices.set(conflict.key, { choice: "text", text: manual.value }));
-      new Setting(box).setName("处理方式").addDropdown((drop) => {
-        drop.addOption("", "请选择").addOption("local", "保留本地（本地已删除时保留删除）")
-          .addOption("remote", "保留云端（云端已删除时保留删除）");
-        if (!conflict.binary) drop.addOption("text", "编辑合并内容");
-        drop.onChange((value) => {
-          manual.hidden = value !== "text";
-          if (value === "text") this.choices.set(conflict.key, { choice: "text", text: manual.value });
-          else if (value === "local" || value === "remote") this.choices.set(conflict.key, { choice: value });
-          else this.choices.delete(conflict.key);
-        });
-      });
-    }
-    new Setting(this.contentEl).addButton((btn) => btn.setButtonText("应用并继续同步").setCta().onClick(() => {
-      if (this.conflicts.some((conflict) => !this.choices.has(conflict.key))) {
-        new Notice("请为所有冲突选择处理方式"); return;
-      }
-      this.close(); void this.resolve(this.choices);
-    }));
-  }
-
-  private preview(parent: HTMLElement, label: string, content?: string) {
-    const column = parent.createDiv();
-    column.createEl("strong", { text: label });
-    column.createEl("pre", { text: content ?? "（此版本中不存在该文件）", cls: "istart-git-preview" });
   }
 
   onClose() { this.contentEl.empty(); }

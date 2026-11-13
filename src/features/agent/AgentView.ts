@@ -8,7 +8,7 @@ import { storyName } from "../../core/agent/StoryContent";
 import { cloneJson } from "../../util/json";
 import { ActionModal } from "../../ui/ActionModal";
 import { changedRange } from "../../core/agent/Changes";
-import { getMobileViewport } from "../../ui/MobileViewport";
+import { bindSidebarViewport } from "../../ui/SidebarViewport";
 import { renderWorkbenchNav } from "../workbench/WorkbenchNav";
 import { WORKBENCH_VIEWS } from "../workbench/WorkbenchController";
 import { renderAgentTaskForm } from "./AgentTaskForm";
@@ -32,6 +32,7 @@ export class AgentView extends ItemView {
   private sendButton!: HTMLButtonElement;
   private statusEl!: HTMLElement;
   private modelEl!: HTMLElement;
+  private optionsSummary!: HTMLElement;
   private storySettings!: HTMLButtonElement;
   private historyOpen = false;
   private query = "";
@@ -55,11 +56,9 @@ export class AgentView extends ItemView {
     const root = this.contentEl; root.empty(); root.addClass("istart-agent-root");
     if (Platform.isMobile) root.addClass("istart-agent-mobile");
     renderWorkbenchNav(root, this.plugin, "assistant");
-    const header = root.createDiv({ cls: "istart-agent-header" });
-    const brand = header.createDiv({ cls: "istart-agent-brand", text: "AI 助手" }); setIcon(brand.createSpan(), "sparkles");
-    this.button(header, "新建会话", "plus", () => { this.controller.create(); this.historyOpen = false; this.render(); this.input.focus(); });
     const top = root.createDiv({ cls: "istart-agent-sessionbar" });
     this.titleButton = this.button(top, "会话列表", "messages-square", () => { this.historyOpen = !this.historyOpen; this.render(); }); this.titleButton.addClass("istart-agent-session-title");
+    this.button(top, "新建会话", "plus", () => { this.controller.create(); this.historyOpen = false; this.render(); if (!Platform.isMobile) this.input.focus(); });
     this.button(top, "会话操作", "more-horizontal", event => this.sessionMenu(event));
     this.historyEl = root.createDiv({ cls: "istart-agent-history" });
     const historyControls = this.historyEl.createDiv({ cls: "istart-agent-history-controls" });
@@ -73,7 +72,8 @@ export class AgentView extends ItemView {
     this.contextEl = this.conversationEl.createDiv({ cls: "istart-agent-context" });
     this.messagesEl = this.conversationEl.createDiv({ cls: "istart-agent-messages", attr: { "aria-label": "对话消息" } });
     const composer = this.conversationEl.createDiv({ cls: "istart-agent-composer" });
-    const shortcuts = composer.createEl("details", { cls: "istart-agent-shortcuts" });
+    const body = composer.createDiv({ cls: "istart-agent-composer-body" });
+    const shortcuts = body.createEl("details", { cls: "istart-agent-shortcuts" });
     shortcuts.createEl("summary", { text: "任务快捷入口" });
     const taskChoices = shortcuts.createDiv({ cls: "istart-agent-shortcut-list" });
     for (const [id, label] of [
@@ -83,27 +83,39 @@ export class AgentView extends ItemView {
       ["new-reading-project", "阅读项目"], ["new-writing-project", "新建作品"], ["create-artifact", "实用模板"],
     ]) this.button(taskChoices, label, "sparkles", () => this.plugin.startAgentAction(id, null), true);
     this.button(taskChoices, "导入原稿", "file-input", () => this.plugin.openImportNovel(), true);
-    this.taskEl = composer.createDiv({ cls: "istart-agent-task" });
+    this.taskEl = body.createDiv({ cls: "istart-agent-task" });
     this.taskEl.addEventListener("keydown", event => {
       if (!event.isComposing && (event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); this.send(); }
     });
-    this.input = composer.createEl("textarea", { attr: { placeholder: "描述任务，或输入 @ 引用笔记…", rows: "3", "aria-label": "发送给 AI 助手" } });
+    this.input = body.createEl("textarea", { attr: { placeholder: "描述任务，或输入 @ 引用笔记…", rows: "3", "aria-label": "发送给 AI 助手" } });
     this.input.addEventListener("input", () => { const s = this.controller.active; if (s) this.controller.updateDraft(s.id, this.input.value); });
     this.input.addEventListener("keydown", event => {
       if (!event.isComposing && (event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); this.send(); }
       if (!event.isComposing && event.key === "@") { event.preventDefault(); this.pickNote(); }
     });
     const actions = composer.createDiv({ cls: "istart-agent-composer-actions" });
-    this.button(actions, "引用笔记", "at-sign", () => this.pickNote());
-    this.button(actions, "引用当前笔记或选区", "text-select", () => { const ref = this.controller.captureCurrent(); if (!ref) throw new Error("请先打开一篇笔记"); this.controller.attach(ref); });
-    this.button(actions, "设置插入位置", "text-cursor-input", () => {
+    const reference = this.button(actions, "引用笔记", "at-sign", () => this.pickNote());
+    reference.createSpan({ text: "引用", cls: "istart-agent-action-label" });
+    const current = this.button(actions, "引用当前笔记或选区", "text-select", () => { const ref = this.controller.captureCurrent(); if (!ref) throw new Error("请先打开一篇笔记"); this.controller.attach(ref); });
+    current.createSpan({ text: "当前", cls: "istart-agent-action-label" });
+    const position = this.button(actions, "设置插入位置", "text-cursor-input", () => {
       const session = this.controller.active; if (!session) return;
       const current = this.controller.captureCurrent();
       const refs = session.references.length ? session.references : current ? [current] : [];
       new AgentPositionModal(this.plugin, session.id, refs).open();
     });
+    position.createSpan({ text: "位置", cls: "istart-agent-action-label" });
+    const dismiss = this.button(actions, "收起键盘", "keyboard", () => {
+      const active = root.ownerDocument.activeElement as HTMLElement | null;
+      if (active && root.contains(active)) active.blur();
+    });
+    dismiss.addClass("istart-sidebar-dismiss-keyboard");
+    dismiss.createSpan({ text: "收起", cls: "istart-agent-action-label" });
     this.sendButton = this.button(actions, "发送", "arrow-up", () => this.send()); this.sendButton.addClass("mod-cta");
-    const meta = composer.createDiv({ cls: "istart-agent-composer-meta" });
+    const options = body.createEl("details", { cls: "istart-agent-input-options" });
+    options.open = !Platform.isMobile;
+    this.optionsSummary = options.createEl("summary", { text: "模式与检索设置" });
+    const meta = options.createDiv({ cls: "istart-agent-composer-meta" });
     this.mode = meta.createEl("select", { attr: { "aria-label": "执行模式" } });
     this.mode.createEl("option", { value: "agent", text: "Agent" }); this.mode.createEl("option", { value: "ask", text: "问答 · 只读" });
     this.mode.createEl("option", { value: "story", text: "小说演绎与进化模式" });
@@ -120,7 +132,7 @@ export class AgentView extends ItemView {
     this.statusEl = root.createDiv({ cls: "istart-agent-status", attr: { role: "status", "aria-live": "polite" } });
     this.unsubscribe = this.controller.subscribe(() => this.scheduleRender());
     this.registerDomEvent(this.contentEl.ownerDocument, "selectionchange", () => this.scheduleRender());
-    if (Platform.isMobile) this.bindViewport();
+    this.cleanupViewport = bindSidebarViewport(root);
     this.render();
   }
   async onClose(): Promise<void> {
@@ -142,20 +154,28 @@ export class AgentView extends ItemView {
   private button(parent: HTMLElement, label: string, icon: string, action: (event: MouseEvent) => unknown, text = false): HTMLButtonElement {
     const button = parent.createEl("button", { cls: text ? "istart-agent-text-button" : "istart-agent-icon-button", attr: { type: "button", "aria-label": label, "data-tooltip-position": "top" } });
     if (icon) setIcon(button.createSpan(), icon);
-    if (text) button.createSpan({ text: label }); else button.setAttribute("title", label);
+    if (text) button.createSpan({ text: label });
+    else {
+      button.setAttribute("title", label);
+      if (parent.hasClass("istart-agent-message-actions")) {
+        const shortLabel: Record<string, string> = { "保存或写入回答": "保存/写入", "复制完整消息": "完整复制", "复制回答": "复制", "从此处分支": "分支", "重新生成": "重新生成" };
+        button.createSpan({ text: shortLabel[label] ?? label, cls: "istart-agent-touch-label" });
+      }
+    }
     button.addEventListener("click", event => this.perform(() => action(event)));
     return button;
   }
   private render(): void {
     if (!this.input) return;
     const s = this.controller.active;
-    this.statusEl.setText(this.controller.error || this.controller.saveError || (s && this.controller.isRunning(s.id) ? "正在处理…可切换到其他会话" : "上下文按本轮固定 · Ctrl/Cmd+Enter 发送"));
+    this.statusEl.setText(this.controller.error || this.controller.saveError || (s && this.controller.isRunning(s.id) ? "正在处理…可切换到其他会话" : (Platform.isMobile ? "上下文按本轮固定 · 点击发送" : "上下文按本轮固定 · Ctrl/Cmd+Enter 发送")));
+    this.statusEl.toggleClass("is-error", !!(this.controller.error || this.controller.saveError));
     if (this.controller.error) {
       this.conversationEl.hide(); this.historyEl.hide();
       this.button(this.statusEl, "重新加载", "refresh-cw", () => this.controller.load(), true); return;
     }
     if (!s) return;
-    if (s.pendingTask) this.statusEl.setText("填写本次任务参数 · Ctrl/Cmd+Enter 开始");
+    if (s.pendingTask) this.statusEl.setText(Platform.isMobile ? "填写参数后点击「开始任务」" : "填写本次任务参数 · Ctrl/Cmd+Enter 开始");
     this.titleButton.empty(); setIcon(this.titleButton.createSpan(), "messages-square"); this.titleButton.createSpan({ text: s.title }); setIcon(this.titleButton.createSpan(), "chevron-down");
     this.titleButton.setAttribute("aria-expanded", String(this.historyOpen));
     this.historyEl.toggle(this.historyOpen); this.conversationEl.toggle(!this.historyOpen);
@@ -177,12 +197,15 @@ export class AgentView extends ItemView {
     this.sendButton.disabled = s.archived;
     if (s.archived) this.statusEl.setText("会话已归档，可在会话操作中恢复后继续");
     const openStory = this.controller.openStory(s.id);
+    this.optionsSummary.setText(`${s.mode === "story" ? "小说演绎" : s.mode === "ask" ? "问答" : "Agent"} · 模式与检索设置`);
     this.mode.value = s.mode; this.mode.disabled = busy || !!s.pendingTask || !!openStory; this.search.checked = s.searchVault; this.search.disabled = busy || s.mode === "story";
     this.search.parentElement?.toggle(s.mode !== "story");
     this.storySettings.toggle(s.mode === "story"); this.storySettings.disabled = busy || s.archived || !!openStory;
     this.input.placeholder = openStory ? "输入导演指令，在下一次回应前生效…" : s.mode === "story" ? "描述场景、冲突和本场目标，让角色开始演绎…" : "描述任务，或输入 @ 引用笔记…";
     this.sendButton.empty(); setIcon(this.sendButton.createSpan(), busy && !openStory ? "square" : "arrow-up"); this.sendButton.setAttribute("aria-label", openStory ? "发送导演指令" : busy ? "停止生成" : s.pendingTask ? "开始任务" : "发送");
-    if (s.pendingTask) this.sendButton.createSpan({ text: "开始任务" });
+    const sendLabel = openStory ? "发送指令" : busy ? "停止" : s.pendingTask ? "开始任务" : "发送";
+    this.sendButton.createSpan({ text: sendLabel });
+    this.sendButton.title = sendLabel;
     this.contextEl.empty();
     for (const ref of s.references) {
       const chip = this.contextEl.createDiv({ cls: "istart-agent-context-chip" });
@@ -414,31 +437,6 @@ export class AgentView extends ItemView {
     await leaf.openFile(file, { active: true });
   }
   private textModal(title: string, initial: string, callback: (value: string) => unknown): void { new AgentTextModal(this.plugin, title, initial, value => this.perform(() => callback(value))).open(); }
-  private bindViewport(): void {
-    const win = this.contentEl.ownerDocument.defaultView;
-    if (!win) return;
-    const doc = this.contentEl.ownerDocument;
-    let layoutHeight = Math.max(win.innerHeight, doc.documentElement.clientHeight), layoutWidth = win.innerWidth;
-    const resize = () => {
-      const keyboard = parseFloat(win.getComputedStyle(doc.documentElement).getPropertyValue("--keyboard-height")) || 0;
-      const currentHeight = Math.max(win.innerHeight, doc.documentElement.clientHeight);
-      const focused = doc.activeElement === this.input || this.taskEl.contains(doc.activeElement);
-      layoutHeight = layoutWidth !== win.innerWidth || (!focused && keyboard === 0) ? currentHeight : Math.max(layoutHeight, currentHeight);
-      layoutWidth = win.innerWidth;
-      const viewport = getMobileViewport(layoutHeight, layoutWidth, keyboard, win.visualViewport);
-      this.contentEl.classList.toggle("istart-agent-keyboard-visible", viewport.keyboardVisible);
-      const available = Math.max(120, viewport.top + viewport.height - this.contentEl.getBoundingClientRect().top);
-      this.contentEl.style.maxHeight = `${available}px`;
-    };
-    win.visualViewport?.addEventListener("resize", resize); win.visualViewport?.addEventListener("scroll", resize); win.addEventListener("resize", resize);
-    this.contentEl.addEventListener("focusin", resize); this.contentEl.addEventListener("focusout", resize);
-    const keyboardEvents = ["keyboardWillShow", "keyboardDidShow", "keyboardWillHide", "keyboardDidHide"];
-    for (const event of keyboardEvents) win.addEventListener(event, resize);
-    const observer = new win.MutationObserver(resize);
-    observer.observe(doc.documentElement, { attributes: true, attributeFilter: ["style", "class"] });
-    resize();
-    this.cleanupViewport = () => { observer.disconnect(); for (const event of keyboardEvents) win.removeEventListener(event, resize); win.visualViewport?.removeEventListener("resize", resize); win.visualViewport?.removeEventListener("scroll", resize); win.removeEventListener("resize", resize); this.contentEl.removeEventListener("focusin", resize); this.contentEl.removeEventListener("focusout", resize); this.contentEl.classList.remove("istart-agent-keyboard-visible"); this.contentEl.style.removeProperty("max-height"); };
-  }
 }
 class StorySettingsModal extends ActionModal {
   constructor(plugin: DeepSeekPlugin, private characters: { path: string; name: string }[], private config: StoryConfig | undefined, private submit: (config: StoryConfig) => void) { super(plugin.app); this.titleEl.setText("小说参演设置"); }

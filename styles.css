@@ -1556,7 +1556,7 @@ button.istart-import-merge {
 .istart-workbench-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
 .istart-workbench-heading strong { font-size: var(--font-ui-small); }
 .istart-workbench-heading button { font-size: var(--font-ui-smaller); }
-.istart-workbench-tabs { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px; }
+.istart-workbench-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 4px; }
 .istart-workbench-nav .istart-workbench-tab { display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 36px; padding: 6px 4px; height: auto; font-size: var(--font-ui-small); white-space: normal; box-shadow: none; border: 1px solid transparent; background: transparent; }
 .istart-workbench-tab svg { width: 16px; height: 16px; vertical-align: middle; }
 .istart-workbench-nav .istart-workbench-tab.is-active { color: var(--text-accent); background: var(--background-modifier-hover); border-color: var(--interactive-accent); }
@@ -1574,11 +1574,6 @@ button.istart-import-merge {
 .istart-agent-task-active .istart-agent-composer { flex: 1; min-height: 0; display: flex; flex-direction: column; }
 .istart-agent-task-active .istart-agent-task { flex: 1; min-height: 0; max-height: none; }
 .istart-agent-task-active .istart-agent-composer-actions, .istart-agent-task-active .istart-agent-composer-meta { flex-shrink: 0; }
-.istart-agent-task-active.istart-agent-keyboard-visible .istart-agent-header,
-.istart-agent-task-active.istart-agent-keyboard-visible .istart-agent-sessionbar,
-.istart-agent-task-active.istart-agent-keyboard-visible .istart-agent-context,
-.istart-agent-task-active.istart-agent-keyboard-visible .istart-agent-composer-meta,
-.istart-agent-task-active.istart-agent-keyboard-visible .istart-workbench-heading { display: none; }
 .workspace-leaf-content .istart-agent-root { display:flex; flex-direction:column; height:100%; min-height:0; min-width:0; padding:0; overflow:hidden; }
 .istart-agent-header,.istart-agent-sessionbar,.istart-agent-composer-actions,.istart-agent-composer-meta { display:flex; align-items:center; gap:8px; }
 .istart-agent-header { justify-content:space-between; padding:10px 12px; border-bottom:1px solid var(--background-modifier-border); }
@@ -1589,7 +1584,7 @@ button.istart-import-merge {
 .istart-agent-root .istart-agent-icon-button { padding:6px; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; background:transparent; border:0; box-shadow:none; }
 .istart-agent-root .istart-agent-icon-button:hover { background:var(--background-modifier-hover); }
 .istart-agent-root .istart-agent-session-title { flex:1; min-width:0; justify-content:flex-start; text-align:left; gap:8px; }
-.istart-agent-session-title > span:nth-child(2) { flex:1; }
+.istart-agent-session-title > span:nth-child(2) { flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .istart-agent-root svg { width:16px; height:16px; flex-shrink:0; vertical-align:middle; }
 .istart-agent-conversation { flex:1; display:flex; flex-direction:column; min-height:0; min-width:0; }
 .istart-agent-context { display:flex; flex-wrap:wrap; gap:6px; padding:2px 12px 10px; font-size:var(--font-smallest); }
@@ -1625,9 +1620,9 @@ button.istart-import-merge {
 .istart-agent-change-path { font-size:var(--font-smallest); margin-top:10px; overflow-wrap:anywhere; }
 .istart-agent-root pre.istart-agent-diff-before { background:rgba(var(--color-red-rgb),.12); color:var(--text-normal); border-left:2px solid var(--color-red); padding:8px; }
 .istart-agent-root pre.istart-agent-diff-after { background:rgba(var(--color-green-rgb),.12); color:var(--text-normal); border-left:2px solid var(--color-green); padding:8px; }
-.istart-agent-composer { flex-shrink:0; padding:10px 12px 6px; border-top:1px solid var(--background-modifier-border); background:var(--background-primary); }
+.istart-agent-composer { display:flex; flex-direction:column; flex:0 1 auto; min-height:0; max-height:65%; padding:10px 12px 6px; border-top:1px solid var(--background-modifier-border); background:var(--background-primary); }
 .istart-agent-composer textarea { display:block; width:100%; min-height:70px; max-height:220px; resize:vertical; }
-.istart-agent-composer-actions { margin-top:8px; }
+.istart-agent-composer-actions { margin-top:8px; flex-shrink:0; flex-wrap:wrap; }
 .istart-agent-composer-actions > button:last-child { margin-left:auto; }
 .istart-agent-root .mod-cta { background:var(--interactive-accent); color:var(--text-on-accent); }
 .istart-agent-root .mod-cta:hover { background:var(--interactive-accent-hover); }
@@ -1765,3 +1760,155 @@ button.istart-import-merge {
 .istart-story-more { flex-basis:100%; }
 .istart-story-more > summary { color:var(--text-muted); font-size:var(--font-smaller); }
 .istart-story-more .istart-story-controls { margin-top:8px; }
+
+/* Sync conflict workbench */
+.istart-conflict-modal { width: min(1000px, 95vw); }
+.istart-conflict-toolbar, .istart-conflict-footer {
+  display: flex; flex-wrap: wrap; gap: 8px; align-items: center; padding: 12px 0;
+}
+.istart-conflict-toolbar label { display: flex; align-items: center; gap: 6px; margin-inline-end: auto; }
+.istart-conflict-footer { border-top: 1px solid var(--background-modifier-border); }
+.istart-conflict-footer > span { margin-inline-end: auto; }
+.istart-conflict-list { max-height: 340px; overflow: auto; }
+.istart-conflict-table { width: 100%; table-layout: fixed; border-collapse: collapse; }
+.istart-conflict-table th, .istart-conflict-table td {
+  padding: 8px; text-align: start; overflow-wrap: anywhere; border-bottom: 1px solid var(--background-modifier-border);
+}
+.istart-conflict-table th { color: var(--text-muted); font-size: var(--font-smaller); font-weight: var(--font-medium); }
+.istart-conflict-table th:first-child, .istart-conflict-table td:first-child { width: 48px; }
+.istart-conflict-table th:nth-child(2) { width: 42%; }
+.istart-conflict-table th:nth-child(3) { width: 28%; }
+.istart-conflict-table tr.is-active { background: var(--background-modifier-hover); }
+.istart-conflict-table .istart-sync-hint { margin-top: 4px; }
+.istart-conflict-table button { max-width: 100%; }
+.istart-conflict-detail { padding: 12px 0; min-width: 0; }
+.istart-conflict-detail h4, .istart-conflict-impact strong { overflow-wrap: anywhere; }
+.istart-conflict-detail .setting-item-control { flex-wrap: wrap; }
+.istart-conflict-impact { padding: 12px 0; border-bottom: 1px solid var(--background-modifier-border); }
+.istart-conflict-message { color: var(--text-warning); white-space: pre-wrap; overflow-wrap: anywhere; }
+@media (max-width: 600px) {
+  .istart-conflict-table th, .istart-conflict-table td { padding: 6px 4px; font-size: var(--font-smaller); }
+  .istart-conflict-table th:first-child, .istart-conflict-table td:first-child { width: 36px; }
+  .istart-conflict-detail .setting-item { display: block; }
+  .istart-conflict-detail .setting-item-control { justify-content: flex-start; margin-top: 8px; }
+}
+
+/* Workbench panes respond to their own width, including narrow desktop splits. */
+.workspace-leaf-content .istart-sidebar-root {
+  flex: 1 1 0;
+  min-width: 0;
+  min-height: 0;
+  height: 100%;
+  max-height: var(--istart-sidebar-height, 100%);
+  box-sizing: border-box;
+}
+.workspace-leaf-content .istart-workbench-root {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+  overflow: hidden;
+  container: istart-sidebar / inline-size;
+}
+.istart-workbench-root > .istart-workbench-nav { position: relative; padding: 8px; }
+.istart-workbench-short-label { display: none; }
+.istart-workbench-tab > span:first-child { display: inline-flex; flex-shrink: 0; }
+.istart-workbench-body {
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 12px;
+  padding-bottom: max(12px, env(safe-area-inset-bottom, 0px));
+  scroll-padding-block: 12px;
+  overflow-wrap: anywhere;
+}
+.istart-sidebar-root button {
+  max-width: 100%;
+  height: auto;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.istart-sidebar-root :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) {
+  min-width: 0;
+  max-width: 100%;
+}
+.istart-workbench-body .setting-item { min-width: 0; flex-wrap: wrap; gap: 8px; }
+.istart-workbench-body .setting-item-info { min-width: 0; overflow-wrap: anywhere; }
+.istart-workbench-body .setting-item-control { min-width: 0; flex-wrap: wrap; gap: 8px; }
+.istart-sidebar-root :is(button, summary, input, select, textarea, a):focus-visible {
+  outline: 2px solid var(--interactive-accent);
+  outline-offset: 2px;
+}
+.istart-annotations-body { display: flex; flex-direction: column; gap: 8px; }
+.istart-annotations-body > * { flex-shrink: 0; }
+.istart-annotations-body .istart-annotations-list { flex: none; overflow: visible; }
+.istart-annotation-card:focus-within .istart-annotation-more { opacity: 1; }
+.istart-agent-root .istart-agent-context { max-height: 88px; flex: 0 1 auto; overflow-y: auto; }
+.istart-agent-root .istart-agent-sessionbar { flex-shrink: 0; }
+.istart-agent-composer-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scroll-padding-block: 8px; }
+.istart-agent-root .istart-agent-task { max-height: none; overflow: visible; }
+.istart-agent-task-active .istart-agent-composer { max-height: none; }
+.istart-agent-task-active .istart-agent-composer-body { flex: 1 1 auto; }
+.istart-agent-input-options { margin-top: 8px; }
+.istart-agent-input-options > summary, .istart-agent-shortcuts > summary {
+  display: list-item; padding: 6px 0; color: var(--text-muted); font-size: var(--font-smaller);
+}
+.istart-agent-composer-actions { gap: 4px; }
+.istart-agent-composer-actions .istart-agent-action-label, .istart-agent-touch-label { display: none; }
+.istart-agent-composer-actions > .mod-cta { gap: 6px; min-width: 64px; }
+.istart-sidebar-root .istart-sidebar-dismiss-keyboard { display: none; }
+.istart-sidebar-keyboard-visible .istart-sidebar-dismiss-keyboard { display: inline-flex; }
+.istart-agent-status { max-height: 64px; overflow-y: auto; }
+.istart-agent-root.istart-sidebar-keyboard-visible .istart-workbench-heading,
+.istart-agent-root.istart-sidebar-keyboard-visible .istart-agent-sessionbar,
+.istart-agent-root.istart-sidebar-keyboard-visible .istart-agent-context,
+.istart-agent-root.istart-sidebar-keyboard-visible .istart-agent-status:not(.is-error),
+.istart-agent-root.istart-sidebar-keyboard-visible .istart-agent-shortcuts { display: none; }
+.istart-sidebar-keyboard-visible .istart-agent-composer { padding-bottom: 8px; }
+.istart-agent-root.istart-sidebar-compact-keyboard > .istart-workbench-nav { display: none; }
+.istart-agent-root.istart-sidebar-compact-keyboard .istart-agent-composer { flex: 1 1 auto; max-height: 100%; }
+.istart-sidebar-keyboard-visible .istart-workbench-body { padding-bottom: 12px; }
+.istart-sidebar-mobile :is(button, select, summary) { min-height: 44px; }
+.istart-sidebar-mobile .istart-agent-icon-button { min-width: 44px; }
+.istart-sidebar-mobile :is(input:not([type="checkbox"]):not([type="radio"]), select, textarea) { font-size: 16px; }
+.istart-sidebar-mobile :is(.istart-annotations-icon-btn, .istart-annotation-more) { width: 44px; height: 44px; opacity: 1; }
+.istart-sidebar-mobile .istart-annotations-chip { min-height: 44px; }
+.istart-sidebar-mobile .istart-annotations-search input { height: 44px; }
+.workspace-leaf-content .istart-typo-root { overflow-y: auto; padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); }
+@container istart-sidebar (max-width: 420px) {
+  .istart-workbench-heading { display: none; }
+  .istart-workbench-nav .istart-workbench-tab { flex-direction: column; gap: 2px; min-height: 44px; padding: 4px 2px; }
+  .istart-workbench-tab-label { display: none; }
+  .istart-workbench-short-label { display: inline; }
+  .istart-workbench-body { padding-inline: 10px; }
+  .istart-workbench-body .setting-item-info { flex-basis: 100%; }
+  .istart-workbench-body .setting-item-control { width: 100%; justify-content: flex-start; }
+  .istart-workbench-body .setting-item-control :is(input:not([type="checkbox"]):not([type="radio"]), select) { width: 100%; }
+  .istart-sync-file-row { flex-wrap: wrap; }
+  .istart-sync-file-left { flex-basis: 100%; }
+  .istart-sync-file-actions { max-width: 100%; flex-wrap: wrap; }
+  .istart-sync-file-name { white-space: normal; overflow-wrap: anywhere; }
+  .istart-sync-btn-row > button { flex: 1 1 120px; }
+  .istart-git-file-row { flex-wrap: wrap; }
+  .istart-agent-root .istart-agent-composer-actions > .istart-agent-icon-button { min-width: 44px; min-height: 44px; }
+  .istart-agent-composer-actions > .istart-agent-icon-button:not(.mod-cta) { flex-direction: column; gap: 2px; }
+  .istart-agent-composer-actions .istart-agent-action-label { display: inline; font-size: var(--font-smallest); }
+  .istart-agent-composer-meta select { width: 100%; }
+  .istart-agent-task-heading { flex-wrap: wrap; }
+  .istart-agent-message-actions .istart-agent-touch-label { display: inline; }
+  .istart-agent-message-actions .istart-agent-icon-button { gap: 4px; }
+  .istart-agent-sessionbar { gap: 4px; padding: 4px 8px; }
+}
+@media (pointer: coarse) {
+  .istart-sidebar-root :is(button, select, summary) { min-height: 44px; }
+  .istart-sidebar-root .istart-agent-icon-button { min-width: 44px; }
+  .istart-sidebar-root :is(.istart-annotations-icon-btn, .istart-annotation-more) { width: 44px; height: 44px; }
+  .istart-sidebar-root :is(.istart-agent-composer-meta label, .istart-agent-history-controls label) { min-height: 44px; }
+}
+@media (hover: none) {
+  .istart-annotation-more { opacity: 1; }
+  .istart-agent-message-actions .istart-agent-touch-label { display: inline; }
+  .istart-agent-message-actions .istart-agent-icon-button { gap: 4px; }
+}

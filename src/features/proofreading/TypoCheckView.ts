@@ -1,6 +1,7 @@
 import { ItemView, MarkdownView, Notice, Platform, TFile, WorkspaceLeaf } from "obsidian";
 import type DeepSeekPlugin from "../../main";
 import type { ProofreadingReport } from "../../core/agent/types";
+import { bindSidebarViewport } from "../../ui/SidebarViewport";
 import { captureEditorTarget } from "../../editor/EditorTarget";
 import { selectTypoIssue, TypoCheckResult, TypoIssue } from "../../ai/TypoChecker";
 
@@ -12,6 +13,7 @@ export class TypoCheckView extends ItemView {
   private status = "运行「错别字甄别」检查当前笔记或选中文字。";
   private stale = false;
   private opened = false;
+  private cleanupViewport?: () => void;
   private statusEl: HTMLElement | null = null;
 
   constructor(leaf: WorkspaceLeaf, private plugin: DeepSeekPlugin) { super(leaf); }
@@ -39,10 +41,12 @@ export class TypoCheckView extends ItemView {
       if (file === this.target?.file) this.markStale();
     }));
     this.render();
+    this.cleanupViewport = bindSidebarViewport(this.contentEl);
   }
 
   async onClose(): Promise<void> {
     this.opened = false;
+    this.cleanupViewport?.();
     this.statusEl = null;
     this.contentEl.empty();
   }
@@ -71,7 +75,8 @@ export class TypoCheckView extends ItemView {
   private render(): void {
     const root = this.contentEl;
     root.empty();
-    root.addClass("istart-typo-root");
+    root.addClass("istart-typo-root", "istart-sidebar-root");
+    if (Platform.isMobile) root.addClass("istart-sidebar-mobile");
     root.createEl("h4", { text: "错别字甄别" });
     const toolbar = root.createDiv({ cls: "istart-typo-toolbar" });
     const check = toolbar.createEl("button", { text: "检查当前笔记全文", attr: { type: "button" } });

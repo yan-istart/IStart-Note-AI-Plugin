@@ -4,6 +4,7 @@ import { PUBLISHING_PLATFORMS, sanitizeRemoteUrl } from "../../core/publishing/t
 import type { DeliveryState, PublishingRecord } from "../../core/publishing/types";
 import { renderWorkbenchNav } from "../workbench/WorkbenchNav";
 import { WORKBENCH_VIEWS } from "../workbench/WorkbenchController";
+import { bindSidebarViewport } from "../../ui/SidebarViewport";
 import { renderPublishingConnection } from "./PublishingSettings";
 
 export const PUBLISHING_VIEW_TYPE = WORKBENCH_VIEWS.publishing;
@@ -13,6 +14,7 @@ export class PublishingView extends ItemView {
   private preview: Component | null = null;
   private settingsOpen = false;
   private opened = false;
+  private cleanupViewport?: () => void;
   constructor(leaf: WorkspaceLeaf, private plugin: DeepSeekPlugin) { super(leaf); }
   getViewType(): string { return PUBLISHING_VIEW_TYPE; }
   getDisplayText(): string { return "IStart 内容分发"; }
@@ -21,8 +23,9 @@ export class PublishingView extends ItemView {
     this.opened = true;
     this.register(this.plugin.publishing.onChange(() => { if (this.opened) this.render(); }));
     this.render();
+    this.cleanupViewport = bindSidebarViewport(this.contentEl);
   }
-  async onClose(): Promise<void> { this.opened = false; this.preview?.unload(); this.contentEl.empty(); }
+  async onClose(): Promise<void> { this.opened = false; this.cleanupViewport?.(); this.preview?.unload(); this.contentEl.empty(); }
   private button(root: HTMLElement, text: string, work: () => Promise<void>): void {
     const button = root.createEl("button", { text, attr: { type: "button" } });
     button.disabled = this.plugin.publishing.busy;
@@ -30,9 +33,12 @@ export class PublishingView extends ItemView {
   }
   private render(): void {
     this.preview?.unload(); this.preview = null;
-    const root = this.contentEl, controller = this.plugin.publishing;
-    root.empty(); root.addClass("istart-publishing-root");
-    renderWorkbenchNav(root, this.plugin, "publishing");
+    const container = this.contentEl, controller = this.plugin.publishing;
+    const scrollTop = container.querySelector(".istart-workbench-body")?.scrollTop ?? 0;
+    container.empty(); container.addClass("istart-publishing-root");
+    renderWorkbenchNav(container, this.plugin, "publishing");
+    const root = container.createDiv({ cls: "istart-workbench-body" });
+    queueMicrotask(() => { if (root.isConnected) root.scrollTop = scrollTop; });
     root.createEl("h4", { text: "图文分发" });
     root.createEl("p", { text: controller.message, cls: "istart-publishing-status", attr: { role: "status", "aria-live": "polite" } });
     const settings = root.createEl("details"); settings.open = this.settingsOpen || !controller.connection;

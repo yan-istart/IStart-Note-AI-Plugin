@@ -8,7 +8,8 @@ import { BaiduSyncService } from "./BaiduSyncService";
 import { ObsidianGitFs, ensureDirectory } from "./ObsidianGitFs";
 
 interface ApplyJournal { before: string; after: string }
-export interface GitVaultResult extends GitSyncOutcome { changed: number; skipped: number; tracked: number }
+export interface GitConflictExpectation { before: string; remoteHeads: readonly string[]; scopeKey: string }
+export interface GitVaultResult extends GitSyncOutcome { scopeKey: string; changed: number; skipped: number; tracked: number }
 export interface GitRestorePreview {
   version: string;
   before: string;
@@ -37,8 +38,14 @@ export class BaiduGitSyncService {
   private readonly remote: string;
   private readonly client: BaiduPanClient;
   private readonly transport: GitTransport;
+  private readonly scopeKey: string;
+
+  private settingsKey(): string {
+    return JSON.stringify([this.config.enabled, this.config.syncEngine, this.config.remotePath, this.config.ignorePattern, this.config.fileSizeLimitMB]);
+  }
 
   constructor(private readonly app: App, private readonly config: BaiduSyncConfig) {
+    this.scopeKey = this.settingsKey();
     const root = config.remotePath.replace(/\/+$/, "");
     this.remote = `${root}/_istart-git/v1`;
     this.storage = `${app.vault.configDir}/plugins/istart-note-ai/git-sync/${md5(new TextEncoder().encode(root))}`;
@@ -128,10 +135,18 @@ export class BaiduGitSyncService {
     return { oid: await this.engine.snapshot(files, protectedPaths), skipped };
   }
 
-  async sync(resolutions = new Map<string, GitResolution>(), onProgress?: (message: string) => void): Promise<GitVaultResult> {
+  async sync(resolutions = new Map<string, GitResolution>(), onProgress?: (message: string) => void, expected?: GitConflictExpectation): Promise<GitVaultResult> {
     return this.exclusive(async () => {
+      if (this.settingsKey() !== this.scopeKey || (expected && expected.scopeKey !== this.scopeKey)) {
+        throw new Error("同步设置已变化，请重新同步并确认冲突方案");
+      }
       if (!this.config.enabled || !await new BaiduSyncService(this.app, this.config).ensureValidToken()) {
         throw new Error("请启用 IStart 数据同步，并在百度网盘配置中完成授权");
+      }
+      for (const resolution of resolutions.values()) {
+        if (resolution.choice === "text" && new TextEncoder().encode(resolution.text).length > this.config.fileSizeLimitMB * 1024 * 1024) {
+          throw new Error("合并内容超出文件大小限制，请缩减内容后重新预览");
+        }
       }
       const pending = await this.readJournal();
       // If an application was interrupted, current edits are committed against the original
@@ -140,15 +155,27 @@ export class BaiduGitSyncService {
       onProgress?.("扫描整个笔记库并保存本地修改...");
       const snapshot = await this.snapshot();
       onProgress?.("下载版本并合并设备修改...");
-      const result = await this.engine.synchronize(this.transport, resolutions, pending?.after);
+      if (expected && snapshot.oid !== expected.before) throw new Error("预览后本地笔记库发生变化，请重新同步并确认冲突方案");
+      const transport: GitTransport = expected ? {
+        ...this.transport,
+        list: async () => {
+          const heads = await this.transport.list();
+          if (JSON.stringify([...heads].sort()) !== JSON.stringify([...expected.remoteHeads].sort())) {
+            throw new Error("预览后云端版本发生变化，请重新同步并确认冲突方案");
+          }
+          return heads;
+        },
+      } : this.transport;
+      const result = await this.engine.synchronize(transport, resolutions, pending?.after);
       const tracked = (await this.engine.files(result.after)).size;
-      if (result.conflicts.length) return { ...result, changed: 0, skipped: snapshot.skipped, tracked };
+      if (result.conflicts.length) return { ...result, scopeKey: this.scopeKey, changed: 0, skipped: snapshot.skipped, tracked };
+      if (this.settingsKey() !== this.scopeKey) throw new Error("同步设置已变化，请重新同步");
       onProgress?.("应用合并结果...");
       await this.writeJournal({ before: result.before, after: result.after });
       const changed = await this.apply(result.before, result.after);
       await this.engine.setHead(result.after);
       await this.app.vault.adapter.remove(this.journalPath());
-      return { ...result, changed, skipped: snapshot.skipped, tracked };
+      return { ...result, scopeKey: this.scopeKey, changed, skipped: snapshot.skipped, tracked };
     });
   }
 

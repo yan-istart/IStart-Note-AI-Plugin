@@ -1,15 +1,16 @@
 import { App, Modal, Notice, Setting } from "obsidian";
 import { BaiduSyncService } from "./BaiduSyncService";
 import { BaiduSyncConfig } from "../../types";
+import { openFileConflicts } from "./FileConflictModal";
 
 type SyncMode = "sync" | "backup" | "restore" | "force-restore";
-type ConflictStrategy = "local" | "remote" | "keep-both";
+type ConflictStrategy = "ask" | "local" | "remote" | "keep-both";
 
 export class BaiduSyncModal extends Modal {
   private mode: SyncMode = "sync";
   private folder = "";
   private overwrite = false;
-  private conflictStrategy: ConflictStrategy = "keep-both";
+  private conflictStrategy: ConflictStrategy = "ask";
   private deleteRemoteOnLocalDelete = false;
 
   constructor(
@@ -50,9 +51,10 @@ export class BaiduSyncModal extends Modal {
     if (this.mode === "sync") {
       new Setting(contentEl)
         .setName("冲突处理")
-        .setDesc("两端都修改了同一文件时的处理方式")
+        .setDesc("默认先查看具体差异，再批量分配处理方案")
         .addDropdown((drop) =>
           drop
+            .addOption("ask", "查看差异并批量处理（推荐）")
             .addOption("keep-both", "保留两份（本地加 .conflict 后缀）")
             .addOption("local", "以本地为准")
             .addOption("remote", "以远端为准")
@@ -117,39 +119,45 @@ export class BaiduSyncModal extends Modal {
     }
     await this.onSaveToken(this.config.accessToken, this.config.tokenExpiresAt);
 
-    if (this.mode === "sync") {
-      await this.runSync(service);
-    } else if (this.mode === "backup") {
-      await this.runBackup(service);
-    } else if (this.mode === "force-restore") {
-      await this.runForceRestore(service);
-    } else {
-      await this.runRestore(service);
-    }
+    try {
+      if (this.mode === "sync") {
+        await this.runSync(service);
+      } else if (this.mode === "backup") {
+        await this.runBackup(service);
+      } else if (this.mode === "force-restore") {
+        await this.runForceRestore(service);
+      } else {
+        await this.runRestore(service);
+      }
+    } catch (error) { new Notice(`同步操作失败：${(error as Error).message}`); }
   }
 
   private async runSync(service: BaiduSyncService) {
     const notice = new Notice("同步中...", 0);
-    const result = await service.sync(
-      this.folder,
-      { conflictStrategy: this.conflictStrategy, deleteRemoteOnLocalDelete: this.deleteRemoteOnLocalDelete },
-      (msg) => notice.setMessage(` ${msg}`)
-    );
-    notice.hide();
+    try {
+      const result = await service.sync(
+        this.folder,
+        { conflictStrategy: this.conflictStrategy, deleteRemoteOnLocalDelete: this.deleteRemoteOnLocalDelete },
+        (msg) => notice.setMessage(` ${msg}`)
+      );
+      const parts = [
+        result.uploaded > 0 && `上传 ${result.uploaded}`,
+        result.downloaded > 0 && `下载 ${result.downloaded}`,
+        result.conflicts.length > 0 && `冲突 ${result.conflicts.length}`,
+        result.deleted > 0 && `删除 ${result.deleted}`,
+        result.failed > 0 && `失败 ${result.failed}`,
+      ].filter(Boolean).join("  ");
 
-    const parts = [
-      result.uploaded > 0 && `上传 ${result.uploaded}`,
-      result.downloaded > 0 && `下载 ${result.downloaded}`,
-      result.conflicts.length > 0 && `冲突 ${result.conflicts.length}`,
-      result.deleted > 0 && `删除 ${result.deleted}`,
-      result.failed > 0 && `失败 ${result.failed}`,
-    ].filter(Boolean).join("  ");
+      new Notice(parts ? `同步完成：${parts}` : "已是最新，无需同步");
 
-    new Notice(parts ? `同步完成：${parts}` : "已是最新，无需同步");
-
-    if (result.errors.length > 0) {
-      console.error("[IStart-Note-AI] 同步错误：", result.errors);
-    }
+      if (result.errors.length > 0) {
+        console.error("[IStart-Note-AI] 同步错误：", result.errors);
+      }
+      if (this.conflictStrategy === "ask" && result.conflicts.length) {
+        await openFileConflicts(this.app, this.config, result.conflicts, undefined, undefined,
+          () => this.onSaveToken(this.config.accessToken, this.config.tokenExpiresAt));
+      }
+    } finally { notice.hide(); }
   }
 
   private async runBackup(service: BaiduSyncService) {

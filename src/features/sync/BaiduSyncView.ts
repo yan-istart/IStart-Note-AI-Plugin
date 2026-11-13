@@ -1,6 +1,6 @@
 import { ItemView, Modal, Notice, Setting, TFile, WorkspaceLeaf } from "obsidian";
 import { BaiduSyncService } from "./BaiduSyncService";
-import { BaiduSyncMeta, SyncAction } from "./BaiduSyncMeta";
+import { SyncAction } from "./BaiduSyncMeta";
 import { BaiduPanClient } from "./BaiduPanClient";
 import { BaiduGitSyncService } from "./BaiduGitSyncService";
 import { runGitSync, GitHistoryModal } from "./BaiduGitSyncModal";
@@ -9,6 +9,8 @@ import { mountGitChangesPanel } from "./GitChangesPanel";
 import { renderWorkbenchNav } from "../workbench/WorkbenchNav";
 import { WORKBENCH_VIEWS } from "../workbench/WorkbenchController";
 import { destructiveButton } from "../../ui/compat";
+import { openFileConflicts } from "./FileConflictModal";
+import { bindSidebarViewport } from "../../ui/SidebarViewport";
 
 export const SYNC_VIEW_TYPE = WORKBENCH_VIEWS.sync;
 
@@ -28,6 +30,7 @@ export class BaiduSyncView extends ItemView {
   private renderedSettingsKey = "";
   private renderGeneration = 0;
   private unmountChanges?: () => void;
+  private cleanupViewport?: () => void;
 
   constructor(leaf: WorkspaceLeaf, plugin: DeepSeekPlugin) {
     super(leaf);
@@ -41,11 +44,13 @@ export class BaiduSyncView extends ItemView {
   onOpen(): Promise<void> {
     this.viewIsOpen = true;
     this.render();
+    this.cleanupViewport = bindSidebarViewport(this.contentEl);
     return Promise.resolve();
   }
 
   onClose(): Promise<void> {
     this.unmountChanges?.();
+    this.cleanupViewport?.();
     this.viewIsOpen = false;
     this.renderGeneration++;
     return Promise.resolve();
@@ -71,10 +76,13 @@ export class BaiduSyncView extends ItemView {
     this.unmountChanges?.();
     const generation = ++this.renderGeneration;
     this.renderedSettingsKey = this.settingsKey();
-    const root = this.containerEl.children[1] as HTMLElement;
-    root.empty();
-    root.addClass("istart-sync-root");
-    renderWorkbenchNav(root, this.plugin, "sync");
+    const container = this.contentEl;
+    const scrollTop = container.querySelector(".istart-workbench-body")?.scrollTop ?? 0;
+    container.empty();
+    container.addClass("istart-sync-root");
+    renderWorkbenchNav(container, this.plugin, "sync");
+    const root = container.createDiv({ cls: "istart-workbench-body" });
+    queueMicrotask(() => { if (root.isConnected) root.scrollTop = scrollTop; });
 
     // 标题栏
     const header = root.createDiv({ cls: "istart-sync-header" });
@@ -165,7 +173,10 @@ export class BaiduSyncView extends ItemView {
     const summaryEl = root.createDiv({ cls: "istart-sync-summary" });
     if (counts.upload) this.makeBadge(summaryEl, `待上传 ${counts.upload}`, "istart-sync-badge-upload");
     if (counts.download) this.makeBadge(summaryEl, `待下载 ${counts.download}`, "istart-sync-badge-download");
-    if (counts.conflict) this.makeBadge(summaryEl, `冲突 ${counts.conflict}`, "istart-sync-badge-conflict");
+    if (counts.conflict) {
+      this.makeBadge(summaryEl, `冲突 ${counts.conflict}`, "istart-sync-badge-conflict");
+      this.makeSmallBtn(summaryEl, "批量处理冲突", () => { void this.openConflicts(); });
+    }
     if (counts.unchanged) this.makeBadge(summaryEl, `已同步 ${counts.unchanged}`, "istart-sync-badge-unchanged");
 
     // 文件列表（只显示需要操作的）
@@ -202,12 +213,8 @@ export class BaiduSyncView extends ItemView {
     if (item.action === SyncAction.Download || item.action === SyncAction.RemoteOnly) {
       this.makeSmallBtn(right, "下载", () => { void this.downloadOne(item); });
     }
-    if (item.action === SyncAction.Conflict) {
-      this.makeSmallBtn(right, "用本地", () => { void this.resolveConflict(item, "local"); });
-      this.makeSmallBtn(right, "用远端", () => { void this.resolveConflict(item, "remote"); });
-    }
-    if (item.action === SyncAction.LocalDeleted) {
-      this.makeSmallBtn(right, "删远端", () => { void this.deleteRemote(item.path); });
+    if ([SyncAction.Conflict, SyncAction.LocalDeleted, SyncAction.RemoteDeleted].includes(item.action)) {
+      this.makeSmallBtn(right, "查看差异与处理", () => { void this.openConflicts(item.path); });
     }
   }
 
@@ -227,37 +234,7 @@ export class BaiduSyncView extends ItemView {
       if (!tokenOk) { new Notice("Token 已过期，请重新授权"); return; }
       await this.plugin.saveSettings();
 
-      const client = new BaiduPanClient(cfg);
-      const remoteRoot = cfg.remotePath;
-
-      // 获取 meta
-      const metaPath = `${cfg.remotePath}/istart-sync-meta.json`;
-      let meta = new BaiduSyncMeta();
-      try {
-        const metaBuf = await client.downloadFile(metaPath);
-        if (metaBuf) meta = new BaiduSyncMeta(new TextDecoder().decode(metaBuf));
-      } catch { /* 首次 */ }
-
-      // 本地文件
-      const localMap = new Map<string, number>();
-      for (const f of this.app.vault.getFiles()) {
-        if (!f.path.split("/").some((p) => p.startsWith("."))) {
-          localMap.set(f.path, f.stat.mtime);
-        }
-      }
-
-      // 远端文件
-      const remoteMap = new Map<string, number>();
-      const remoteEntries = await client.listAllFiles(remoteRoot);
-      for (const e of remoteEntries) {
-        if (!e.isdir && !e.path.endsWith("istart-sync-meta.json")) {
-          const rel = e.path.replace(remoteRoot + "/", "").replace(/^\//, "");
-          if (rel.startsWith("_istart-git/")) continue;
-          remoteMap.set(rel, e.server_mtime);
-        }
-      }
-
-      const plans = meta.buildSyncPlan(localMap, remoteMap);
+      const plans = await service.scan();
       if (scanSettingsKey !== this.settingsKey()) return;
       this.statusList = plans.map((p) => ({
         path: p.path,
@@ -311,19 +288,22 @@ export class BaiduSyncView extends ItemView {
     if (!tokenOk) { new Notice("Token 已过期，请重新授权"); return; }
 
     const notice = new Notice("同步中...", 0);
-    const result = await service.sync("", { conflictStrategy: "keep-both" }, (msg) =>
-      notice.setMessage(`${msg}`)
-    );
-    notice.hide();
+    try {
+      const result = await service.sync("", { conflictStrategy: "ask" }, (msg) =>
+        notice.setMessage(`${msg}`)
+      );
 
-    const parts = [
-      result.uploaded && `上传 ${result.uploaded}`,
-      result.downloaded && `下载 ${result.downloaded}`,
-      result.conflicts.length && `冲突 ${result.conflicts.length}`,
-      result.failed && `失败 ${result.failed}`,
-    ].filter(Boolean).join("  ");
-    new Notice(parts ? `同步完成：${parts}` : "已是最新");
-    await this.scan();
+      const parts = [
+        result.uploaded && `上传 ${result.uploaded}`,
+        result.downloaded && `下载 ${result.downloaded}`,
+        result.conflicts.length && `冲突 ${result.conflicts.length}`,
+        result.failed && `失败 ${result.failed}`,
+      ].filter(Boolean).join("  ");
+      new Notice(parts ? `同步完成：${parts}` : "已是最新");
+      await this.scan();
+      if (result.conflicts.length) await this.openConflicts();
+    } catch (error) { new Notice(`同步失败：${(error as Error).message}`); }
+    finally { notice.hide(); }
   }
 
   async forceOverwrite() {
@@ -404,18 +384,9 @@ export class BaiduSyncView extends ItemView {
     await this.scan();
   }
 
-  private async resolveConflict(item: FileStatus, strategy: "local" | "remote") {
-    if (strategy === "local") await this.uploadOne(item.path);
-    else await this.downloadOne(item);
-  }
-
-  private async deleteRemote(path: string) {
-    const cfg = this.plugin.settings.baiduSync;
-    const client = new BaiduPanClient(cfg);
-    const remotePath = `${cfg.remotePath}/${path}`.replace(/\/+/g, "/");
-    const ok = await client.deleteFile(remotePath);
-    new Notice(ok ? `已删除远端：${path.split("/").pop()}` : `删除失败`);
-    if (ok) await this.scan();
+  private async openConflicts(initialPath?: string): Promise<void> {
+    const paths = this.statusList.filter(item => [SyncAction.Conflict, SyncAction.LocalDeleted, SyncAction.RemoteDeleted].includes(item.action)).map(item => item.path);
+    await openFileConflicts(this.app, this.plugin.settings.baiduSync, paths, () => this.scan(), initialPath, () => this.plugin.saveSettings());
   }
 
   // ── 工具方法 ───────────────────────────────────────────────
@@ -425,7 +396,7 @@ export class BaiduSyncView extends ItemView {
     for (const s of this.statusList) {
       if (s.action === SyncAction.Upload || s.action === SyncAction.LocalOnly) counts.upload++;
       else if (s.action === SyncAction.Download || s.action === SyncAction.RemoteOnly) counts.download++;
-      else if (s.action === SyncAction.Conflict) counts.conflict++;
+      else if ([SyncAction.Conflict, SyncAction.LocalDeleted, SyncAction.RemoteDeleted].includes(s.action)) counts.conflict++;
       else counts.unchanged++;
     }
     return counts;

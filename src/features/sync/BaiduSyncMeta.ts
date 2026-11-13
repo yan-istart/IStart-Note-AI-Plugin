@@ -105,8 +105,8 @@ export class BaiduSyncMeta {
           // 本地新文件
           plans.push({ path, action: SyncAction.LocalOnly, localMtime });
         } else {
-          // 两边都有但没有 meta，保守处理：以本地为准上传
-          plans.push({ path, action: SyncAction.Upload, localMtime, remoteMtime });
+          // 两边都有但没有共同记录，先比较内容，避免首次同步覆盖同名文件。
+          plans.push({ path, action: SyncAction.Conflict, localMtime, remoteMtime });
         }
         continue;
       }
@@ -114,7 +114,9 @@ export class BaiduSyncMeta {
       const localChanged = localMtime > record.localMtime + 1000; // 1s 容差
       const remoteChanged = remoteMtime !== undefined && remoteMtime > record.remoteMtime;
 
-      if (!localChanged && !remoteChanged) {
+      if (remoteMtime === undefined) {
+        plans.push({ path, action: localChanged ? SyncAction.Conflict : SyncAction.RemoteDeleted, localMtime });
+      } else if (!localChanged && !remoteChanged) {
         plans.push({ path, action: SyncAction.Unchanged });
       } else if (localChanged && !remoteChanged) {
         plans.push({ path, action: SyncAction.Upload, localMtime, remoteMtime });
@@ -135,8 +137,8 @@ export class BaiduSyncMeta {
         // 远端新文件，本地没有
         plans.push({ path, action: SyncAction.RemoteOnly, remoteMtime });
       } else {
-        // meta 有记录但本地没了 → 本地删除了
-        plans.push({ path, action: SyncAction.LocalDeleted, remoteMtime });
+        // 本地删除、远端仍有编辑时必须先处理冲突。
+        plans.push({ path, action: remoteMtime > record.remoteMtime ? SyncAction.Conflict : SyncAction.LocalDeleted, remoteMtime });
       }
     }
 

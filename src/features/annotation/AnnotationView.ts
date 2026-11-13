@@ -16,6 +16,7 @@ import type { AnnotationCommentStyle, AnnotationRecord } from "../../core/annota
 import { parseAnnotations } from "../../core/annotations/AnnotationParser";
 import { locateSourceRange } from "../../core/annotations/AnnotationNavigation";
 import { AnnotationDeleteModal, AnnotationModal } from "./AnnotationModal";
+import { bindSidebarViewport } from "../../ui/SidebarViewport";
 import { AnnotationService } from "./AnnotationService";
 
 export const ANNOTATION_VIEW_TYPE = WORKBENCH_VIEWS.annotations;
@@ -55,6 +56,8 @@ export class AnnotationView extends ItemView {
   private statusEl: HTMLElement | null = null;
   private countEl: HTMLElement | null = null;
   private opened = false;
+  private bodyEl: HTMLElement | null = null;
+  private cleanupViewport?: () => void;
 
   constructor(leaf: WorkspaceLeaf, private plugin: DeepSeekPlugin) {
     super(leaf);
@@ -73,6 +76,7 @@ export class AnnotationView extends ItemView {
     this.countEl = null;
     if (Platform.isMobile) this.contentEl.addClass("istart-annotations-mobile");
     renderWorkbenchNav(this.contentEl, this.plugin, "annotations");
+    this.cleanupViewport = bindSidebarViewport(this.contentEl);
     this.bindEvents();
     void this.reload();
     return Promise.resolve();
@@ -91,6 +95,8 @@ export class AnnotationView extends ItemView {
   private teardown(): void {
     if (!this.opened && this.events.length === 0) return;
     this.opened = false;
+    this.cleanupViewport?.(); this.cleanupViewport = undefined;
+    this.bodyEl = null;
     this.scanGeneration++;
     this.loading = false;
     if (this.refreshTimer !== undefined) {
@@ -287,7 +293,8 @@ export class AnnotationView extends ItemView {
     if (Platform.isMobile) this.contentEl.addClass("istart-annotations-mobile");
     renderWorkbenchNav(this.contentEl, this.plugin, "annotations");
 
-    const header = this.contentEl.createDiv({ cls: "istart-annotations-header" });
+    const body = this.bodyEl = this.contentEl.createDiv({ cls: "istart-workbench-body istart-annotations-body" });
+    const header = body.createDiv({ cls: "istart-annotations-header" });
     const tabs = header.createDiv({ cls: "istart-annotations-tabs" });
     this.createTab(tabs, "当前笔记", "current");
     this.createTab(tabs, "全库", "vault");
@@ -299,7 +306,7 @@ export class AnnotationView extends ItemView {
     setIcon(refreshButton, "refresh-cw");
     refreshButton.addEventListener("click", () => { void this.reload(); });
 
-    const searchWrap = this.contentEl.createDiv({ cls: "istart-annotations-search" });
+    const searchWrap = body.createDiv({ cls: "istart-annotations-search" });
     const search = searchWrap.createEl("input", {
       type: "search",
       attr: { placeholder: "搜索文字、批注或文件名", "aria-label": "搜索批注" },
@@ -314,14 +321,14 @@ export class AnnotationView extends ItemView {
       }, 120);
     });
 
-    const filters = this.contentEl.createDiv({ cls: "istart-annotations-filters" });
+    const filters = body.createDiv({ cls: "istart-annotations-filters" });
     this.createFilter(filters, "全部", "all");
     this.createFilter(filters, "高亮", "highlight");
     this.createFilter(filters, "批注", "note");
     this.countEl = filters.createSpan({ cls: "istart-annotations-count" });
 
-    this.statusEl = this.contentEl.createDiv({ cls: "istart-annotations-status" });
-    this.listEl = this.contentEl.createDiv({ cls: "istart-annotations-list" });
+    this.statusEl = body.createDiv({ cls: "istart-annotations-status" });
+    this.listEl = body.createDiv({ cls: "istart-annotations-list" });
     this.renderList();
   }
 
@@ -362,7 +369,8 @@ export class AnnotationView extends ItemView {
 
   private renderList(): void {
     if (!this.listEl) return;
-    const scrollTop = this.listEl.scrollTop;
+    const scroller = this.bodyEl ?? this.listEl;
+    const scrollTop = scroller.scrollTop;
     this.listEl.empty();
 
     const filtered = this.filteredItems();
@@ -407,7 +415,7 @@ export class AnnotationView extends ItemView {
       } else {
         this.renderEmpty("全库还没有批注", "在任意笔记中选中文字并添加批注后，会自动汇总到这里。");
       }
-      this.listEl.scrollTop = 0;
+      scroller.scrollTop = 0;
       return;
     }
 
@@ -427,7 +435,7 @@ export class AnnotationView extends ItemView {
         text: `仅显示前 ${LIST_LIMIT} 条，请用搜索缩小范围。`,
       });
     }
-    this.listEl.scrollTop = scrollTop;
+    scroller.scrollTop = scrollTop;
   }
 
   private filteredItems(): AnnotationItem[] {

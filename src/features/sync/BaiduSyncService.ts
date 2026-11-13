@@ -2,6 +2,7 @@ import { App, Notice, TFile } from "obsidian";
 import { BaiduSyncConfig, DeepSeekSettings, SyncableConfig } from "../../types";
 import { BaiduPanClient } from "./BaiduPanClient";
 import { BaiduSyncMeta, SyncAction, SyncPlan } from "./BaiduSyncMeta";
+import { withFileSyncLock } from "./FileSyncLock";
 
 const META_FILENAME = "istart-sync-meta.json";
 const CONFIG_FILENAME = "istart-config.json";
@@ -16,6 +17,8 @@ export interface SyncResult {
   errors: string[];
 }
 
+export interface FileSyncOptions { conflictStrategy?: "ask" | "local" | "remote" | "keep-both"; deleteRemoteOnLocalDelete?: boolean }
+
 export class BaiduSyncService {
   private client: BaiduPanClient;
 
@@ -25,13 +28,17 @@ export class BaiduSyncService {
 
   // ── 双向同步（核心） ───────────────────────────────────────
 
-  async sync(
+  async sync(localFolder = "", options: FileSyncOptions = {}, onProgress?: (msg: string) => void): Promise<SyncResult> {
+    return withFileSyncLock(this.app, () => this.syncInternal(localFolder, options, onProgress));
+  }
+
+  private async syncInternal(
     localFolder = "",
-    options: { conflictStrategy?: "local" | "remote" | "keep-both"; deleteRemoteOnLocalDelete?: boolean } = {},
+    options: FileSyncOptions = {},
     onProgress?: (msg: string) => void
   ): Promise<SyncResult> {
     const result: SyncResult = { uploaded: 0, downloaded: 0, conflicts: [], deleted: 0, skipped: 0, failed: 0, errors: [] };
-    const { conflictStrategy = "keep-both", deleteRemoteOnLocalDelete = false } = options;
+    const { conflictStrategy = "ask", deleteRemoteOnLocalDelete = false } = options;
 
     onProgress?.("读取同步元数据...");
     const meta = await this.loadMeta();
@@ -68,27 +75,27 @@ export class BaiduSyncService {
 
           case SyncAction.Download:
           case SyncAction.RemoteOnly:
-            await this.doDownload(plan, remoteRoot, meta, result);
+            await this.doDownload(plan, meta, result);
             break;
 
           case SyncAction.Conflict:
-            await this.handleConflict(plan, remoteRoot, meta, result, conflictStrategy);
+            await this.handleConflict(plan, meta, result, conflictStrategy);
             break;
 
           case SyncAction.LocalDeleted:
             if (deleteRemoteOnLocalDelete) {
               const remotePath = this.toRemotePath(plan.path, localFolder);
-              await this.client.deleteFile(remotePath);
+              if (!await this.client.deleteFile(remotePath)) throw new Error(`Delete failed: ${plan.path}`);
               meta.delete(plan.path);
               result.deleted++;
             } else {
-              meta.delete(plan.path);
+              result.conflicts.push(plan.path);
               result.skipped++;
             }
             break;
 
           case SyncAction.RemoteDeleted:
-            meta.delete(plan.path);
+            result.conflicts.push(plan.path);
             result.skipped++;
             break;
         }
@@ -106,7 +113,11 @@ export class BaiduSyncService {
 
   // ── 纯备份（只上传，不下载） ───────────────────────────────
 
-  async backup(
+  async backup(localFolder = "", onProgress?: (current: number, total: number, file: string) => void): Promise<SyncResult> {
+    return withFileSyncLock(this.app, () => this.backupInternal(localFolder, onProgress));
+  }
+
+  private async backupInternal(
     localFolder = "",
     onProgress?: (current: number, total: number, file: string) => void
   ): Promise<SyncResult> {
@@ -152,7 +163,11 @@ export class BaiduSyncService {
 
   // ── 恢复（只下载） ─────────────────────────────────────────
 
-  async restore(
+  async restore(localFolder = "", overwrite = false, onProgress?: (current: number, total: number, file: string) => void): Promise<SyncResult> {
+    return withFileSyncLock(this.app, () => this.restoreInternal(localFolder, overwrite, onProgress));
+  }
+
+  private async restoreInternal(
     localFolder = "",
     overwrite = false,
     onProgress?: (current: number, total: number, file: string) => void
@@ -287,8 +302,8 @@ export class BaiduSyncService {
     }
   }
 
-  private async doDownload(plan: SyncPlan, remoteRoot: string, meta: BaiduSyncMeta, result: SyncResult) {
-    const remotePath = `${remoteRoot}/${plan.path}`.replace(/\/+/g, "/");
+  private async doDownload(plan: SyncPlan, meta: BaiduSyncMeta, result: SyncResult) {
+    const remotePath = this.toRemotePath(plan.path, "");
     const content = await this.client.downloadFile(remotePath);
     if (!content) { result.failed++; result.errors.push(`Download failed: ${plan.path}`); return; }
 
@@ -301,23 +316,31 @@ export class BaiduSyncService {
 
   private async handleConflict(
     plan: SyncPlan,
-    remoteRoot: string,
     meta: BaiduSyncMeta,
     result: SyncResult,
-    strategy: "local" | "remote" | "keep-both"
+    strategy: "ask" | "local" | "remote" | "keep-both"
   ) {
     result.conflicts.push(plan.path);
 
+    if (strategy === "ask") return;
+    const local = this.app.vault.getAbstractFileByPath(plan.path);
     if (strategy === "local") {
-      await this.doUpload(plan, meta, result);
+      if (local instanceof TFile) await this.doUpload(plan, meta, result);
+      else if (await this.client.deleteFile(this.toRemotePath(plan.path, ""))) { meta.delete(plan.path); result.deleted++; }
+      else throw new Error(`Delete failed: ${plan.path}`);
     } else if (strategy === "remote") {
-      await this.doDownload(plan, remoteRoot, meta, result);
+      if (plan.remoteMtime !== undefined) await this.doDownload(plan, meta, result);
+      else {
+        if (local instanceof TFile) await this.app.fileManager.trashFile(local);
+        meta.delete(plan.path); result.deleted++;
+      }
     } else {
       const conflictPath = plan.path.replace(/(\.\w+)?$/, `.conflict$1`);
       const abstract = this.app.vault.getAbstractFileByPath(plan.path);
       if (abstract instanceof TFile) await this.app.vault.rename(abstract, conflictPath);
 
-      await this.doDownload(plan, remoteRoot, meta, result);
+      if (plan.remoteMtime !== undefined) await this.doDownload(plan, meta, result);
+      else { meta.delete(plan.path); result.deleted++; }
       new Notice(`冲突：${plan.path}，本地版本已保存为 ${conflictPath}`);
     }
   }
@@ -352,26 +375,27 @@ export class BaiduSyncService {
     const map = new Map<string, number>();
     const files = this.app.vault.getFiles();
     for (const f of files) {
-      if (folder && !f.path.startsWith(folder)) continue;
+      if (folder && f.path !== folder && !f.path.startsWith(folder.replace(/\/+$/, "") + "/")) continue;
       if (this.shouldIgnore(f)) continue;
       map.set(f.path, f.stat.mtime);
     }
     return map;
   }
 
+  async scan(localFolder = ""): Promise<SyncPlan[]> {
+    const meta = await this.loadMeta();
+    return meta.buildSyncPlan(this.buildLocalFileMap(localFolder), await this.buildRemoteFileMap(this.remoteRoot(localFolder)));
+  }
+
   private async buildRemoteFileMap(remoteRoot: string): Promise<Map<string, number>> {
     const map = new Map<string, number>();
-    try {
-      const entries = await this.client.listAllFiles(remoteRoot);
-      for (const e of entries) {
-        if (e.isdir) continue;
-        const rel = e.path.replace(remoteRoot + "/", "").replace(/^\//, "");
-        if (rel === "_istart-git" || rel.startsWith("_istart-git/")) continue;
-        if (rel === META_FILENAME) continue;
-        map.set(rel, e.server_mtime);
-      }
-    } catch {
-      // 远端目录不存在
+    const root = this.config.remotePath.replace(/\/+$/, "");
+    const entries = await this.client.listAllFiles(remoteRoot, true);
+    for (const entry of entries) {
+      if (entry.isdir || !entry.path.startsWith(root + "/")) continue;
+      const path = entry.path.slice(root.length + 1);
+      if (this.shouldIgnorePath(path, entry.size)) continue;
+      map.set(path, entry.server_mtime);
     }
     return map;
   }
@@ -390,13 +414,14 @@ export class BaiduSyncService {
     return remotePath.replace(remoteRoot + "/", "").replace(/^\//, "");
   }
 
-  private shouldIgnore(file: TFile): boolean {
-    const path = file.path;
-    if (path.split("/").some((p) => p.startsWith("."))) return true;
-    if (file.stat.size > this.config.fileSizeLimitMB * 1024 * 1024) return true;
-    if (this.config.ignorePattern) {
-      try { if (new RegExp(this.config.ignorePattern).test(path)) return true; } catch { /* ignore */ }
-    }
+  private shouldIgnore(file: TFile): boolean { return this.shouldIgnorePath(file.path, file.stat.size); }
+
+  private shouldIgnorePath(path: string, size: number): boolean {
+    if (path.split("/").some(part => part.startsWith("."))) return true;
+    if (path === this.app.vault.configDir || path.startsWith(`${this.app.vault.configDir}/`)) return true;
+    if (/^(?:_istart-git|_plugin|_obsidian-config)(?:\/|$)/.test(path) || path === META_FILENAME || path === CONFIG_FILENAME) return true;
+    if (size > this.config.fileSizeLimitMB * 1024 * 1024) return true;
+    if (this.config.ignorePattern && new RegExp(this.config.ignorePattern).test(path)) return true;
     return false;
   }
 

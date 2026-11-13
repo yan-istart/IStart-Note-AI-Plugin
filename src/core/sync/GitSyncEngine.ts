@@ -1,5 +1,6 @@
 import * as git from "isomorphic-git";
 import diff3 from "diff3";
+import { SyncConflict, SyncResolution } from "./SyncConflict";
 
 export interface GitTransport {
   list(): Promise<string[]>;
@@ -7,22 +8,15 @@ export interface GitTransport {
   upload(oid: string, bundle: Uint8Array): Promise<void>;
 }
 
-export interface GitConflict {
-  path: string;
-  key: string;
-  local?: string;
-  remote?: string;
-  base?: string;
-  binary: boolean;
-}
-
-export type GitResolution = { choice: "local" | "remote" } | { choice: "text"; text: string };
+export type GitConflict = SyncConflict;
+export type GitResolution = SyncResolution;
 export interface GitSyncOutcome {
   before: string;
   after: string;
   uploaded: number;
   downloaded: number;
   conflicts: GitConflict[];
+  remoteHeads: string[];
 }
 
 export interface GitHistoryEntry {
@@ -313,12 +307,19 @@ export class GitSyncEngine {
       else {
         const key = `${path}:${b ?? "-"}:${l ?? "-"}:${r ?? "-"}`;
         const resolution = resolutions.get(key);
-        const read = async (oid?: string): Promise<string | undefined> => oid ? textOf(await this.blob(oid)) : undefined;
-        const [baseText, localText, remoteText] = await Promise.all([read(b), read(l), read(r)]);
+        const read = async (oid?: string) => oid ? this.blob(oid) : undefined;
+        const [baseBytes, localBytes, remoteBytes] = await Promise.all([read(b), read(l), read(r)]);
+        const decode = (bytes?: Uint8Array) => bytes && bytes.length <= 1_000_000 ? textOf(bytes) : undefined;
+        const baseText = decode(baseBytes), localText = decode(localBytes), remoteText = decode(remoteBytes);
         const binary = !/\.(md|markdown|txt|canvas|json|csv|tsv|yaml|yml)$/i.test(path)
           || (l !== undefined && localText === undefined) || (r !== undefined && remoteText === undefined)
           || (b !== undefined && baseText === undefined)
           || [baseText, localText, remoteText].some((text) => (text?.length ?? 0) > 1_000_000);
+        const conflict: GitConflict = {
+          path, key, base: baseText, local: localText, remote: remoteText, binary,
+          baseExists: b !== undefined, localExists: l !== undefined, remoteExists: r !== undefined,
+          baseSize: baseBytes?.length ?? 0, localSize: localBytes?.length ?? 0, remoteSize: remoteBytes?.length ?? 0,
+        };
         if (resolution?.choice === "local") result = l;
         else if (resolution?.choice === "remote") result = r;
         else if (resolution?.choice === "text" && !binary) result = await git.writeBlob({ ...this.args, blob: encoder.encode(resolution.text) });
@@ -328,8 +329,8 @@ export class GitSyncEngine {
           if (blocks.every((block) => "ok" in block)) {
             const text = blocks.map((block) => "ok" in block ? block.ok.join("") : "").join("");
             result = await git.writeBlob({ ...this.args, blob: encoder.encode(text) });
-          } else conflicts.push({ path, key, base: baseText, local: localText, remote: remoteText, binary });
-        } else conflicts.push({ path, key, base: baseText, local: localText, remote: remoteText, binary });
+          } else conflicts.push(conflict);
+        } else conflicts.push(conflict);
       }
       if (result) merged.set(path, result);
     }
@@ -343,7 +344,7 @@ export class GitSyncEngine {
     let after = before;
     for (const remote of new Set([...(recoveryHead ? [recoveryHead] : []), ...heads])) {
       const merged = await this.merge(after, remote, resolutions);
-      if (merged.conflicts.length) return { before, after: before, uploaded: 0, downloaded, conflicts: merged.conflicts };
+      if (merged.conflicts.length) return { before, after: before, uploaded: 0, downloaded, conflicts: merged.conflicts, remoteHeads: heads };
       after = merged.oid;
     }
     let uploaded = 0;
@@ -354,7 +355,7 @@ export class GitSyncEngine {
       uploaded = 1;
     }
     // The live-vault layer advances HEAD only after a durable application journal.
-    return { before, after, uploaded, downloaded, conflicts: [] };
+    return { before, after, uploaded, downloaded, conflicts: [], remoteHeads: heads };
   }
 
   async history(depth = 30): Promise<GitHistoryEntry[]> {
