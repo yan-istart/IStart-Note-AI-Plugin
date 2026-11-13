@@ -180,7 +180,7 @@ export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise
   return new Promise<T>((resolve, reject) => {
     const cancel = () => { cleanup(); reject(new Error("生成已停止")); };
     const cleanup = () => signal.removeEventListener("abort", cancel);
-    promise.then(value => { cleanup(); resolve(value); }, error => { cleanup(); reject(error); });
+    promise.then(value => { cleanup(); resolve(value); }, (error: unknown) => { cleanup(); reject(error instanceof Error ? error : new Error(String(error))); });
     if (signal.aborted) { cancel(); return; }
     signal.addEventListener("abort", cancel, { once: true });
   });
@@ -188,7 +188,12 @@ export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise
 
 async function streamCompletion(url: string, headers: Record<string, string>, payload: object, onDelta: (text: string) => void, signal?: AbortSignal): Promise<{ status: number; text: string; json: unknown }> {
   let response: Response;
-  try { response = await fetch(url, { method: "POST", headers, body: JSON.stringify({ ...payload, stream: true }), signal }); }
+  try {
+    // requestUrl buffers the complete response and cannot deliver SSE deltas.
+    // Keep fetch only for opt-in streaming; StreamUnavailable falls back to requestUrl.
+    // eslint-disable-next-line no-restricted-globals -- requestUrl has no streaming reader or AbortSignal support.
+    response = await fetch(url, { method: "POST", headers, body: JSON.stringify({ ...payload, stream: true }), signal });
+  }
   catch (error) { if (signal?.aborted) throw error; throw new StreamUnavailable(); }
   if (!response.ok) return { status: response.status, text: await response.text(), json: null };
   if (!response.headers.get("content-type")?.includes("text/event-stream")) {

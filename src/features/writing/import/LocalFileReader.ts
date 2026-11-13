@@ -19,7 +19,7 @@ let cached: FsModule | null | undefined;
 export function getFs(): FsModule | null {
   if (cached !== undefined) return cached;
   try {
-    const req = (typeof require !== "undefined" ? require : null) as ((id: string) => unknown) | null;
+    const req = typeof require !== "undefined" ? require : null;
     cached = req ? (req("fs") as FsModule) : null;
   } catch {
     cached = null;

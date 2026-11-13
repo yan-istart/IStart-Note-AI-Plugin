@@ -5,7 +5,7 @@
 </p>
 
 <p align="center">
-  <a href="./README.md">简体中文</a> ·
+  <a href="./README.zh-CN.md">简体中文</a> ·
   <a href="#feature-list">Feature list</a> ·
   <a href="#quick-start">Quick Start</a> ·
   <a href="#entry-point-and-feature-consolidation-plan">Consolidation plan</a> ·
@@ -28,7 +28,7 @@ IStart-Note-AI is an Obsidian plugin built around three business scenarios: **Kn
 - Writing: turn ideas into works — web novels, papers, long-form articles — with shared and work-specific writing skills
 - Auxiliary: AI assistant, sidebar annotations, typo checking, document beautification, model settings, IStart Data Sync
 
-> Documentation reflects the current source tree. `package.json` and `manifest.json` declare version **2.6.0**; minimum Obsidian version: **1.7.2**. The UI currently uses Chinese labels; English names below describe those controls.
+> Documentation reflects the current source tree. `package.json` and `manifest.json` declare version **2.7.1**; minimum Obsidian version: **1.7.2**. The UI currently uses Chinese labels; English names below describe those controls.
 
 ---
 

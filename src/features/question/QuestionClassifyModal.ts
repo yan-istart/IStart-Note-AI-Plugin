@@ -64,12 +64,12 @@ export class QuestionClassifyModal extends Modal {
 
     if (this.classification.related.length > 0) {
       const relatedEl = contentEl.createDiv({ attr: { style: "margin-bottom: 12px;" } });
-      relatedEl.createEl("div", {
+      relatedEl.createDiv({
         text: "相关问题",
         attr: { style: "font-size: 12px; color: var(--text-muted); margin-bottom: 4px;" },
       });
       for (const r of this.classification.related) {
-        relatedEl.createEl("div", {
+        relatedEl.createDiv({
           text: `• ${r}`,
           attr: { style: "font-size: 13px; padding: 2px 0;" },
         });

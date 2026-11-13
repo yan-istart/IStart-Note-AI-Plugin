@@ -65,8 +65,7 @@ export class ActionModal extends Modal {
     let header = this.titleEl.parentElement!;
     if (header === this.modalEl) {
       // Older Obsidian versions put the title directly in the modal.
-      header = doc.createElement("div");
-      header.addClass("modal-header");
+      header = this.modalEl.createDiv({ cls: "modal-header" });
       this.modalEl.insertBefore(header, this.titleEl);
       header.appendChild(this.titleEl);
     }

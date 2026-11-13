@@ -25,7 +25,7 @@ export function onGitLocalChange(app: App, listener: () => void): () => void {
   let listeners = changeListeners.get(app);
   if (!listeners) changeListeners.set(app, listeners = new Set());
   listeners.add(listener);
-  return () => { listeners!.delete(listener); };
+  return () => { listeners.delete(listener); };
 }
 
 const vaultOperations = new WeakMap<App, Promise<void>>();
@@ -59,7 +59,7 @@ export class BaiduGitSyncService {
         return new Uint8Array(buffer);
       },
       upload: async (oid, bundle) => {
-        const ok = await this.client.uploadFile(Uint8Array.from(bundle).buffer as ArrayBuffer, `${this.remote}/${oid}.bundle`);
+        const ok = await this.client.uploadFile(Uint8Array.from(bundle).buffer, `${this.remote}/${oid}.bundle`);
         if (!ok) throw new Error("上传版本包失败，本地历史已保留，请重试");
       },
     };
@@ -195,7 +195,7 @@ export class BaiduGitSyncService {
       } else {
         const dir = change.path.slice(0, change.path.lastIndexOf("/"));
         if (change.path.includes("/")) await ensureDirectory(this.app.vault.adapter, dir);
-        const buffer = Uint8Array.from(change.bytes).buffer as ArrayBuffer;
+        const buffer = Uint8Array.from(change.bytes).buffer;
         if (existing instanceof TFile) await this.app.vault.modifyBinary(existing, buffer);
         else await this.app.vault.createBinary(change.path, buffer);
       }
@@ -316,7 +316,7 @@ export class BaiduGitSyncService {
       const next = (await hashBlob({ object: bytes })).oid;
       await this.assertUnedited(path, previous, next);
       const existing = this.app.vault.getAbstractFileByPath(path);
-      const buffer = Uint8Array.from(bytes).buffer as ArrayBuffer;
+      const buffer = Uint8Array.from(bytes).buffer;
       if (existing instanceof TFile) await this.app.vault.modifyBinary(existing, buffer);
       else {
         if (existing) throw new Error("同名路径是目录，无法恢复");

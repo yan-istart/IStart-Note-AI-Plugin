@@ -31,7 +31,7 @@ import { buildReadingProjectDraft, completeReadingQuestions, readingProgress, qu
 
 const string = (required = false) => ({ type: "string" as const, required });
 const choice = (...choices: string[]) => ({ type: "string" as const, choices, required: true });
-const str = (args: ToolArguments, key: string, fallback = "") => typeof args[key] === "string" ? args[key] as string : fallback;
+const str = (args: ToolArguments, key: string, fallback = "") => typeof args[key] === "string" ? args[key] : fallback;
 const writingTypes = ["chapter", "writing-project", "character", "setting", "outline", "snippet"];
 export class AgentTools {
   readonly registry = new ToolRegistry();
@@ -179,7 +179,7 @@ export class AgentTools {
       const indexNote = this.app.vault.getAbstractFileByPath(indexPath) || c.drafts?.has(indexPath) ? await this.note(c, indexPath) : undefined;
       const previous = indexNote?.content ?? "# 问题索引\n\n## 核心问题\n\n## 深化问题\n\n## 扩展问题\n";
       const section = classification.category === "refinement" ? "## 深化问题" : classification.category === "expansion" ? "## 扩展问题" : "## 核心问题";
-      const link = `- [[${path}|${question.replace(/[\[\]|\n]/g, " ")}]]`;
+      const link = `- [[${path}|${question.replace(/[[\]|\n]/g, " ")}]]`;
       let after = previous.includes(section) ? previous.replace(section, () => `${section}\n${link}`) : `${previous}\n${section}\n${link}\n`;
       const nodes: QuestionNode[] = [{ title: question, category: classification.category, parent: classification.parent }];
       const oldLinks = [...previous.matchAll(/\[\[([^\]|]+)\|([^\]]+)\]\]/g)];
@@ -228,11 +228,13 @@ export class AgentTools {
         const cards: unknown = parseJsonSafe(text, null);
         if (!Array.isArray(cards) || !cards.length || cards.length > 15) throw new Error("未返回有效的角色卡");
         const changes: FileChange[] = [];
-        for (const card of cards) {
-          if (!card || typeof card.name !== "string" || typeof card.summary !== "string") throw new Error("角色卡格式无效");
+        for (const value of cards as unknown[]) {
+          if (!value || typeof value !== "object") throw new Error("角色卡格式无效");
+          const card = value as Record<string, unknown>;
+          if (typeof card.name !== "string" || typeof card.summary !== "string") throw new Error("角色卡格式无效");
           const path = `${context.projectPath}/_角色/${noteName(card.name)}.md`;
           if (this.app.vault.getAbstractFileByPath(path)) continue;
-          changes.push({ path, before: null, after: `---\ntype: character\nname: ${JSON.stringify(card.name)}\nrole: ${["protagonist", "support", "villain"].includes(card.role) ? card.role : "support"}\n---\n\n# ${card.name}\n\n## 角色概要\n\n${card.summary}\n` });
+          changes.push({ path, before: null, after: `---\ntype: character\nname: ${JSON.stringify(card.name)}\nrole: ${typeof card.role === "string" && ["protagonist", "support", "villain"].includes(card.role) ? card.role : "support"}\n---\n\n# ${card.name}\n\n## 角色概要\n\n${card.summary}\n` });
         }
         if (!changes.length) return { content: "提取的角色卡均已存在，未生成重复文件。" };
         return { content: `提取 ${changes.length} 个新角色，应用后创建角色卡。`, proposals: [this.proposal(c, "提取角色卡", changes)] };

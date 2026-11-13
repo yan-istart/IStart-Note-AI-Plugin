@@ -6,6 +6,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 
 ## [Unreleased]
 
+### Fixed
+- Resolve community scorecard warnings: load ES2019 library types, validate untrusted Agent/import data, type Git filesystem calls, use Obsidian DOM helpers and cross-window checks, and remove unnecessary assertions, escapes, unused code, and CSS `!important`.
+- Make settings sections discoverable through Obsidian 1.13+ settings search while retaining the existing settings UI on older versions. Keep realtime SSE streaming with a documented, single-line `fetch` lint exception and the existing `requestUrl` fallback.
+- Preserve the repository manifest in builds and publish release assets only through CI, using the committed lockfile, Node.js 22, and artifact attestations. Use an English root README with the complete Chinese guide in `README.zh-CN.md`.
+- Add community scorecard lint checks to local/CI validation and update development dependencies with a vulnerability-free lockfile.
+
 ### Added
 - Complete Agent migration for document beautification, readonly proofreading with durable source locations, knowledge-debt statistics, existing annotation rewriting/suggestions, and manuscript classification/analysis. Remove the separate All features panel; keep existing command IDs as assistant aliases and provide inline task shortcuts.
 - Copy messages, tool results, role turns, complete previews and entire conversations; preserve text selection while streaming. Stable editor snapshots and an inline source-position picker keep insertion usable after switching focus, including inserting an existing answer at an explicitly chosen location.

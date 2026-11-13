@@ -364,7 +364,8 @@ export default class DeepSeekPlugin extends Plugin {
   // ── 设置 ───────────────────────────────────────────────────
 
   async loadSettings() {
-    const saved: Partial<DeepSeekSettings> | null = await this.loadData();
+    const data: unknown = await this.loadData();
+    const saved = data && typeof data === "object" && !Array.isArray(data) ? data as Partial<DeepSeekSettings> : null;
     this.settings = Object.assign({}, DEFAULT_SETTINGS, saved);
     this.settings.skills = loadSkillSettings(saved?.skills);
     this.settings.floatingToolbar = loadFloatingToolbarSettings(saved?.floatingToolbar);

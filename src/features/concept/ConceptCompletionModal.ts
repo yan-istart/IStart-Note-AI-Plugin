@@ -121,7 +121,7 @@ export class BatchScanModal extends Modal {
     for (const c of this.concepts) {
       const row = listEl.createDiv({ attr: { style: "display: flex; align-items: center; gap: 8px; padding: 4px 0;" } });
       const cb = row.createEl("input", { type: "checkbox" });
-      row.createEl("span", { text: c.name });
+      row.createSpan({ text: c.name });
 
       cb.addEventListener("change", () => {
         if (cb.checked) {

@@ -1,11 +1,11 @@
 import type { ChangeProposal, FileChange } from "./types";
 
 export function validateNotePath(path: string): string {
-  if (!path || path.length > 500 || !path.endsWith(".md") || /[\\\x00-\x1f:*?"<>|]/.test(path) || path.split("/").some(p => !p || p.startsWith(".") || p.trim() !== p)) throw new Error("只能读写 Vault 中有效的 Markdown 笔记路径");
+  if (!path || path.length > 500 || !path.endsWith(".md") || /[\\:*?"<>|]/.test(path) || Array.from(path).some(char => char.charCodeAt(0) < 32) || path.split("/").some(p => !p || p.startsWith(".") || p.trim() !== p)) throw new Error("只能读写 Vault 中有效的 Markdown 笔记路径");
   return path;
 }
 export function noteName(title: string): string {
-  const name = title.replace(/[\\/:*?"<>|#\[\]\x00-\x1f]/g, "-").replace(/^\.+/, "").trim().slice(0, 80);
+  const name = Array.from(title, char => char.charCodeAt(0) < 32 ? "-" : char).join("").replace(/[\\/:*?"<>|#[\]]/g, "-").replace(/^\.+/, "").trim().slice(0, 80);
   return name || "AI 笔记";
 }
 export interface ChangeIO {

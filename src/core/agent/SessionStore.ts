@@ -13,7 +13,7 @@ function validStoryConfig(v: unknown): boolean {
   return object(v) && [1, 2, 3].includes(Number(v.rounds)) && typeof v.rounds === "number" && Array.isArray(v.characterPaths) && v.characterPaths.length <= 4 && strings(v.characterPaths) && new Set(v.characterPaths).size === v.characterPaths.length;
 }
 function validStory(v: unknown): boolean {
-  if (!object(v) || typeof v.projectPath !== "string" || typeof v.chapterPath !== "string" || !Array.isArray(v.cast) || !v.cast.length || v.cast.length > 4 || !v.cast.every(c => object(c) && validReference(c) && typeof c.content === "string" && String(c.path).startsWith(`${v.projectPath}/_角色/`)) || new Set(v.cast.map(c => c.path)).size !== v.cast.length) return false;
+  if (!object(v) || typeof v.projectPath !== "string" || typeof v.chapterPath !== "string" || !Array.isArray(v.cast) || !v.cast.length || v.cast.length > 4 || !v.cast.every((c: unknown): c is Record<string, unknown> => object(c) && validReference(c) && typeof c.content === "string" && String(c.path).startsWith(`${v.projectPath}/_角色/`)) || new Set(v.cast.map(c => c.path)).size !== v.cast.length) return false;
   const cast = v.cast;
   if (!Array.isArray(v.turns) || v.turns.length > 15 || !v.turns.every(t => object(t) && typeof t.name === "string" && typeof t.content === "string" && [1, 2, 3].includes(Number(t.round)) && typeof t.round === "number" && (t.path === undefined || cast.some(c => c.path === t.path)))) return false;
   if (v.confirmedAt !== undefined && (typeof v.confirmedAt !== "number" || !Number.isFinite(v.confirmedAt))) return false;
@@ -21,14 +21,14 @@ function validStory(v: unknown): boolean {
 }
 function validReference(v: unknown): boolean {
   if (!object(v) || typeof v.path !== "string") return false;
-  if (v.selection !== undefined && (!object(v.selection) || typeof v.selection.text !== "string" || typeof v.selection.content !== "string" || !Number.isInteger(v.selection.start) || !Number.isInteger(v.selection.end) || Number(v.selection.start) < 0 || Number(v.selection.end) < Number(v.selection.start) || (v.selection.content as string).slice(Number(v.selection.start), Number(v.selection.end)) !== v.selection.text)) return false;
-  if (v.cursor !== undefined && (!object(v.cursor) || typeof v.cursor.content !== "string" || !Number.isInteger(v.cursor.offset) || Number(v.cursor.offset) < 0 || Number(v.cursor.offset) > (v.cursor.content as string).length)) return false;
+  if (v.selection !== undefined && (!object(v.selection) || typeof v.selection.text !== "string" || typeof v.selection.content !== "string" || !Number.isInteger(v.selection.start) || !Number.isInteger(v.selection.end) || Number(v.selection.start) < 0 || Number(v.selection.end) < Number(v.selection.start) || v.selection.content.slice(Number(v.selection.start), Number(v.selection.end)) !== v.selection.text)) return false;
+  if (v.cursor !== undefined && (!object(v.cursor) || typeof v.cursor.content !== "string" || !Number.isInteger(v.cursor.offset) || Number(v.cursor.offset) < 0 || Number(v.cursor.offset) > v.cursor.content.length)) return false;
   return v.annotation === undefined || typeof v.annotation === "string";
 }
 function validCheckpoint(v: unknown): boolean {
   if (!object(v) || v.version !== 1 || !["ask", "agent"].includes(String(v.mode)) || typeof v.searchVault !== "boolean" || !Array.isArray(v.messages) || !v.messages.every(m => object(m) && ["user", "assistant"].includes(String(m.role)) && typeof m.content === "string")) return false;
   if ((v.task !== undefined && !validAgentTask(v.task)) || (v.taskResult !== undefined && (typeof v.taskResult !== "string" || v.task === undefined))) return false;
-  if (!Array.isArray(v.notes) || v.notes.length > 25 || !v.notes.every(n => object(n) && validReference(n) && typeof n.content === "string" && (n.selection === undefined || (object(n.selection) && n.selection.content === n.content)))) return false;
+  if (!Array.isArray(v.notes) || v.notes.length > 25 || !v.notes.every((n: unknown): n is Record<string, unknown> => object(n) && validReference(n) && typeof n.content === "string" && (n.selection === undefined || (object(n.selection) && n.selection.content === n.content)))) return false;
   if (new Set(v.notes.map(n => n.path)).size !== v.notes.length || (v.primaryPath !== undefined && (typeof v.primaryPath !== "string" || !v.notes.some(n => n.path === v.primaryPath)))) return false;
   const scope = v.scope;
   if (scope !== null && (!object(scope) || !["genre", "projectTitle", "projectPath"].every(k => typeof scope[k] === "string"))) return false;

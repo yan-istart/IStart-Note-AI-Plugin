@@ -119,7 +119,7 @@ function binl2hex(binarray: number[]): string {
 }
 
 function rstr2binl(input: string): number[] {
-  const output: number[] = new Array(input.length >> 2).fill(0);
+  const output: number[] = new Array<number>(input.length >> 2).fill(0);
   for (let i = 0; i < input.length * 8; i += 8) {
     output[i >> 5] |= (input.charCodeAt(i / 8) & 0xff) << i % 32;
   }

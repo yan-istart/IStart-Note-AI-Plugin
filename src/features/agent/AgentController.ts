@@ -1,4 +1,5 @@
 import { App, Notice, TFile, MarkdownView } from "obsidian";
+import { cloneJson } from "../../util/json";
 import type DeepSeekPlugin from "../../main";
 import { SessionStore, parseSessionData } from "../../core/agent/SessionStore";
 import { AgentRunner } from "../../core/agent/AgentRunner";
@@ -62,13 +63,13 @@ export class AgentController {
   captureCurrent(): NoteReference | null {
     const foreground = this.app.workspace.getActiveViewOfType(MarkdownView);
     const reference = foreground ? this.referenceFromView(foreground) : this.lastReference;
-    return reference ? JSON.parse(JSON.stringify(reference)) : null;
+    return reference ? cloneJson(reference) : null;
   }
   /** An Agent action uses its conversation's primary target after focus leaves the editor. */
   captureTaskReference(): NoteReference | null {
     if (this.app.workspace.getActiveViewOfType(MarkdownView)) return this.captureCurrent();
     const reference = this.active?.references[0];
-    return reference ? JSON.parse(JSON.stringify(reference)) : this.captureCurrent();
+    return reference ? cloneJson(reference) : this.captureCurrent();
   }
   setInsertionReference(id: string, reference: NoteReference): void {
     const s = this.sessions.find(s => s.id === id);
@@ -76,7 +77,7 @@ export class AgentController {
     if (this.isRunning(id)) throw new Error("请在生成结束后调整插入位置");
     if (s.references.length >= 8 && !s.references.some(r => r.path === reference.path)) throw new Error("每个会话最多引用8篇笔记，请先移除一个引用");
     if (!reference.cursor || !Number.isInteger(reference.cursor.offset) || reference.cursor.offset < 0 || reference.cursor.offset > reference.cursor.content.length) throw new Error("插入位置无效");
-    const captured = JSON.parse(JSON.stringify(reference)) as NoteReference;
+    const captured = cloneJson(reference);
     delete captured.selection;
     s.references = [captured, ...s.references.filter(r => r.path !== captured.path)];
     this.touch(s);
@@ -115,9 +116,9 @@ export class AgentController {
     // A button starts an isolated task; preserve any existing draft or running conversation.
     const current = this.active;
     const s = current && !current.archived && !current.messages.length && !current.draft && !current.pendingTask && !this.isRunning(current.id) ? current : this.create();
-    s.references = JSON.parse(JSON.stringify(references));
+    s.references = cloneJson(references);
     s.mode = task.mode;
-    s.pendingTask = JSON.parse(JSON.stringify(task));
+    s.pendingTask = cloneJson(task);
     s.title = AGENT_TASKS[task.actionId].label;
     this.touch(s);
     return s;
@@ -139,7 +140,7 @@ export class AgentController {
     validateTaskFields(task);
     if (this.isRunning(id)) throw new Error("本会话正在生成，请等待或停止后重试");
     s.mode = task.mode;
-    return this.track(this.runTurn(id, taskDescription(task), undefined, JSON.parse(JSON.stringify(task))));
+    return this.track(this.runTurn(id, taskDescription(task), undefined, cloneJson(task)));
   }
   /** Native wizards call a recorded task and consume its result, without a second LLM workflow. */
   async executeTask(task: AgentTask, sessionId?: string, signal?: AbortSignal): Promise<{ sessionId: string; message: AgentMessage }> {
@@ -150,7 +151,7 @@ export class AgentController {
     if (sessionId && (!session || session.archived)) throw new Error("导入会话已关闭，请重新打开导入向导");
     if (session && (session.draft || session.pendingTask || this.isRunning(session.id))) throw new Error("导入会话中已有未完成任务，请稍候重试");
     if (!session) session = this.prepareTask(task, []);
-    else { session.pendingTask = JSON.parse(JSON.stringify(task)); session.mode = task.mode; this.touch(session); }
+    else { session.pendingTask = cloneJson(task); session.mode = task.mode; this.touch(session); }
     const id = session.id;
     const stop = () => this.stop(id);
     signal?.addEventListener("abort", stop, { once: true });
@@ -211,7 +212,7 @@ export class AgentController {
     const source = this.sessions.find(s => s.id === sessionId); if (!source) throw new Error("会话不存在");
     const index = throughId ? source.messages.findIndex(m => m.id === throughId) : source.messages.length - 1;
     if (index < 0 && throughId) throw new Error("消息不存在");
-    const copy: AgentSession = JSON.parse(JSON.stringify(source));
+    const copy: AgentSession = cloneJson(source);
     const fresh = newSession(copy.references);
     fresh.title = `${source.title} · 分支`; fresh.parentId = source.id; fresh.mode = source.mode; fresh.searchVault = source.searchVault;
     fresh.storyConfig = copy.storyConfig;
@@ -251,7 +252,7 @@ export class AgentController {
     if (this.running.has(id)) throw new Error("本会话正在生成，请等待或停止后重试");
     if (this.running.size >= 2) throw new Error("已有两个会话正在生成，请稍候再发送");
     const abort = new AbortController(); this.running.set(id, abort);
-    const user: AgentMessage | undefined = resume ? [...s.messages.slice(0, s.messages.indexOf(resume))].reverse().find(m => m.role === "user") : { id: agentId(), role: "user", content: text.trim(), createdAt: Date.now(), task, taskReferences: task ? JSON.parse(JSON.stringify(s.references)) : undefined };
+    const user: AgentMessage | undefined = resume ? [...s.messages.slice(0, s.messages.indexOf(resume))].reverse().find(m => m.role === "user") : { id: agentId(), role: "user", content: text.trim(), createdAt: Date.now(), task, taskReferences: task ? cloneJson(s.references) : undefined };
     if (!user) { this.running.delete(id); throw new Error("任务缺少原始用户消息"); }
     if (!resume) {
       s.messages.push(user); s.draft = "";
@@ -264,7 +265,7 @@ export class AgentController {
     try {
       await this.persist();
       const saved = resume?.checkpoint;
-      const references = saved ? saved.notes : user.taskReferences ?? JSON.parse(JSON.stringify(s.references)) as NoteReference[];
+      const references = saved ? saved.notes : user.taskReferences ?? cloneJson(s.references);
       const notes = new Map<string, NoteSnapshot>();
       for (const reference of references) {
         if (saved) {
@@ -331,7 +332,7 @@ export class AgentController {
     if (user?.task) {
       if (this.isRunning(s.id)) throw new Error("本会话正在生成，请等待或停止后重试");
       // Regeneration uses the original task, references and fixed editor positions.
-      if (user.taskReferences) s.references = JSON.parse(JSON.stringify(user.taskReferences));
+      if (user.taskReferences) s.references = cloneJson(user.taskReferences);
       else if (user.references) s.references = user.references.map(({ content: _content, ...ref }) => ref);
       s.mode = user.task.mode;
       await this.track(this.runTurn(s.id, user.content, undefined, user.task));

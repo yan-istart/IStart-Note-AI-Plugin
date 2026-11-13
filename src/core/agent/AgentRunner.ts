@@ -127,7 +127,7 @@ export class AgentRunner {
         if (previous?.pendingTool) await execute(previous.pendingTool);
         else if (taskResult === undefined) {
           const step = { id: agentId(), tool: task.tool, label: task.tool, status: "running" as const };
-          result.steps!.push(step);
+          result.steps.push(step);
           await execute({ stepId: step.id, name: task.tool, args: task.args });
         }
         this.check(context);
@@ -151,7 +151,7 @@ export class AgentRunner {
         this.check(context);
         let decision: AgentDecision;
         try { decision = parseDecision(raw); }
-        catch (error) {
+        catch {
           if (formatRetries >= 2) throw new Error("模型回复格式无法识别，已尝试两次格式校正。任务进度已保留，可点击「继续任务」重试。");
           formatRetries++;
           messages.push({ role: "assistant", content: raw.slice(0, 10000) }, { role: "user", content: '响应格式无效。只返回一个完整 JSON 对象：{"type":"answer","content":"回答正文"} 或 {"type":"tool","name":"工具名","args":{}}。字符串中的换行必须转义为 \\n，不能有多余花括号。不要重复已完成的工具。' });
@@ -161,7 +161,7 @@ export class AgentRunner {
         if (index === settings.maxSteps) throw new Error("已达到工具执行上限，请缩小任务范围后继续");
         result.content = "";
         const step = { id: agentId(), tool: decision.name, label: decision.name, status: "running" as const };
-        result.steps!.push(step); changed();
+        result.steps.push(step); changed();
         messages.push({ role: "assistant", content: raw.slice(0, 12000) });
         await execute({ stepId: step.id, name: decision.name, args: decision.args });
       }

@@ -14,7 +14,7 @@ import { fileURLToPath } from "url";
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const root = join(__dirname, "..");
 
-const newVersion = process.argv[2];
+const newVersion = process.argv[2] ?? process.env.npm_package_version;
 if (!newVersion || !/^\d+\.\d+\.\d+$/.test(newVersion)) {
   console.error("Usage: node scripts/version-bump.mjs <x.y.z>");
   process.exit(1);
@@ -34,6 +34,14 @@ const pkg = JSON.parse(readFileSync(packagePath, "utf8"));
 pkg.version = newVersion;
 writeFileSync(packagePath, JSON.stringify(pkg, null, 2) + "\n");
 console.log(`package.json  → ${newVersion}`);
+
+// npm ci rejects releases whose lockfile root still carries the previous version.
+const lockPath = join(root, "package-lock.json");
+const lock = JSON.parse(readFileSync(lockPath, "utf8"));
+lock.version = newVersion;
+lock.packages[""].version = newVersion;
+writeFileSync(lockPath, JSON.stringify(lock, null, 2) + "\n");
+console.log(`package-lock.json → ${newVersion}`);
 
 // Update versions.json
 const versionsPath = join(root, "versions.json");

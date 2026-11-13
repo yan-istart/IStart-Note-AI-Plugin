@@ -60,12 +60,12 @@ export class BaiduPanClient {
   /** 把 requestUrl 的 any JSON 收窄为类型化对象 */
   private jsonOf(res: { json: unknown }): BaiduJsonResponse {
     const value = res.json;
-    return value && typeof value === "object" ? value as BaiduJsonResponse : {};
+    return value && typeof value === "object" ? value : {};
   }
 
   private tokenJsonOf(res: { json: unknown }): OAuthTokenResponse {
     const value = res.json;
-    return value && typeof value === "object" ? value as OAuthTokenResponse : {};
+    return value && typeof value === "object" ? value : {};
   }
 
   // ── OAuth ──────────────────────────────────────────────────

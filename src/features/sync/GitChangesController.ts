@@ -31,7 +31,7 @@ export class GitChangesController extends Component {
     // File explorer mounts/recycles rows when folders expand and views reopen.
     const observer = new MutationObserver(records => {
       if (records.some(record => record.type === "childList" && [...Array.from(record.addedNodes), ...Array.from(record.removedNodes)]
-        .some(node => node instanceof HTMLElement && (node.matches(".nav-file, .nav-folder, .nav-file-title") || !!node.querySelector(".nav-file-title"))))) this.decorate();
+        .some(node => node.instanceOf(HTMLElement) && (node.matches(".nav-file, .nav-folder, .nav-file-title") || !!node.querySelector(".nav-file-title"))))) this.decorate();
     });
     observer.observe(app.workspace.containerEl, { childList: true, subtree: true });
     this.register(() => observer.disconnect());

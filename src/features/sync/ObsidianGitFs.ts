@@ -1,5 +1,5 @@
 import type { DataAdapter } from "obsidian";
-import type { PromiseFsClient } from "isomorphic-git";
+import type { GitFileSystem } from "../../core/sync/GitSyncEngine";
 
 function fsError(code: string, path: string): Error & { code: string } {
   return Object.assign(new Error(`${code}: ${path}`), { code });
@@ -14,8 +14,8 @@ export async function ensureDirectory(adapter: DataAdapter, path: string): Promi
 }
 
 /** Promise filesystem backed by the same Obsidian adapter on iOS, Android, and desktop. */
-export class ObsidianGitFs implements PromiseFsClient {
-  readonly promises: PromiseFsClient["promises"];
+export class ObsidianGitFs implements GitFileSystem {
+  readonly promises: GitFileSystem["promises"];
 
   constructor(private readonly adapter: DataAdapter, private readonly root: string) {
     const stat = async (path: string) => {
@@ -40,7 +40,7 @@ export class ObsidianGitFs implements PromiseFsClient {
         await ensureDirectory(adapter, real.slice(0, real.lastIndexOf("/")));
         if (typeof data === "string") await adapter.write(real, data);
         // Buffer.slice() is a view, unlike Uint8Array.slice(); copy the exact bytes.
-        else await adapter.writeBinary(real, Uint8Array.from(data).buffer as ArrayBuffer);
+        else await adapter.writeBinary(real, Uint8Array.from(data).buffer);
       },
       unlink: async (path: string) => {
         const real = this.path(path);

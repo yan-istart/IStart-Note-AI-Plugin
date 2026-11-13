@@ -24,9 +24,9 @@ export class ToolRegistry {
     if (!tool || (tool.draft && mode !== "agent")) throw new Error(`此模式下不可用的工具：${name}`);
     if (!input || typeof input !== "object" || Array.isArray(input)) throw new Error("工具参数必须是对象");
     const args: ToolArguments = {};
-    for (const [key, value] of Object.entries(input)) {
+    for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
       const field = tool.fields[key];
-      if (!field || typeof value !== field.type || (typeof value === "string" && (value.length > 50000 || (field.choices && !field.choices.includes(value)))) || (typeof value === "number" && !Number.isFinite(value))) throw new Error(`工具参数无效：${key}`);
+      if (!field || (typeof value !== "string" && typeof value !== "number" && typeof value !== "boolean") || typeof value !== field.type || (typeof value === "string" && (value.length > 50000 || (field.choices && !field.choices.includes(value)))) || (typeof value === "number" && !Number.isFinite(value))) throw new Error(`工具参数无效：${key}`);
       args[key] = value;
     }
     for (const [key, field] of Object.entries(tool.fields)) if (field.required && (args[key] === undefined || args[key] === "")) throw new Error(`缺少工具参数：${key}`);

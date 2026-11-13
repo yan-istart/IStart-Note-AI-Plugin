@@ -1,5 +1,5 @@
 import { App, TFile, CachedMetadata } from "obsidian";
-import { frontmatterOf, fmString } from "../../util/frontmatter";
+import { frontmatterOf } from "../../util/frontmatter";
 
 /**
  * A single indexed vault entry.
@@ -236,7 +236,7 @@ export class KnowledgeIndexService {
       ...((fm?.tags as string[] | undefined) ?? []),
     ];
     const links = (meta?.links ?? []).map((l) => l.link);
-    const concepts: string[] = Array.isArray(fm?.concepts) ? (fm!.concepts as string[]) : [];
+    const concepts: string[] = Array.isArray(fm?.concepts) ? (fm.concepts as string[]) : [];
 
     const entry: IndexEntry = {
       path: file.path,

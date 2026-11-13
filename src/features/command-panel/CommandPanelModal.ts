@@ -56,7 +56,7 @@ export class CommandPanelModal extends ActionModal {
       if (group.actions.length === 0) continue;
 
       const groupEl = groupContainer.createDiv({ cls: "istart-panel-group" });
-      groupEl.createEl("div", { text: group.title, cls: "istart-panel-group-title" });
+      groupEl.createDiv({ text: group.title, cls: "istart-panel-group-title" });
 
       for (const action of group.actions) {
         const row = groupEl.createEl("button", { cls: "istart-panel-action", attr: { type: "button" } });
@@ -65,9 +65,9 @@ export class CommandPanelModal extends ActionModal {
         setIcon(iconEl, panelIcon(action.icon));
 
         const textEl = row.createDiv({ cls: "istart-panel-action-text" });
-        textEl.createEl("span", { text: action.label, cls: "istart-panel-action-label" });
+        textEl.createSpan({ text: action.label, cls: "istart-panel-action-label" });
         if (action.description) {
-          textEl.createEl("span", { text: action.description, cls: "istart-panel-action-desc" });
+          textEl.createSpan({ text: action.description, cls: "istart-panel-action-desc" });
         }
 
         if (!Platform.isMobile && shortcutIndex <= 9) {

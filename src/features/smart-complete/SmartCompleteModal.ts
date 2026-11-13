@@ -41,7 +41,7 @@ export class DocumentAnalysisModal extends Modal {
       const header = row.createDiv({ cls: "istart-smart-suggestion-header" });
       const cb = header.createEl("input", { type: "checkbox" });
       header.createEl("strong", { text: `${s.section}` });
-      header.createEl("span", { text: ` — ${s.reason}`, cls: "istart-smart-suggestion-reason" });
+      header.createSpan({ text: ` — ${s.reason}`, cls: "istart-smart-suggestion-reason" });
 
       // 预览内容
       const previewEl = row.createDiv({ cls: "istart-smart-suggestion-preview" });

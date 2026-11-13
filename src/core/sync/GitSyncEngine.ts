@@ -50,10 +50,20 @@ const REF = "refs/heads/main";
 const encoder = new TextEncoder();
 const decoder = new TextDecoder("utf-8", { fatal: true });
 
+// isomorphic-git's public filesystem methods are typed as Function. Give the
+// operations used directly here concrete signatures shared by both adapters.
+export interface GitFileSystem extends git.PromiseFsClient {
+  promises: Omit<git.PromiseFsClient["promises"], "readFile" | "mkdir" | "writeFile"> & {
+    readFile(path: string): Promise<unknown>;
+    mkdir(path: string): Promise<unknown>;
+    writeFile(path: string, data: string | Uint8Array): Promise<unknown>;
+  };
+}
+
 export function assertNotePath(path: string): void {
   // Validate vault-relative paths, not Windows filename rules. Git trees retain
   // existing names verbatim; the vault service checks the destination platform.
-  if (!path || path.includes("\\") || /[\x00-\x1f]/.test(path) || path.split("/").some(
+  if (!path || path.includes("\\") || Array.from(path).some(char => char.charCodeAt(0) < 32) || path.split("/").some(
     (part) => !part || part.startsWith(".")
   )) throw new Error(`不支持的同步路径：${path}`);
 }
@@ -71,7 +81,7 @@ function sameTree(a: Map<string, string>, b: Map<string, string>): boolean {
 export class GitSyncEngine {
   private readonly args: { fs: git.FsClient; dir: string; gitdir: string };
 
-  constructor(private readonly fs: git.PromiseFsClient, readonly dir: string) {
+  constructor(private readonly fs: GitFileSystem, readonly dir: string) {
     this.args = { fs, dir, gitdir: `${dir}/repo` };
   }
 
@@ -189,20 +199,22 @@ export class GitSyncEngine {
 
   private async reachable(head: string): Promise<Set<string>> {
     const seen = new Set<string>();
-    const visit = async (oid: string): Promise<void> => {
+    const visit = async (oid: string, type: "commit" | "tree" | "blob"): Promise<void> => {
       if (seen.has(oid)) return;
       seen.add(oid);
-      const object = await git.readObject({ ...this.args, oid, format: "content" });
-      if (object.type === "commit") {
+      if (type === "commit") {
         const { commit } = await git.readCommit({ ...this.args, oid });
-        await visit(commit.tree);
-        for (const parent of commit.parent) await visit(parent);
-      } else if (object.type === "tree") {
+        await visit(commit.tree, "tree");
+        for (const parent of commit.parent) await visit(parent, "commit");
+      } else if (type === "tree") {
         const { tree } = await git.readTree({ ...this.args, oid });
-        for (const entry of tree) await visit(entry.oid);
-      } else if (object.type !== "blob") throw new Error("同步包包含不支持的 Git 对象");
+        for (const entry of tree) {
+          if (entry.type !== "tree" && entry.type !== "blob") throw new Error("同步包包含不支持的 Git 对象");
+          await visit(entry.oid, entry.type);
+        }
+      } else await git.readBlob({ ...this.args, oid });
     };
-    await visit(head);
+    await visit(head, "commit");
     return seen;
   }
 
@@ -287,8 +299,8 @@ export class GitSyncEngine {
     const local = await this.files(ours);
     const remote = await this.files(theirs);
     if (sameTree(local, remote)) return { oid: await this.commit(local, [ours, theirs], "合并设备修改"), conflicts: [] };
-    const bases = await git.findMergeBase({ ...this.args, oids: [ours, theirs] });
-    if (bases.length !== 1) throw new Error("版本历史缺少唯一共同祖先，无法安全自动合并");
+    const bases: unknown[] = await git.findMergeBase({ ...this.args, oids: [ours, theirs] });
+    if (bases.length !== 1 || typeof bases[0] !== "string" || !OID.test(bases[0])) throw new Error("版本历史缺少唯一共同祖先，无法安全自动合并");
     const base = await this.files(bases[0]);
     const merged = new Map<string, string>();
     const conflicts: GitConflict[] = [];

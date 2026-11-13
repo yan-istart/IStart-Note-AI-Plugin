@@ -107,13 +107,13 @@ export class KnowledgeDebtModal extends Modal {
     });
     const shown = entries.slice(0, 15);
     for (const entry of shown) {
-      list.createEl("div", {
+      list.createDiv({
         text: `• ${entry.basename}${entry.domain ? ` [${entry.domain}]` : ""}`,
         attr: { style: "padding: 1px 0; color: var(--text-normal);" },
       });
     }
     if (entries.length > 15) {
-      list.createEl("div", {
+      list.createDiv({
         text: `...还有 ${entries.length - 15} 项`,
         attr: { style: "color: var(--text-muted); font-style: italic;" },
       });

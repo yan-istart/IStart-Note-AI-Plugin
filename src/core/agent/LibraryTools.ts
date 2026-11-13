@@ -40,14 +40,26 @@ export function registerLibraryTools(registry: ToolRegistry, app: App, settings:
   }});
   registry.add({ name: "import.classify", label: "原稿智能分类", description: "对导入向导明确提供的原稿节选分类，units 是 JSON 数组 [{index,title,head}]，每批最多50项；返回 JSON 分类，不读写原稿文件。", fields: { units: { type: "string", required: true } }, execute: async a => {
     const units: unknown = JSON.parse(String(a.units));
-    if (!Array.isArray(units) || !units.length || units.length > 50 || !units.every(u => u && Number.isInteger(u.index) && u.index >= 0 && typeof u.title === "string" && u.title.length <= 200 && typeof u.head === "string" && u.head.length <= 300) || new Set(units.map(u => u.index)).size !== units.length) throw new Error("原稿分类样本无效");
-    const result = await new ImportClassifier(settings, client).classifyUnits(units as ClassifyUnit[]);
+    if (!Array.isArray(units) || !units.length || units.length > 50 || !units.every(isClassifyUnit) || new Set(units.map(u => u.index)).size !== units.length) throw new Error("原稿分类样本无效");
+    const result = await new ImportClassifier(settings, client).classifyUnits(units);
     return { content: JSON.stringify({ classifications: [...result].map(([index, kind]) => ({ index, kind })) }) };
   }});
   registry.add({ name: "import.analyze", label: "分析原稿元数据", description: "从导入向导提供的采样章节推断简介、文风、角色和设定。chapters 是 JSON 数组 [{number,title,content}]，最多8章；只返回 JSON 元数据，不创建项目。", fields: { title: { type: "string", required: true }, genre: { type: "string", required: true, choices: ["novel", "paper", "article"] }, chapters: { type: "string", required: true } }, execute: async a => {
     const chapters: unknown = JSON.parse(String(a.chapters));
-    if (!Array.isArray(chapters) || chapters.length > 8 || !chapters.every(ch => ch && Number.isInteger(ch.number) && ch.number > 0 && typeof ch.title === "string" && ch.title.length <= 200 && typeof ch.content === "string" && ch.content.length <= 2500)) throw new Error("原稿分析样本无效");
-    const result = await new ImportAnalyzer(settings, client).analyze(String(a.title), a.genre as WritingGenre, chapters as RawChapter[]);
+    if (!Array.isArray(chapters) || chapters.length > 8 || !chapters.every(isChapterSample)) throw new Error("原稿分析样本无效");
+    const result = await new ImportAnalyzer(settings, client).analyze(String(a.title), a.genre as WritingGenre, chapters);
     return { content: JSON.stringify(result) };
   }});
+}
+
+function isClassifyUnit(value: unknown): value is ClassifyUnit {
+  if (!value || typeof value !== "object") return false;
+  const unit = value as Record<string, unknown>;
+  return typeof unit.index === "number" && Number.isInteger(unit.index) && unit.index >= 0 && typeof unit.title === "string" && unit.title.length <= 200 && typeof unit.head === "string" && unit.head.length <= 300;
+}
+
+function isChapterSample(value: unknown): value is RawChapter {
+  if (!value || typeof value !== "object") return false;
+  const chapter = value as Record<string, unknown>;
+  return typeof chapter.number === "number" && Number.isInteger(chapter.number) && chapter.number > 0 && typeof chapter.title === "string" && chapter.title.length <= 200 && typeof chapter.content === "string" && chapter.content.length <= 2500;
 }

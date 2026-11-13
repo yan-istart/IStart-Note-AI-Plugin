@@ -81,47 +81,15 @@ validate_semver() {
 # Update version in manifest.json, package.json, and versions.json
 # ---------------------------------------------------------------------------
 update_versions() {
-  local new_version="$1"
-  local min_app_version
-
-  min_app_version=$(node -e "console.log(require('$PROJECT_DIR/manifest.json').minAppVersion)")
-
-  info "Updating manifest.json → $new_version"
-  node -e "
-    const fs = require('fs');
-    const path = '$PROJECT_DIR/manifest.json';
-    const m = JSON.parse(fs.readFileSync(path, 'utf8'));
-    m.version = '$new_version';
-    fs.writeFileSync(path, JSON.stringify(m, null, 2) + '\n');
-  "
-
-  info "Updating package.json → $new_version"
-  node -e "
-    const fs = require('fs');
-    const path = '$PROJECT_DIR/package.json';
-    const p = JSON.parse(fs.readFileSync(path, 'utf8'));
-    p.version = '$new_version';
-    fs.writeFileSync(path, JSON.stringify(p, null, 2) + '\n');
-  "
-
-  info "Updating versions.json"
-  node -e "
-    const fs = require('fs');
-    const path = '$PROJECT_DIR/versions.json';
-    const v = JSON.parse(fs.readFileSync(path, 'utf8'));
-    v['$new_version'] = '$min_app_version';
-    fs.writeFileSync(path, JSON.stringify(v, null, 2) + '\n');
-  "
+  (cd "$PROJECT_DIR" && node scripts/version-bump.mjs "$1")
 }
 
 # ---------------------------------------------------------------------------
 # Build
 # ---------------------------------------------------------------------------
 build_plugin() {
-  if [[ ! -d "$PROJECT_DIR/node_modules" ]]; then
-    info "Installing dependencies..."
-    (cd "$PROJECT_DIR" && npm install)
-  fi
+  info "Installing locked dependencies..."
+  (cd "$PROJECT_DIR" && npm ci)
 
   info "Building plugin (production)..."
   (cd "$PROJECT_DIR" && npm run build)
@@ -186,48 +154,14 @@ get_gh_repo() {
 }
 
 # ---------------------------------------------------------------------------
-# Create GitHub Release
-#
-# Per Obsidian docs Step 2:
-#   - Tag version must match manifest.json version
-#   - Upload main.js, manifest.json (and styles.css if present) as binary
-#     attachments to the release
+# Show the single release publisher. Local uploads race CI and lack attestations.
 # ---------------------------------------------------------------------------
-create_github_release() {
-  local version="$1"
+show_release_workflow() {
   local gh_repo
   gh_repo=$(get_gh_repo)
-
-  # Obsidian expects bare filenames (main.js, manifest.json) as release assets.
-  # The build outputs to dist/, so we copy them to a temp dir to ensure the
-  # uploaded filenames are clean.
-  local staging
-  staging=$(mktemp -d)
-
-  cp "$PROJECT_DIR/dist/main.js"      "$staging/main.js"
-  cp "$PROJECT_DIR/dist/manifest.json" "$staging/manifest.json"
-
-  local assets=("$staging/main.js" "$staging/manifest.json")
-
-  if [[ -f "$PROJECT_DIR/styles.css" ]]; then
-    cp "$PROJECT_DIR/styles.css" "$staging/styles.css"
-    assets+=("$staging/styles.css")
-  fi
-
-  info "Creating GitHub Release: $version (repo: $gh_repo)"
-
-  gh release create "$version" \
-    --repo "$gh_repo" \
-    --title "$version" \
-    --generate-notes \
-    "${assets[@]}"
-
-  rm -rf "$staging"
-
-  ok "Release created: $version"
-  echo ""
-  echo -e "  ${CYAN}https://github.com/${gh_repo}/releases/tag/${version}${NC}"
-  echo ""
+  info "GitHub Actions will build, attest, and upload the release assets."
+  info "Review and publish the draft after the workflow succeeds:"
+  echo "  https://github.com/${gh_repo}/actions/workflows/release.yml"
 }
 
 # ---------------------------------------------------------------------------
@@ -258,9 +192,9 @@ main() {
 
     build_plugin
     create_tag "$new_version"
-    create_github_release "$new_version"
+    show_release_workflow
 
-    echo -e "${GREEN}🎉 Release $new_version complete!${NC}"
+    echo -e "${GREEN}🎉 Release $new_version queued in GitHub Actions!${NC}"
     echo ""
     return
   fi
@@ -312,9 +246,9 @@ main() {
   fi
   build_plugin
   create_tag "$new_version"
-  create_github_release "$new_version"
+  show_release_workflow
 
-  echo -e "${GREEN}🎉 Release $new_version complete!${NC}"
+  echo -e "${GREEN}🎉 Release $new_version queued in GitHub Actions!${NC}"
   echo ""
 }
 

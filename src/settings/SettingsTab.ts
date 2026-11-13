@@ -1,4 +1,5 @@
-import { App, Notice, PluginSettingTab, Setting } from "obsidian";
+import type { SettingDefinitionItem } from "obsidian";
+import { App, Notice, PluginSettingTab, Setting, requireApiVersion } from "obsidian";
 import type DeepSeekPlugin from "../main";
 import type { DeepSeekSettings } from "../types";
 import type { SkillDefinition } from "../core/skills/types";
@@ -6,12 +7,47 @@ import { BaiduAuthModal } from "../features/sync/BaiduAuthModal";
 
 type SettingsSection = "knowledge" | "writing" | "skill" | "annotation" | "interface" | "sync" | "auxiliary";
 
+const SETTINGS_SECTIONS: { id: SettingsSection; label: string; aliases: string[] }[] = [
+  { id: "knowledge", label: "知识", aliases: ["知识路径", "Q&A 笔记目录", "问题索引目录", "概念页目录", "知识索引", "索引状态", "生成笔记后自动打开图谱"] },
+  { id: "writing", label: "写作", aliases: ["写作路径", "作品目录", "续写与插写", "写作上下文范围", "上下文长度", "默认续写字数", "默认插写字数"] },
+  { id: "skill", label: "Skill", aliases: ["写作 Skill", "启用自动附带", "仅在写作场景注入", "Skill 根目录", "最大注入字符", "已发现 Skill"] },
+  { id: "annotation", label: "批注", aliases: ["侧边栏批注", "默认批注形式", "移动端跳转后收起侧栏", "打开批注侧边栏", "使用方式"] },
+  { id: "interface", label: "界面", aliases: ["悬浮工具栏", "启用悬浮工具栏", "选中文字时显示", "光标空闲时显示入口", "移动端启用"] },
+  { id: "sync", label: "数据同步", aliases: ["IStart 数据同步", "启用 IStart 数据同步", "存储服务", "同步方式", "自动 Git 同步", "手动 Git 整库同步", "自动备份", "备份插件本身", "忽略规则", "单文件大小限制（MB）", "跨设备配置同步", "启动时自动拉取配置", "百度网盘配置", "App ID", "App Secret", "授权状态", "远端路径"] },
+  { id: "auxiliary", label: "辅助", aliases: ["AI 服务", "API Key", "Base URL", "模型", "输出风格", "Agent 对话", "打开 AI 助手侧边栏", "流式输出", "每轮工具步数上限", "上下文资料预算", "共享会话历史", "隐私与诊断"] },
+];
+
 export class DeepSeekSettingsTab extends PluginSettingTab {
   private activeSection: SettingsSection = "auxiliary"; // start with AI setup
   private skillListGeneration = 0;
 
   constructor(app: App, private plugin: DeepSeekPlugin) {
     super(app, plugin);
+  }
+
+  /** Index legacy sections without rendering controls or scanning skills during registration. */
+  getSettingDefinitions(): SettingDefinitionItem[] {
+    return SETTINGS_SECTIONS.map(section => ({
+      type: "page",
+      name: section.label,
+      items: [{
+        name: `${section.label}设置`,
+        aliases: section.aliases,
+        render: setting => {
+          this.activeSection = section.id;
+          this.containerEl.addClass("istart-settings-root");
+          setting.settingEl.empty();
+          setting.settingEl.removeClass("setting-item");
+          this.renderSection(setting.settingEl);
+        },
+      }],
+    }));
+  }
+
+  private refresh(): void {
+    // On 1.13+, display() is bypassed and update() preserves the current sub-page.
+    if (requireApiVersion("1.13.0")) this.update();
+    else this.display();
   }
 
   display(): void {
@@ -35,24 +71,14 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
   }
 
   private renderNav(container: HTMLElement): void {
-    const sections: { id: SettingsSection; label: string }[] = [
-      { id: "knowledge", label: "知识" },
-      { id: "writing", label: "写作" },
-      { id: "skill", label: "Skill" },
-      { id: "annotation", label: "批注" },
-      { id: "interface", label: "界面" },
-      { id: "sync", label: "数据同步" },
-      { id: "auxiliary", label: "辅助" },
-    ];
-
-    for (const sec of sections) {
+    for (const sec of SETTINGS_SECTIONS) {
       const item = container.createDiv({
         cls: `istart-settings-nav-item${this.activeSection === sec.id ? " is-active" : ""}`,
       });
       item.setText(sec.label);
       item.addEventListener("click", () => {
         this.activeSection = sec.id;
-        this.display();
+        this.refresh();
       });
     }
   }
@@ -128,7 +154,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         btn.setButtonText("重建索引").onClick(() => {
           this.plugin.knowledgeIndex.rebuild();
           new Notice(`索引已重建：${this.plugin.knowledgeIndex.size} 篇`);
-          this.display();
+          this.refresh();
         })
       );
 
@@ -275,7 +301,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
       .setDesc("关闭某个 Skill 只会影响插件自动注入，不影响 Codex / OpenCode 的发现。")
       .addButton((button) => button.setButtonText("重新扫描").onClick(async () => {
         await this.plugin.skillRegistry.refresh();
-        this.display();
+        this.refresh();
       }));
 
     listEl = el.createDiv({ cls: "istart-skill-list" });
@@ -315,7 +341,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
             this.plugin.settings.skills.disabledSkillIds = [...next];
             await this.plugin.saveSettings();
           }));
-      setting.descEl.createEl("div", { text: skill.path, cls: "istart-skill-path" });
+      setting.descEl.createDiv({ text: skill.path, cls: "istart-skill-path" });
     }
   }
 
@@ -531,7 +557,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         t.setValue(this.plugin.settings.baiduSync.enabled).onChange(async (v) => {
           this.plugin.settings.baiduSync.enabled = v;
           await this.plugin.saveSettings();
-          this.display();
+          this.refresh();
         })
       );
 
@@ -548,7 +574,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
       .addDropdown((drop) => drop.addOption("git", "Git 版本同步（支持电脑与手机）")
         .addOption("files", "原有文件备份与同步").setValue(cfg.syncEngine).onChange(async (value) => {
           cfg.syncEngine = value as "git" | "files";
-          await this.plugin.saveSettings(); this.display();
+          await this.plugin.saveSettings(); this.refresh();
         }));
 
     if (cfg.syncEngine === "git") {
@@ -605,7 +631,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .addButton((btn) => btn.setButtonText("推送配置").onClick(() => void this.plugin.pushConfig()))
-      .addButton((btn) => btn.setButtonText("拉取配置").onClick(async () => { await this.plugin.pullConfig(); this.display(); }));
+      .addButton((btn) => btn.setButtonText("拉取配置").onClick(async () => { await this.plugin.pullConfig(); this.refresh(); }));
   }
 
   private renderBaiduSyncSettings(el: HTMLElement): void {
@@ -645,7 +671,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
             cfg.accessToken = accessToken;
             cfg.refreshToken = refreshToken;
             cfg.tokenExpiresAt = expiresAt;
-            void this.plugin.saveSettings().then(() => this.display());
+            void this.plugin.saveSettings().then(() => this.refresh());
           }).open();
         })
       );

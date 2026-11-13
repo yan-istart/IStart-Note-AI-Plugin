@@ -8,7 +8,7 @@ on:
 
 jobs:
   build:
-    name: Type-check and build
+    name: Lint, test and build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -25,10 +25,13 @@ jobs:
       - name: Type-check
         run: npm run typecheck
 
+      - name: Check community scorecard rules
+        run: npm run lint
+
       - name: Build
         run: npm run build
 
-      - name: Test Git synchronization
+      - name: Run tests
         run: npm test
 
       - name: Verify build artifacts

@@ -152,7 +152,7 @@ export class ConceptPageManager {
    * 维护 domain 索引页：{domain}/_索引.md
    * 包含概念列表和 Mermaid 概览图。
    */
-  private async updateDomainIndex(domain: string, conceptName: string, conceptPath: string): Promise<void> {
+  private async updateDomainIndex(domain: string, conceptName: string, _conceptPath: string): Promise<void> {
     const folderPath = normalizePath(this.settings?.conceptsPath ?? "Knowledge/Concepts");
     const domainFolder = normalizePath(`${folderPath}/${this.sanitize(domain)}`);
     const indexPath = normalizePath(`${domainFolder}/_索引.md`);

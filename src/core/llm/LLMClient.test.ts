@@ -2,7 +2,7 @@ import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
 import { requestUrl } from "obsidian";
 import type { RequestUrlResponse } from "obsidian";
 import { DEFAULT_SETTINGS } from "../../types";
-import { LLMClient, LLMError, LLMResponseError } from "./LLMClient";
+import { LLMClient, LLMError, LLMResponseError, abortable } from "./LLMClient";
 import { generateWritingText } from "../../ai/WritingGeneration";
 import { setSkillProvider } from "../skills/SkillRuntime";
 import type { SkillDefinition } from "../skills/types";
@@ -29,6 +29,12 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("agent conversations and transport", () => {
+  it("normalizes non-Error rejections and preserves Error diagnostics", async () => {
+    const signal = new AbortController().signal;
+    await expect(abortable(Promise.reject("offline"), signal)).rejects.toThrow("offline");
+    const error = new LLMError(429, "rate limited", "retry later");
+    await expect(abortable(Promise.reject(error), signal)).rejects.toBe(error);
+  });
   it("preserves user/assistant turns and isolates explicitly pinned skills from the active file", async () => {
     request.mockResolvedValue(success);
     const provider = vi.fn(() => []); setSkillProvider(provider);

@@ -25,7 +25,7 @@ const WATERMARK_PATTERNS = [
   /最快更新[^\n]*/g,
   /更新快[^\n]*无广告[^\n]*/g,
   /一秒记住[^\n]*/g,
-  /(?:www\.|https?:\/\/)[a-z0-9.\/_-]+/gi,
+  /(?:www\.|https?:\/\/)[a-z0-9./_-]+/gi,
 ];
 
 /** 常见 HTML 实体 */

@@ -77,7 +77,7 @@ export class SectionPreviewModal extends Modal {
     });
 
     for (const item of this.newItems) {
-      listEl.createEl("div", {
+      listEl.createDiv({
         text: `• ${item}`,
         attr: { style: "padding: 3px 0; font-size: 14px;" },
       });

@@ -1,16 +1,16 @@
 # IStart-Note-AI
 
 <p align="center">
-  <strong>把 Obsidian 变成你的个人知识系统与写作工作台。</strong>
+  <strong>Turn your Obsidian vault into a personal knowledge system and writing studio.</strong>
 </p>
 
 <p align="center">
-  <a href="./README.en.md">English</a> ·
-  <a href="#功能清单">功能清单</a> ·
-  <a href="#快速开始">快速开始</a> ·
-  <a href="#入口与功能聚合规划">入口聚合规划</a> ·
-  <a href="#隐私说明">隐私说明</a> ·
-  <a href="#当前限制">当前限制</a>
+  <a href="./README.zh-CN.md">简体中文</a> ·
+  <a href="#feature-list">Feature list</a> ·
+  <a href="#quick-start">Quick Start</a> ·
+  <a href="#entry-point-and-feature-consolidation-plan">Consolidation plan</a> ·
+  <a href="#privacy">Privacy</a> ·
+  <a href="#current-limitations">Current limitations</a>
 </p>
 
 <p align="center">
@@ -22,277 +22,251 @@
 
 ---
 
-IStart-Note-AI 是一个面向 Obsidian 的 AI 插件,围绕三大业务场景:**知识**(读进来)、**写作**(写出去)、**辅助**(跨设备支撑)。
-
-- 知识:把零散笔记变成可检索、可关联的知识系统
-- 写作:把灵感变成作品——网文小说、论文、长文，并支持写作 Skill
-- 辅助:AI 助手、侧边栏批注、错别字甄别、文档美化、模型设置、IStart 数据同步
-
----
-
-## English
-
 IStart-Note-AI is an Obsidian plugin built around three business scenarios: **Knowledge** (read in), **Writing** (write out), and **Auxiliary** (cross-device support).
 
-- **Knowledge** — turn scattered notes into a searchable, interlinked knowledge system: Q&A generation, concept pages, reading project templates, vault Q&A with source citations, and a knowledge-debt dashboard.
-- **Writing** — turn ideas into works (web novels, papers, long-form articles): generate outlines, characters, and world settings; continue writing from the cursor with setting injection; generate the next chapter; import existing manuscripts (split, classify, clean) without touching the originals.
-- **Auxiliary** — AI assistant, sidebar annotations, typo checking with source navigation, configurable chat-completions endpoint with two fixed DeepSeek model choices, multiple output styles, and optional IStart Data Sync with Baidu Pan storage.
+- Knowledge: turn scattered notes into a searchable, interlinked knowledge system
+- Writing: turn ideas into works — web novels, papers, long-form articles — with shared and work-specific writing skills
+- Auxiliary: AI assistant, sidebar annotations, typo checking, document beautification, model settings, IStart Data Sync
 
-For the full English documentation see [README.en.md](./README.en.md).
-
-> 本文按当前源码实现整理。`package.json` 与 `manifest.json` 标注版本为 **2.6.0**，最低支持 **Obsidian 1.7.2**。
+> Documentation reflects the current source tree. `package.json` and `manifest.json` declare version **2.7.1**; minimum Obsidian version: **1.7.2**. The UI currently uses Chinese labels; English names below describe those controls.
 
 ---
 
-## 功能清单
+## Feature list
 
-以下按能力分类列出已实现功能。AI 能力统一通过助手的 Agent 工具执行，可使用任务快捷入口、已有命令或自然语言发起。
+Implemented features are grouped below by capability. AI capabilities run as tools inside the assistant, using inline shortcuts, existing commands or natural-language requests. Items marked **Agent conversation** are available through natural-language requests in the assistant.
 
-### 工作台与快捷入口
+### Workspace and shortcuts
 
-- **统一工作台**：一个侧栏图标，在 AI 助手、批注、数据同步之间切换。
-- **助手任务快捷入口**：在输入区展开常用写作、文档、知识和导入任务。
-- **上下文快捷操作**：根据当前笔记、章节类型、选区和光标位置推荐可用功能。
-- **命令与右键菜单**：通过 Obsidian 命令面板、编辑器右键和部分文件右键操作进入功能。
-- **选区悬浮工具栏**：选中文字后快速添加批注、润色、扩写或解释。
-- **光标空闲入口**：可选在光标旁展开续写、插写和总结等操作。
-- **写作状态栏**：打开章节时显示续写和下一章按钮。
+- **Unified workspace** — one ribbon icon with assistant, annotations, and data-sync pages.
+- **Inline task shortcuts** — expand common writing, document, knowledge, and import tasks in the assistant.
+- **Contextual shortcuts** — available actions reflect the current note, chapter type, selection, and cursor.
+- **Commands and context menus** — use Obsidian commands, editor menus, and selected file-menu actions.
+- **Selection toolbar** — annotate, polish, expand, or explain selected text.
+- **Cursor-idle entry** — optionally expand continuation, insertion, summary, and other cursor actions.
+- **Writing status bar** — continue or generate the next chapter from chapter notes.
 
-### Agent 对话与任务
+### Agent conversations and tasks
 
-- **问答模式**：读取、检索、总结和解释笔记，不生成文件修改草稿。
-- **Agent 模式**：组合工具处理知识、写作、阅读、批注和模板任务。
-- **多会话**：各会话独立保存消息、输入草稿、引用和执行模式。
-- **会话管理**：搜索、置顶、重命名、归档、删除、创建分支和导出 Markdown。
-- **内容复制**：消息、引用、执行结果和修改预览可选中复制；支持复制完整消息、原文、修改后全文、新增内容及整个会话。
-- **固定插入位置**：保存目标笔记与光标快照，侧栏失焦不会丢失位置；可在助手中点击「设置插入位置」选择原文位置，已有回答也可插入到该位置。
-- **上下文引用**：通过 `@` 选择笔记，或捕获当前原文、选区与光标位置。
-- **任务快捷入口**：点击续写、润色、总结等功能后，直接调用对应 Agent 工具。
-- **统一参数卡**：在助手内填写知识提问、新建作品、阅读项目、实用模板和写作参数。
-- **连续调整草稿**：通过后续对话缩短、改写或调整尚未保存的生成结果。
-- **修改预览与应用**：检查文件路径和内容变化，确认应用后写入；原文变化时阻止覆盖。
-- **执行记录**：查看工具步骤、执行状态、结果与来源引用。
-- **任务恢复**：停止生成、重新生成，或从已保存的工具断点继续中断任务。
-- **历史持久化**：本地保存会话和任务卡，可选开启不含模型及百度凭证的跨设备会话共享。
-- **流式回复**：可选逐步显示回答，浏览器跨域不可用时回退到完整响应。
+- **Ask mode** — read, search, summarize, and explain without creating file-change proposals.
+- **Agent mode** — combine tools for knowledge, writing, reading, annotations, and templates.
+- **Independent sessions** — separate messages, input drafts, references, and execution modes.
+- **Session management** — search, pin, rename, archive, delete, branch, and export Markdown.
+- **Context references** — attach notes with `@` or capture source text, selections, and cursor positions.
+- **Task shortcuts** — continuation, polish, summary, and other action buttons invoke their tools directly.
+- **Shared task cards** — enter question, project, template, and writing parameters inside the assistant.
+- **Follow-up draft revision** — shorten, rewrite, or restructure generated content before saving it.
+- **Preview and apply** — inspect paths and content changes before writing; changed source text blocks overwrites.
+- **Execution records** — inspect tool steps, status, results, and source references.
+- **Task recovery** — stop generation, regenerate, or continue from saved tool checkpoints.
+- **Persistent history** — save sessions and task cards locally; optionally share history without model or Baidu credentials.
+- **Streaming replies** — optionally display incremental answers, with a full-response fallback when browser CORS prevents streaming.
 
-### 知识管理与阅读
+### Knowledge and reading
 
-- **知识库问答**：检索 Vault 中的相关笔记，回答附带 `[[来源]]` 引用。
-- **知识问题分类**：识别新问题、深化问题和扩展问题。
-- **结构化问答与图谱**：生成 Q&A、概念占位页、推荐追问和问题索引，更新 Mermaid 问题演化图。
-- **空概念页扫描**：在助手中列出待补全页面，可继续指定处理范围。
-- **概念页补全**：生成定义、解释、示例和关联，支持单页与每批最多 5 页的补全预览。
-- **阅读项目规划**：输入书名与可选目录，生成阅读地图、章节模板和核心概念占位页。
-- **读前问题与项目续接（Agent 对话）**：逐章补齐问题，保留手写笔记并更新阅读进度。
-- **章节总结（Agent 对话）**：根据阅读资料整理章节内容。
-- **费曼检验（Agent 对话）**：生成问题，帮助检查对章节内容的理解。
-- **知识债务检查**：在助手中汇总空概念、孤立问题、未完成阅读和长期草稿；概念补全先预览再应用。
-- **知识索引管理**：自动增量更新笔记索引，也可在设置中手动重建。
-- **实用模板**：生成检查表、SOP、例行流程、行动计划、复盘表、问题清单、决策记录和自定义模板。
-- **模板使用与今日记录**：支持一次性、模板或例行使用，可同时生成今日记录，并选择来源策略。
+- **Vault QA** — retrieve related vault notes and answer with `[[source]]` references.
+- **Question classification** — distinguish new, refinement, and expansion questions.
+- **Structured Q&A and graphs** — preview Q&A, concept placeholders, follow-ups, indexes, and Mermaid question-evolution graphs.
+- **Empty-concept scanning** — list pages needing completion and specify what to process next.
+- **Concept completion** — preview definitions, explanations, examples, and links, individually or in batches of up to five.
+- **Reading-project planning** — generate a reading map, chapter templates, and concept placeholders from a book and optional contents.
+- **Pre-reading questions and project continuation (Agent conversation)** — fill chapters incrementally while preserving handwritten notes and updating progress.
+- **Chapter summaries (Agent conversation)** — organize chapter content from reading material.
+- **Feynman checks (Agent conversation)** — generate questions to test chapter understanding.
+- **Knowledge-debt check (Agent)** — review empty concepts, orphan questions, unfinished reading, and stale drafts.
+- **Knowledge-index management** — update the index incrementally or rebuild it from settings.
+- **Practical templates** — create checklists, SOPs, routines, action plans, reviews, question lists, decisions, and custom templates.
+- **Template usage and daily records** — choose one-off, template, or recurring use, optionally generate today's record, and select an evidence policy.
 
-### 写作与小说创作
+### Writing and fiction
 
-- **新建作品**：支持小说、论文、通用长文三种体裁。
-- **作品资料规划**：生成作品首页、大纲、逐章梗概和章节模板；小说额外生成角色卡与世界观设定。
-- **原稿导入**：支持粘贴、当前笔记、Vault 文件或目录，以及桌面本地 `.md`、`.txt` 文件或目录，保留原稿。
-- **导入整理**：自动切章、预览与合并章节、规则或 AI 内容分类、清洗水印，并反推文风与设定。
-- **续写**：从光标处或文末继续写，带入当前正文；作品章节额外使用大纲、文风、角色和设定。
-- **插写**：参考光标前后文生成连接内容，适合衔接、补充解释与转场。
-- **生成下一章**：按作品大纲生成下一章正文，预览后创建章节文件。
-- **润色与扩写**：改写选中文字，保留事实、情节和作品文风。
-- **生成参数**：分别设置续写和插写字数，并选择上下文范围、续写位置与附加要求。
-- **角色卡提取**：从写作章节提取尚不存在的角色卡，预览后保存到作品目录。
-- **小说演绎**：选择 1–4 名角色、1–3 轮演绎，各角色独立生成发言，旁白补充衔接。
-- **剧情确认**：作者可先修订并确认剧情，再用于后续演绎和角色推演。
-- **角色进化**：基于已确认剧情生成带原文依据的角色卡更新，应用后反馈到后续演绎。
+- **New works** — create novel, paper, or general-article projects.
+- **Project planning** — preview the home page, outline, chapter synopses, and templates; novels also include character and world-setting cards.
+- **Manuscript import** — import pasted text, the current note, vault files/folders, or desktop `.md`/`.txt` sources while preserving originals.
+- **Import preparation** — split, preview, merge, classify, clean, and infer style/settings from existing material.
+- **Continuation** — write at the cursor or document end with current prose and relevant project material.
+- **Insertion** — bridge existing passages using the text on both sides of the cursor.
+- **Next chapter** — generate prose from the outline and preview the new chapter file.
+- **Polish and expansion** — revise selected text while preserving facts, plot, and voice.
+- **Generation parameters** — set independent continuation/insertion lengths, context scope, continuation position, and instructions.
+- **Character extraction** — preview new character cards from a writing-project chapter.
+- **Story enactment** — choose one to four characters and one to three rounds; characters generate their own lines and a narrator adds transitions.
+- **Scene confirmation** — revise and approve a scene before using it in later enactment or character analysis.
+- **Character evolution** — preview evidence-backed card updates from confirmed scenes and feed applied changes into later enactment.
 
-### 写作 Skill
+### Writing skills
 
-- **标准技能文件**：发现并读取本地 `SKILL.md` 正文作为写作规则。
-- **三层规则匹配**：按通用写作技巧、体裁规范、当前作品规范自动选择技能。
-- **作品识别**：通过 `_作品.md` 识别作品目录、名称和体裁。
-- **技能管理**：自定义扫描目录、重新扫描、单独启停技能和限制注入长度。
-- **文件复用**：可与 Codex/OpenCode 共用技能文件，配置示例见 [写作 Skill 快速配置](#写作-skill-快速配置)。
+- **Standard skill files** — discover local `SKILL.md` bodies as writing rules.
+- **Three-layer matching** — select shared craft, genre, and current-work guidance.
+- **Project detection** — use `_作品.md` to identify the work, directory, and genre.
+- **Skill management** — configure roots, rescan, enable individual skills, and bound injected content.
+- **File reuse** — share skill files with Codex/OpenCode; see [Writing skills quick setup](#writing-skills-quick-setup).
 
-### 批注与文档处理
+### Annotations and documents
 
-- **普通高亮与批注**：为选区添加 `==高亮==`、行内批注或脚注批注。
-- **批注汇总**：查看当前笔记或全库的高亮、批注及 Obsidian 注释。
-- **批注检索与维护**：搜索、筛选、跳转原文、编辑、复制或移除批注。
-- **AI 批注**：根据选区及附近上下文生成可预览的批注草稿。
-- **批注建议**：针对已有批注获取 AI 建议，或带入 Agent 继续讨论。
-- **总结与解释**：总结当前笔记或解释选中文字，结果保存在助手会话中。
-- **文档美化**：预览结构调整、Callout、双链和适当的 Mermaid 图，再替换文档。
-- **错别字甄别**：检查全文或选区，列出错误与更正建议，点击定位原文，不自动替换。
-- **图表与公式（Agent 对话）**：生成 Mermaid 图表或 LaTeX 公式，并预览插入内容。
+- **Local highlights and comments** — add `==highlights==`, inline comments, or footnotes to a selection.
+- **Annotation overview** — browse the current note or whole vault, including Obsidian comments.
+- **Annotation maintenance** — search, filter, navigate to source, edit, copy, and remove entries.
+- **AI annotation** — preview a comment drafted from a selection and nearby context.
+- **Annotation suggestions** — request AI suggestions for an existing comment or continue discussing it in Agent.
+- **Summary and explanation** — keep note summaries and selection explanations in the conversation.
+- **Document beautification** — preview structure, Callouts, links, and optional Mermaid diagrams before replacement.
+- **Typo checking** — check a note or selection, review corrections, and click to locate the source; no automatic replacement.
+- **Diagrams and formulas (Agent conversation)** — generate Mermaid diagrams or LaTeX and preview insertion.
 
-### IStart 数据同步
+### IStart Data Sync
 
-- **独立同步设置**：分开管理同步方式、通用规则、存储服务和跨设备配置。
-- **百度网盘存储**：当前支持的存储服务，配置自己的应用信息、授权和远端路径。
-- **Git 整库同步**：同步规则范围内的笔记、附件和删除，电脑与手机使用相同的 JavaScript Git 内核。
-- **增量与冲突处理**：交换增量版本包、合并文本，并提供冲突处理界面。
-- **版本历史**：浏览整库历史版本、文件清单和相邻版本的增删改。
-- **历史恢复**：恢复单个文件，或预览后恢复整个笔记库，并保留后续历史。
-- **本地改动查看**：显示新增、修改、删除汇总，支持路径/类型筛选、文件标记和逐行差异。
-- **离线差异比较**：对照最近本地 Git 提交查看改动，不联网、不创建提交。
-- **原有文件模式**：保留文件备份、恢复、状态扫描、双向同步和逐文件冲突选择。
-- **可选自动同步**：前台自动 Git 同步和启动时拉取配置均默认关闭，可按设备开启。
-- **配置迁移**：手动推送或拉取支持的配置项，不包含模型与百度凭证。
+- **Dedicated settings** — manage sync mode, shared rules, storage, and configuration transfer separately.
+- **Baidu Pan storage** — configure your application, authorization, and remote path; currently the supported storage service.
+- **Whole-vault Git sync** — synchronize included notes, attachments, and deletions with a shared desktop/mobile JavaScript Git engine.
+- **Incremental transfer and conflicts** — exchange version bundles, merge text, and resolve conflicts.
+- **Version history** — browse vault versions, file lists, and changes between adjacent versions.
+- **History restore** — restore a file or preview a whole-vault restore while retaining later history.
+- **Local changes** — inspect added/modified/deleted summaries, path/type filters, badges, and line diffs.
+- **Offline comparison** — compare with the latest local Git commit without network requests or new commits.
+- **Legacy file mode** — retain backup, restore, status scanning, bidirectional sync, and per-file conflict choices.
+- **Optional automation** — foreground Git sync and startup configuration pull are off by default and controlled per device.
+- **Configuration transfer** — push/pull supported settings without model or Baidu credentials.
 
-### 设置与多端支持
+### Settings and platform support
 
-- **AI 服务设置**：配置 API Key、Base URL 和界面内置模型选项。
-- **输出风格**：提供知识库、技术、极简、产品、学术、叙事和卡片化风格。
-- **目录设置**：配置 Q&A、问题索引、概念页和作品根目录。
-- **Agent 偏好**：调整流式输出、工具步数、资料预算和共享历史。
-- **移动端适配**：侧栏抽屉、触控按钮、选区跳转和键盘布局；悬浮工具栏可单独启用。
-- **本地数据与隐私**：笔记使用 Markdown 保存，会话与配置分开存储，无遥测或插件方服务器。数据发送范围见 [隐私说明](#隐私说明)。
+- **AI service settings** — configure the API key, Base URL, and built-in model choices.
+- **Output styles** — knowledge-base, technical, minimal, product, academic, story, and dashboard.
+- **Directory settings** — configure Q&A, question indexes, concepts, and writing roots.
+- **Agent preferences** — adjust streaming, tool steps, context budget, and shared history.
+- **Mobile layout** — sidebar drawers, touch controls, source navigation, keyboard sizing, and an optional floating toolbar.
+- **Local data and privacy** — Markdown notes, separate session/settings storage, no telemetry or plugin-operated server; see [Privacy](#privacy) for data flows.
 
 ---
 
-## Agent 对话快速使用
+## Agent task shortcuts
 
-点击左侧「IStart 工作台」图标进入「AI 助手」，或运行「AI 助手」命令，通过顶部 `+` 新建会话。AI 助手中的模式下拉框可选择问答、Agent 或小说演绎；Agent 共用助手入口。输入 `@` 选择笔记，或点击选区图标引用最近打开的笔记与光标；切换笔记不会自动替换引用。Ctrl/Cmd+Enter 发送，生成期间点击停止按钮取消本轮。会话菜单支持置顶、重命名、归档、删除、分支和导出。
+AI actions in assistant shortcuts, existing commands, editor menu, floating toolbar, and writing status bar share the assistant's conversations, tool execution, progress, and change previews.
 
-问答模式读取并回答；Agent 模式可调用工具并生成修改草稿。展开「查看修改」后点击「应用修改」写入，原文变化时会要求重新生成。辅助设置可启用流式输出、调整工具步数和资料预算，或主动开启共享历史。
+- **Run directly** — continuation, insertion, polish, expansion, explanation, summary, next chapter, character extraction, AI annotation, and concept completion capture their source and invoke a tool. Explanation and summary use read-only Ask mode.
+- **Fill parameters first** — questions, reading projects, new works, and practical templates use a shared inline card; click **开始任务** when ready.
+- **Adjust this generation** — writing settings and quantity actions configure length, context scope, and continuation position, starting from saved defaults.
+- **Scan before processing** — empty-concept scanning shows a list; specify pages or request batches in the conversation.
 
-任务中断后可点击「继续任务」沿用已完成步骤；「重新生成」会重新开始。未保存的草稿可连续调整，旧版本会标为已替代。阅读项目支持逐章补齐问题并更新进度，模板可同时生成今日记录，长笔记可分页续读。详见 [任务继续与重新生成](./docs/agent-sidebar.md#任务继续与重新生成)。
+Explicit action buttons skip model-based planning. Follow up to revise an unsaved draft, then apply the latest preview. Regeneration preserves the task parameters and captured positions; stale selections/cursors cannot redirect a write. Task cards persist with the session across page switches and restarts.
 
-### 从助手发起 Agent 任务
+Beautification, proofreading, knowledge-debt checks, annotation rewriting/suggestions and manuscript classification/analysis now use Agent tools. File preparation/import, ordinary annotation editing, sync and proofreading navigation retain native interfaces. The separate All features panel is removed; its command and both old AI quick-dialog commands open the assistant. See [Agent task shortcuts (Chinese)](./docs/agent-sidebar.md#任务快捷入口).
 
-助手任务快捷入口、已有命令、编辑器菜单、悬浮工具栏和写作状态栏中的 AI 功能，共用助手的会话、工具执行、进度与修改预览：
+## Current limitations
 
-- **直接执行**：续写、插写、润色、扩写、解释、总结、下一章、角色提取、AI 批注和当前概念补全，先捕获笔记、选区或光标，再调用对应工具；解释和总结使用只读问答模式。
-- **填写参数后执行**：知识提问、新建阅读项目、新建作品和实用模板，先在统一任务卡中填写必要参数，再点击「开始任务」。
-- **调整本次生成参数**：续写设置、插写设置和生成量，在助手内调整字数、上下文和续写位置，初始值来自插件设置。
-- **先扫描再处理**：扫描空概念页先展示列表，可继续通过对话指定页面或要求分批补全。
-
-明确点击的任务直接执行工具，不额外请求模型选择流程。完成后可以继续说「缩短一些」「保持原文风格」来修改尚未保存的草稿，再点击「应用修改」。重新生成沿用原任务参数和捕获的位置，失效选区或光标不会重定向写入。任务卡参数随会话保存，切换页面或重启后可继续填写。
-
-- **文档美化**：生成全文修改预览，原文变化时阻止覆盖。
-- **错别字甄别**：在会话中运行，点击「查看校对定位」打开只读定位列表。
-- **已有批注**：AI 重写与建议进入 Agent，生成替换或追加预览，保留原批注形式和共享脚注。
-- **原稿导入**：向导负责选择、切章、清洗和确认导入；AI 分类及文风、角色、设定分析交给 Agent，结果保留在会话中。关闭向导或取消导入会停止请求。
-
-独立「全部功能」面板已移除，原面板及两个 AI 快捷弹窗命令转入助手。数据同步与普通批注编辑保留专用界面。详见 [Agent 任务快捷入口](./docs/agent-sidebar.md#任务快捷入口)。
-
-## 当前限制
-
-- 知识库问答用内存元数据索引匹配标题、标签、标题层级、链接、概念与领域，侧边栏单次最多检索 8 篇笔记，每篇提供最多 1,800 字符，按需读取笔记可获得更长片段；没有 embedding 或全文语义检索。
-- 阅读项目任务先生成地图与章节模板，读前问题可在同一会话中继续补齐；当前未注册补全阅读项目、生成章节总结、费曼测试的独立命令，可通过 AI 助手处理这些任务。
-- 普通笔记也可续写和插写；默认使用当前整篇正文，`type: chapter` 的章节额外带入完整作品大纲、角色和设定。生成下一章要求打开章节笔记。新建作品生成的是章节模板，不是完整正文。
-- 「完整」模式保留当前整章前后文及全部完整角色卡、设定，不自动带入其他章节的正文。作品资料仍按章节同目录的 `_作品.md`、`_大纲.md`、`_角色/`、`_设定/` 查找。显式选择「光标附近」时才使用长度截取、名称匹配及 3 个角色/2 个设定的限制。
-- 生成量是近似字数目标，不保证严格字数。
-- 错别字甄别需要配置 AI 服务并在编辑模式下启动，仅检查当前笔记或选区，不扫描全库。AI 建议可能误判或遗漏，不提供一键替换；修改正文、移动或删除文件后，旧结果会失效，需要重新检查。
-- Git 同步已有内核与适配器自动化测试；百度授权、真实网络服务及 Android/iOS 真机行为仍需安装后验证，详见同步说明。
-- 批注创建需要编辑模式下的文字选区；阅读模式暂不支持直接选中文字创建批注，但仍可点击侧边栏批注跳转。批注不提供自定义高亮颜色，只会显示已有 `<mark>` 的颜色。全库模式首次扫描会读取所有 Markdown 笔记，笔记很多时需要等待；列表最多显示前 300 条，可用搜索和筛选缩小范围。跨空行、标题/列表块或代码块的选区需要分段处理。
-- 写作 Skill 只注入 `SKILL.md` 正文；`references/` 与 `scripts/` 不会由插件自动读取或执行。Codex/OpenCode 的自动调用依赖 `description`，不能保证每次触发。`.agents` 为隐藏目录，当前插件的 Git 同步默认不同步隐藏路径，建议把 `Skills/` 作为可见主目录。
-- 悬浮工具栏目前只覆盖编辑模式，阅读模式仍使用 Obsidian 原生菜单；移动端默认关闭，避免与原生选区菜单、选区手柄和键盘工具栏重叠。光标空闲入口默认关闭。
+- Vault QA searches titles, tags, headings, links, concepts, and domains using an in-memory metadata index. The sidebar search returns up to eight notes with 1,800-character snippets and can read longer excerpts on demand. There are no embeddings or full-text semantic search.
+- Reading project tasks first generate a map and chapter templates. Continue the conversation to fill pre-reading questions. Dedicated commands for resuming a project, generating chapter summaries, and Feynman tests are not registered; use the assistant for these tasks.
+- Ordinary notes support continuation and insertion between existing passages. Insertion reads both sides of the cursor and previews a connecting passage before writing; chapter notes also use the outline, characters, and settings. Next-chapter generation requires an open chapter note. New projects create chapter templates, not complete prose.
+- Full context is the default: the complete current document, complete project outline, and every complete character/setting card. Other chapters' prose is not included automatically. Project sources still use `_作品.md`, `_大纲.md`, `_角色/`, and `_设定/` in the chapter's parent directory. Explicit nearby mode restores context clipping and name matching with three characters/two settings.
+- Generation quantities are approximate prose-length targets. Legacy quick-dialog previews show actual character counts, excluding whitespace and including punctuation.
+- Typo checking requires a configured AI provider and starts in editing mode. It checks the current note or selection, not the entire vault. AI suggestions can contain false positives or miss errors; there is no one-click replacement. Editing the source, moving it, or deleting it invalidates existing results and requires a fresh check.
+- Git sync has automated engine and adapter tests. Actual Baidu authorization/network behavior and Android/iOS device behavior still require installation testing; see the sync documentation.
+- Creating an annotation requires a text selection in editing mode. Text selection in reading mode is not supported for creation, though sidebar navigation works in both modes. There is no custom highlight-color picker; existing `<mark>` colors are displayed. The vault tab reads every Markdown note on first scan and lists at most 300 results, so use search and filters in large vaults. Selections crossing blank lines, heading/list blocks, or code blocks must be annotated in smaller parts.
+- Writing skills inject only the `SKILL.md` body; `references/` and `scripts/` are not read or executed by the plugin. Codex/OpenCode auto-invocation depends on the description and is not guaranteed. `.agents` is hidden and the plugin's Git sync excludes hidden paths by default, so keep `Skills/` as the visible canonical root.
+- The floating toolbar currently covers editing mode only; reading mode uses Obsidian's native menu. It is off on mobile by default to avoid overlapping the native selection menu, handles, and keyboard toolbar. The cursor-idle trigger is off by default.
 
 ---
 
-## 快速开始
+## Quick Start
 
-1. 安装插件(见[安装](#安装))。
-2. 进入**设置 → IStart-Note-AI → 辅助 → AI 服务**,输入 API Key。
-3. 点击左侧 **IStart 工作台** 图标进入 AI 助手，或从 Obsidian 命令面板运行「打开 IStart 工作台」。
-4. 用自然语言输入指令，或展开助手输入区的「任务快捷入口」，新建作品或续写章节。
-5. 想边读边记时，选中文字后运行「添加批注」或「AI 批注」；在工作台顶部切换到「批注」查看列表。
-6. 想统一写作规范时，在 `Skills/` 下创建 `SKILL.md`，再到设置 → **Skill** 点击「重新扫描」。
-7. 想检查错别字时，在编辑模式运行「错别字甄别」，从右侧列表点击建议定位原文；有选区时只检查所选文字。详见 [使用步骤](#错别字甄别使用步骤)。
+1. Install the plugin (see [Installation](#installation)).
+2. Go to **Settings → IStart-Note-AI → Auxiliary → AI Service** and enter your API key.
+3. Click the single **IStart 工作台** ribbon icon to open the AI assistant, or run **打开 IStart 工作台** from Obsidian's command palette.
+4. Type a request in natural language, or expand **任务快捷入口** in the assistant composer.
+5. To take reading notes, select text and run **Add annotation** or **AI annotation**; switch to **批注** in the workspace to browse them.
+6. To standardize writing rules, add a `SKILL.md` under `Skills/`, then open **Settings → Skill → Rescan**.
+7. To check spelling, run **错别字甄别** in editing mode and click a sidebar suggestion to locate its source. A non-empty selection limits the check to that text. See the [walkthrough](#typo-checking-walkthrough).
 
 ---
 
-## 安装
+## Installation
 
-### 社区插件商店
+### Community plugins
 
-若在设置 → 第三方插件 → 浏览中可以搜索到 **IStart-Note-AI**，可直接安装并启用；否则使用手动安装或源码构建。
+If **IStart-Note-AI** appears in Settings → Community plugins → Browse, install and enable it there. Otherwise use manual installation or build from source.
 
-### 手动安装
+### Manual
 
-从 [GitHub Release](https://github.com/yan-istart/IStart-Note-AI-Plugin/releases) 下载 `main.js`、`manifest.json`、`styles.css`,放入 `<Vault>/.obsidian/plugins/istart-note-ai/`。
+Download `main.js`, `manifest.json`, `styles.css` from a [GitHub Release](https://github.com/yan-istart/IStart-Note-AI-Plugin/releases) and place them in `<vault>/.obsidian/plugins/istart-note-ai/`.
 
-> 克隆源码后需自行构建；可使用 Release 资产，或复制源码构建生成的 `dist/` 文件。
+> Build a source checkout before installation. Use release assets, or copy the files generated in `dist/` after building.
 
-### 从源码构建
+### Build from source
 
 ```bash
-npm ci && npm run build
+npm ci
+npm run build
 # → dist/main.js, dist/manifest.json, dist/styles.css
 ```
 
 ---
 
-## 设置
+## Configuration
 
-AI 默认值：Base URL 为 `https://api.deepseek.com`，模型为 `deepseek-v4-flash`，输出风格为 `knowledge-base`。Base URL 填根地址，不加末尾斜杠或 `/v1/chat/completions`，客户端会追加该后缀。
+Default AI settings: Base URL `https://api.deepseek.com`, model `deepseek-v4-flash`, output style `knowledge-base`. Enter the root URL without a trailing slash or `/v1/chat/completions`, since the client appends that suffix.
 
-模型下拉框提供 `deepseek-v4-flash` 和 `deepseek-v4-pro`；其他兼容端点需接受所选模型名称。当前没有自定义模型输入或服务商管理器。
+The model dropdown offers `deepseek-v4-flash` and `deepseek-v4-pro`. Compatible endpoints must accept the selected model name; there is no custom-model input or provider manager.
 
-设置页按七个标签组织:
+Settings are organized into seven tabs:
 
-| 标签 | 主要设置 |
+| Tab | Key settings |
 | --- | --- |
-| **知识** | Q&A 目录、问题索引目录、概念页目录、知识索引状态与重建 |
-| **写作** | 作品目录（`Writing`）、默认完整当前文档及作品资料；附近模式每侧 2,000 字符、续写目标（800 中文字）、插写目标（200 中文字） |
-| **Skill** | 启用自动附带、写作场景限制、Skill 根目录、最大注入字符、已发现 Skill 列表 |
-| **批注** | 默认行内/脚注批注、移动端跳转后收起侧栏、打开批注侧边栏 |
-| **界面** | 悬浮工具栏开关、选中时显示、光标空闲入口、移动端启用 |
-| **数据同步** | IStart 数据同步开关、同步方式、同步规则、百度网盘配置、跨设备配置同步 |
-| **辅助** | API Key、Base URL、模型、输出风格、隐私说明 |
+| **Knowledge** | Q&A path, Concepts path, Questions index path, index status + rebuild |
+| **Writing** | Works path (`Writing`), full document/project context by default; nearby mode uses 2,000 characters per side, continuation target (800 Chinese characters), insertion target (200 Chinese characters) |
+| **Skill** | Enable auto-attach, writing-only scope, skill roots, maximum injected characters, discovered skill list |
+| **Annotations** | Default inline/footnote comment style, collapse sidebar after mobile navigation, open annotation sidebar |
+| **Interface** | Floating toolbar toggle, show on selection, cursor-idle trigger, mobile enable |
+| **Data Sync** | IStart Data Sync toggle, sync mode and rules, Baidu Pan configuration, cross-device configuration transfer |
+| **Auxiliary** | API key, Base URL, model, output style |
 
-「IStart 数据同步」是统一的同步功能名称；百度网盘是当前支持的存储服务。设置 → 数据同步中分别管理：
+**IStart Data Sync** is the feature name; Baidu Pan is its currently supported storage service. **Settings → Data Sync** separates:
 
-- **通用同步设置**：Git / 文件同步方式、自动行为、忽略规则与单文件大小限制。
-- **百度网盘配置**：App ID、App Secret、账户授权和远端路径。
-- **跨设备配置同步**：不含凭证的配置推送、拉取与可选启动时拉取。
+- **Shared sync options**: Git/file mode, automatic behavior, ignore rules, and per-file size limits.
+- **Baidu Pan configuration**: App ID, App Secret, account authorization, and remote path.
+- **Cross-device configuration transfer**: credential-free push/pull and optional startup pull.
 
-Git / 文件模式决定如何同步，存储服务决定数据保存在哪里。当前仅实现百度网盘，其他存储服务仍待扩展。已有同步配置、授权、命令快捷键和保存的同步侧栏布局继续沿用。
+Git/file mode determines how data is synchronized; the storage service determines where it is stored. Only Baidu Pan is implemented today. Existing sync settings, authorization, command hotkeys, and saved sync sidebar layouts continue to work.
 
 ---
 
-## 写作 Skill 快速配置
+## Writing skills quick setup
 
-写作 Skill 使用标准 Agent Skills `SKILL.md`，按三层自动匹配：
+Writing skills use the standard Agent Skills `SKILL.md` format and are matched in three layers:
 
-| 作用域 | 适用内容 | 自动附带条件 |
+| Scope | Use | Auto-attached when |
 | --- | --- | --- |
-| `global` | 公共写作技巧、修改检查表、通用规范 | 写作类 AI 请求 |
-| `genre` | 网文、论文、长文的体裁规范 | 当前作品体裁匹配 |
-| `project` | 某个作品的文风、禁忌、节奏与连续性检查 | 当前文件属于该作品 |
+| `global` | Shared craft rules, revision checklists, general conventions | A writing AI request runs |
+| `genre` | Web-novel, paper, or article-specific rules | The current work's genre matches |
+| `project` | One work's voice, taboos, pacing, and continuity checklist | The current file belongs to that work |
 
-推荐目录：
+Recommended layout:
 
 ```text
 Skills/
-  writing-craft/SKILL.md       # 公共写作技巧
-  writing-webnovel/SKILL.md    # 体裁规范
-  work-<作品>/SKILL.md         # 作品规范
-.agents/skills/                # Codex/OpenCode 桥接目录
+  writing-craft/SKILL.md       # shared craft rules
+  writing-webnovel/SKILL.md    # genre guidance
+  work-<work>/SKILL.md         # work-specific rules
+.agents/skills/                # Codex/OpenCode bridge
 ```
 
-作品 Skill 的 frontmatter 示例：
+Work-skill frontmatter example:
 
 ```yaml
 ---
-name: 示例作品 · 写作规范
-description: Use only when writing or editing the work "示例作品".
+name: Example Work · Writing Rules
+description: Use only when writing or editing the work "Example Work".
 metadata:
   istart/scope: project
-  istart/project: 示例作品
-  istart/project-path: Writing/Novels/示例作品
+  istart/project: Example Work
+  istart/project-path: Writing/Novels/Example Work
   istart/genre: novel
   istart/priority: 30
 ---
 ```
 
-插件会从章节文件向上查找 `_作品.md`，自动识别作品、目录和体裁。注入顺序为：通用 Skill → 体裁 Skill → 作品 Skill；作品级规则优先。人物、剧情和世界观事实仍以 `_作品.md`、`_大纲.md`、`_角色/`、`_设定/` 为准，不要重复写入 Skill。Skill 文件本身会从知识库问答索引中排除。
+The plugin walks up from the chapter file to `_作品.md`, then infers the work title, folder, and genre. Injection order is global → genre → project, with the most specific rules taking precedence. Keep plot, characters, and worldbuilding in `_作品.md`, `_大纲.md`, `_角色/`, and `_设定/`; put only procedural writing guidance in the skill. Skill files are excluded from the Vault QA index.
 
-Codex/OpenCode 使用同一份文件：
+Codex/OpenCode can read the same files:
 
 ```bash
 cd <vault>
@@ -301,171 +275,170 @@ ln -s ../../Skills/writing-craft .agents/skills/writing-craft
 ln -s ../../Skills/work-example .agents/skills/work-example
 ```
 
-OpenCode 也可以直接配置 `"skills": ["./Skills"]`。启用后，在设置 → **Skill** 中点击「重新扫描」即可查看和单独开关。完整说明与示例见 [写作 Skill](./docs/skills.md)。
+OpenCode can also use `"skills": ["./Skills"]`. Then open **Settings → Skill → Rescan** to review and toggle skills. See [Writing skills](./docs/skills.md) for the full guide and examples.
 
 ---
 
-## 使用
+## Usage
 
-### 桌面
+### Desktop
 
-- 工作台：左侧只保留「IStart 工作台」一个图标；顶部切换「AI 助手 / 批注 / 数据同步」，三个页面复用同一个侧栏。问答、Agent 和小说演绎是 AI 助手内的模式。
-- 任务入口：展开助手输入区的「任务快捷入口」。原面板命令保留 ID，打开 AI 助手。
-- 快捷键：插件没有注册默认快捷键，可在 Obsidian 设置 → 快捷键中为 AI 助手、续写、插写、下一章、新建作品、添加批注、错别字甄别等命令自行绑定。
-- 状态栏:打开章节文件时显示「续写」「下一章」一键按钮；Git 模式下当前文件有改动时显示「Git · 新增 / 修改」，点击查看差异
-- 批注:选中文字后运行「添加批注」或「AI 批注」，也可在编辑器右键菜单和助手任务快捷入口中使用；工作台「批注」页汇总批注。点击批注跳回原文，右上角菜单可编辑批注、获取 AI 建议、复制或移除批注
-- 悬浮工具栏：编辑器中选中文字后显示添加批注、AI 批注、润色、扩写、解释等操作；末尾「助手」进入助手继续处理。可在设置 → 界面中开启光标空闲入口
-- 编辑器右键：AI 助手、知识库问答、概念补全、实用模板、美化文档、添加批注、AI 批注、错别字甄别；无选区时显示续写、插写及各自设置，选中文字时显示润色、扩写、解释，章节笔记额外显示提取角色卡
-- 文件列表：Git 模式在新增、修改的文件名旁显示文字标记；右键选择「查看本地 Git 差异」可比较原版本与当前内容。AI 助手直接引用所点击的笔记；美化文档也使用所点击的目标笔记
-- 数据同步：工作台「数据同步」页展示当前存储服务；Git 模式提供本地改动汇总、路径与类型筛选、手动同步和版本历史。原有同步命令也进入此页
+- One workspace icon opens assistant, annotations and data sync in the same sidebar.
+- Expand **任务快捷入口** for common tasks. Existing commands, hotkeys, editor menus and chapter status actions remain available. The floating toolbar's **助手** button opens the assistant.
+- Beautification and AI annotation rewriting/suggestions produce Agent previews; ordinary annotation editing remains local.
+- File-menu tasks capture the clicked note. Git badges, diffs and version history remain in the file explorer and sync page.
+- The import wizard handles source selection, splitting, cleanup and import. Classification and metadata analysis are recorded Agent tasks; closing/cancelling the wizard stops requests.
 
-### 移动端
+### Mobile
 
-- 从「IStart 工作台」进入，在同一抽屉切换助手、批注和数据同步；常用任务在助手输入区展开。
-- 批注卡片支持菜单与长按；跳回原文后默认收起侧栏，可在设置中关闭。普通批注编辑使用移动端布局，AI 草拟、重写和建议进入 Agent 预览。
-- 校对在会话中执行，可停止或重新生成；点击「查看校对定位」打开列表，点击条目选中原文并收起抽屉。
-- 在 Obsidian 设置 → 界面 → 配置移动工具栏 → 添加命令，加入续写、插写、润色、扩写、解释、总结等已有命令。
-- 续写与插写设置打开助手任务卡，可填写 1–10000 字目标、上下文范围和附加要求；续写可选光标或文末。长期默认值在设置 → 写作中管理。
-- 插写需要取消选区并将光标放在两段正文之间。完整上下文保留整章及作品资料；仅显式选择「光标附近」时启用截取。
-- 任务卡在输入区内滚动，Ctrl/Cmd+Enter 开始任务，移动端不主动聚焦。键盘布局结合 Obsidian 键盘高度和可见视口。
-- 悬浮工具栏在移动端默认关闭，可在设置 → 界面开启；可能与系统选区菜单重叠。
-- Vault 外的本地文件或目录导入仅支持桌面端；移动端可使用粘贴或 Vault 内来源。
+- The workspace uses shared navigation in a sidebar drawer. Common tasks expand inside the assistant.
+- Annotation cards support touch menus and long press; source navigation can collapse the drawer. AI tasks use Agent previews.
+- Proofreading runs in a conversation. **查看校对定位** opens source locations; tapping selects the original text.
+- Existing commands can be added to Obsidian's mobile toolbar. Writing settings open inline task cards; long-term defaults remain in plugin settings.
+- Task cards scroll within the composer and support Ctrl/Cmd+Enter. Fields do not automatically receive focus. Keyboard sizing uses Obsidian insets and the visible viewport.
+- The floating toolbar is off by default on mobile. External manuscript files/folders require desktop; pasted text and vault sources work on mobile.
 
 ---
 
-### 错别字甄别使用步骤
+### Typo checking walkthrough
 
-1. 在设置 → IStart-Note-AI → 辅助 → AI 服务中配置 API Key，打开 Markdown 笔记并切换到编辑模式。
-2. 检查全文时取消选区；只检查一段时先选中文字。
-3. 从 Obsidian 命令面板或编辑器右键菜单运行「错别字甄别」，也可展开助手的任务快捷入口选择「校对」。长笔记会分段检查，在会话中查看执行状态，期间可点击停止按钮。
-4. 结果保留在会话中，点击「查看校对定位」打开「错误内容 → 更正内容」列表。例如，`再接再励 → 再接再厉`，下方显示原文行列位置。点击条目会打开原笔记并选中对应文字；如果原笔记已切换为阅读模式，会先切回编辑模式。
+1. Configure your API key under **Settings → IStart-Note-AI → Auxiliary → AI Service**, open a Markdown note, and switch to editing mode.
+2. Clear the selection to check the whole note, or select the passage you want to check.
+3. Run **错别字甄别** from Obsidian's command palette, the editor context menu, or the assistant's **校对** shortcut. Long notes are checked in chunks; the conversation shows task status and supports stopping.
+4. Click **查看校对定位** in the conversation to review the original text → correction list, for example `再接再励 → 再接再厉`, with its source line and column. Click a suggestion to open the original note and select the text. If that note is now in reading mode, navigation switches it back to editing mode.
 
-同一个词出现多次时，建议按原文行号与出现次数定位，无法核对原文的建议会被忽略并提示。修改正文或移动文件后，旧条目会禁用；回到目标笔记，点击侧边栏「检查当前笔记全文」重新检查。若仍只想检查选区，请重新选中文字并运行命令。
+Repeated words are located using their line and occurrence number. Suggestions that cannot be matched to the source are omitted with a notice. Editing the source or moving the file disables old entries. Return to the target note and click **检查当前笔记全文** (Check the whole current note) to run a fresh check; to check only a selection again, reselect the passage and rerun the command.
 
-校对重点为中文错字、别字、同音误用与明显漏字、多字，不做文风润色。元数据、代码、注释、URL、Markdown 链接目标及双链会被遮盖后再发送；只把选区或当前笔记正文发送到已配置的 AI 服务，不附带其他笔记或写作 Skill。结果仅供人工核对，点击条目只定位，不会替换原文。
-
----
-
-## 入口与功能聚合
-
-- **统一入口**：一个 IStart 工作台图标，顶部切换 AI 助手、批注和数据同步，旧布局中的重复侧栏自动合并。
-- **AI 任务**：写作、知识、阅读、模板、美化、校对、批注 AI 与原稿 AI 分析共用 Agent 会话与工具执行；详见 [从助手发起 Agent 任务](#从助手发起-agent-任务)。
-- **就地操作**：保留原有命令、快捷键、右键菜单、选区工具栏和写作状态栏；悬浮工具栏的「助手」进入同一入口。
-- **专用界面**：同步与冲突处理、普通批注编辑、校对定位、原稿选择与切章继续采用适合操作的界面。
-- **兼容旧入口**：原「全部功能」面板及两个 AI 快捷弹窗命令均转入助手；切换工作台页面会保留会话、草稿和运行中的任务。
-- **后续方向**：作品资料聚合、右键子菜单、百度网盘之外的同步服务，尚未实施。
+The check focuses on Chinese typos, homophone misuse, and obvious missing or extra characters without rewriting style. Metadata, code, comments, URLs, Markdown link destinations, and wiki-links are masked before sending. Only the selected passage or current note is sent to your configured AI provider; other notes and writing skills are not attached. Review suggestions manually: clicking only locates the source and never replaces text.
 
 ---
 
-## 数据目录
+## Entry point and feature consolidation
 
-以下为默认布局。Q&A、Questions、Concepts 与 Writing 路径可配置；Reading 和 Artifacts 当前使用固定路径：
+- **Workspace** — one icon and shared assistant, annotations and sync pages; old duplicate sidebars are consolidated.
+- **Agent tasks** — writing, knowledge, reading, templates, beautification, proofreading, annotation AI and manuscript AI analysis share execution and conversation history.
+- **Native operations** — sync/conflicts, ordinary annotation editing, proofreading navigation and manuscript preparation retain dedicated interfaces.
+- **Compatibility** — the separate All features panel is removed. Its command and both old AI quick-dialog commands open the assistant, preserving IDs and hotkeys.
+- **Future work** — project-material aggregation, context-menu submenus and additional storage providers remain planned.
+
+## Copying and insertion positions
+
+- Select and copy message text, references, tool results and file previews. Buttons copy messages, complete messages, tool details, original/revised files and inserted text; the session menu can copy the whole conversation.
+- Source positions are captured before leaving the editor. Agent actions reuse their conversation's target even when the editor no longer has focus.
+- Click **设置插入位置** to choose a location in a readonly source preview. This also supports notes attached through @ without a cursor.
+- **保存或写入回答 → 插入到已设置位置** stages an existing answer at that location without regenerating it. Apply the preview to write; source edits invalidate old snapshots. After applying, the saved cursor advances to the end of the change.
+
+---
+
+## Data Layout
+
+Default layout below. Q&A, Questions, Concepts, and Writing paths are configurable; Reading and Artifacts currently use fixed paths:
 
 ```
-Knowledge/                 # 知识域(输入/沉淀)
-  Q&A/                     # 问答笔记
-  Questions/               # 问题索引与图谱
-  Concepts/                # 概念页
-  Reading/                 # 阅读项目(每本书一个目录)
-  Artifacts/               # 实用模板
-Writing/                   # 写作域(输出/生产)
-  Novels/<作品>/           # 网文小说
+Knowledge/                 # knowledge domain (read in)
+  Q&A/
+  Questions/
+  Concepts/
+  Reading/
+  Artifacts/
+Writing/                   # writing domain (write out)
+  Novels/<work>/
     _作品.md               # type: writing-project
-    _大纲.md               # type: outline(逐章梗概)
+    _大纲.md               # type: outline (per-chapter synopsis)
     _角色/                 # type: character
-    _设定/                 # type: setting(世界观)
-    _资料/                 # 导入的大纲与参考资料，type: reference
-    01-章节.md             # type: chapter
-  Papers/<论文>/           # 论文
-  Articles/<长文>/         # 通用长文
-Skills/                    # 写作 Skill(可见主目录，可同步)
-  writing-craft/SKILL.md   # 公共写作技巧
-  work-<作品>/SKILL.md     # 作品规范
-.agents/skills/            # 可选：Codex/OpenCode 桥接目录
+    _设定/                 # type: setting (worldbuilding)
+    _资料/                 # imported outlines/reference material, type: reference
+    01-chapter.md          # type: chapter
+  Papers/<paper>/
+  Articles/<article>/
+Skills/                    # visible writing-skill root (syncable)
+  writing-craft/SKILL.md   # shared craft rules
+  work-<work>/SKILL.md     # work-specific rules
+.agents/skills/            # optional Codex/OpenCode bridge
 ```
 
-Frontmatter 类型:`concept` / `question` / `reading-project` / `reading-note` / `writing-project` / `chapter` / `outline` / `character` / `setting` / `reference`；实用模板使用 `execution-artifact-*` 类型。
+Frontmatter types: `concept` / `question` / `reading-project` / `reading-note` / `writing-project` / `chapter` / `outline` / `character` / `setting` / `reference`; practical templates use `execution-artifact-*` types.
 
-写作项目存放在可配置的 `Writing/` 根目录。知识库问答按 frontmatter 类型排除 `chapter`、`writing-project`、`character`、`setting`、`outline`、`snippet`。当前没有设置开关，也不按整个目录排除；无类型笔记和导入的 `reference` 资料仍可能被检索。
+Writing projects live under the configurable `Writing/` root. Vault QA excludes `chapter`, `writing-project`, `character`, `setting`, `outline`, and `snippet` frontmatter types. This filter has no settings toggle and does not exclude an entire directory; untyped notes and imported `reference` notes may still be retrieved.
 
-批注不创建独立目录或索引文件，直接写入原笔记：高亮、行内批注、脚注与 Obsidian 注释都由侧边栏实时解析。移除批注会删除标记和批注文字，但保留被批注的正文。
+Annotations do not create a separate folder or index. They live inside the source note as standard Markdown and are parsed live by the sidebar. Removing an annotation deletes its markers and comment text while keeping the annotated prose.
 
 ---
 
-## 架构
+## Architecture
 
 ```
 src/
   core/
-    llm/              LLM 客户端 + JSON 解析
-    knowledge/        元数据知识索引
-    artifact/         实用模板(检查表/SOP/复盘)类型、校验、渲染
-    sync/             JavaScript Git 内核、版本包交换、合并与恢复
-    annotations/      批注解析、删除范围与跳转定位
-    skills/           Agent Skills 解析、发现、作用域选择和 prompt 注入
-    schema.ts         SCHEMA_VERSION + 工具函数
-  ai/                 AI 能力模块(助手、批注草拟、错别字甄别、分类器、阅读规划、写作规划、续写...)
+    llm/              Unified LLM client + JSON extractor
+    knowledge/        Metadata knowledge index
+    artifact/         Practical template types, prompt, validation, rendering
+    sync/             JavaScript Git engine, bundle exchange, merge and recovery
+    annotations/      Annotation parsing, deletion ranges and navigation lookup
+    skills/           Agent Skills parsing, discovery, scope selection and prompt injection
+    schema.ts         SCHEMA_VERSION + helpers
+  ai/                 AI feature modules (assistant, annotation drafting, typo checking, classifier, reading planner, writing planner, continuer, ...)
   features/
-    agent/            多会话 Agent 侧边栏与会话控制
-    assistant/        共用结果组件（兼容）
-    annotation/       添加批注、删除确认与侧边栏视图
-    proofreading/     Agent 校对结果的原文定位
-    writing/          新建作品、规划预览、续写、原稿导入、项目/上下文管理
-    reading/          阅读项目管理
-    concept/          概念补全
-    question/         问题分类与图谱
-    artifact/         实用模板生成
-    dashboard/        旧看板组件（入口已转入 Agent）
-    sync/             IStart 数据同步（当前存储服务为百度网盘）
-    command-panel/    旧组件（入口已转入助手）
-    toolbar/          编辑器悬浮工具栏(CodeMirror 6 ViewPlugin)
-  vault/              Q&A 与概念页写入
-  settings/           设置页(知识/写作/Skill/批注/界面/辅助)
-  actions/            动作注册与面板定义
+    agent/            Multi-session Agent sidebar and controller
+    assistant/        AI assistant modals
+    annotation/       Add/delete dialogs and annotation sidebar view
+    proofreading/     Typo suggestions, check progress, and source navigation
+    writing/          New work, plan preview, continue, import, project/context management
+    reading/          Reading project manager
+    concept/          Concept completion
+    question/         Question classify + graph
+    artifact/         Practical template builder
+    dashboard/        Legacy dashboard component (entry moved to Agent)
+    sync/             Baidu sync
+    command-panel/    Legacy component (no active entry)
+    toolbar/          Floating editor toolbar (CodeMirror 6 ViewPlugin)
+  vault/              Q&A and concept-note writer
+  settings/           Settings tab (Knowledge / Writing / Skill / Annotations / Interface / Auxiliary)
+  actions/            Action registry + definitions
   main.ts
 ```
 
 ---
 
-## 隐私说明
+## Privacy
 
-AI 功能会把你选中的内容和部分笔记上下文发送到所配置的 API 端点。AI 批注只在你主动点击「AI 草拟」「AI 重写」、运行「AI 批注」或「获取 AI 建议」时联网；普通高亮、批注编辑和侧边栏解析完全在本地完成。同步功能只上传到你自己的百度网盘。Git 笔记同步排除隐藏路径、Obsidian 配置目录、凭证及 Git 元数据；历史会保留已删除笔记的旧内容，未提供额外加密。独立配置同步不含 API Key 与百度凭证，文件模式启用「备份插件本身」时会上传插件 `data.json`（含凭证）及部分 Obsidian 配置。无遥测、无插件方服务器。详见 [PRIVACY.md](./PRIVACY.md) / [PRIVACY.zh-CN.md](./PRIVACY.zh-CN.md)。
+AI features send your selection and partial note context to the configured chat-completions endpoint. AI annotations only use the network when you explicitly click **AI draft**, **AI rewrite**, run **AI annotation**, or request **AI suggestions**; ordinary highlights, annotation editing, and sidebar parsing are local. Sync features upload to your own Baidu Pan. Git sync excludes hidden paths, the Obsidian config directory, credentials, and Git metadata. History retains past content after deletion and has no additional encryption. Separate configuration sync excludes API keys and Baidu credentials. In file mode, enabling plugin backup uploads the plugin `data.json` (including credentials) and selected Obsidian configuration files. No telemetry. No plugin-operated servers. Full details in [PRIVACY.md](./PRIVACY.md).
 
 ---
 
-## 同步与配置迁移
+## Sync and configuration transfer
 
-Git 模式：在设置 → 数据同步中启用「IStart 数据同步」，在「百度网盘配置」中填写百度 App ID、App Secret 并完成授权，选择「Git 版本同步」，再点击「打开同步」或侧边栏「手动同步」。自动同步与启动时自动拉取配置默认关闭。电脑与手机使用同一套同步内核；应用在前台时才支持可选自动同步。
+Enable **IStart Data Sync** under **Settings → Data Sync**, enter your Baidu App ID and App Secret under **Baidu Pan configuration**, authorize your account, choose **Git version sync**, then use **Open sync** or **Manual sync** in the sidebar. Automatic sync and startup configuration pull are off by default. Desktop and mobile use the same JavaScript Git engine; optional automatic sync runs only while the app is in the foreground.
 
-同步默认关闭；新安装默认选择 Git 模式，未记录同步方式的已有配置保留原有文件模式，需要手动切换到 Git。各设备需使用相同远端路径与 Git 模式，旧备份不会被删除。首次 Git 同步从当前本地笔记创建历史；若需要旧云端备份，请先用原有模式恢复。详见 [Git 同步说明](./docs/git-sync.md)。
+Sync is disabled by default. New installations default to Git mode; older configurations without a mode retain file sync until you select Git explicitly. All devices must use Git mode with the same remote path. Existing cloud backups are preserved; restore any old backup in file mode before your first Git sync if needed. See [Git sync documentation](./docs/git-sync.md).
 
-文件模式保留备份、恢复、状态扫描、双向同步、逐文件冲突选择与可选插件备份。「自动备份」设置仍保留，但当前笔记生成流程没有触发该操作，请使用手动备份。
+File mode retains backup, restore, status scanning, bidirectional sync, per-file conflict choices, and optional plugin backup. Its “automatic backup” setting is retained, but current note-generation flows do not trigger it; use manual backup.
 
-Git 模式同步符合规则的普通 Vault 文件，包含附件与删除，使用忽略正则与大小限制（默认单文件 100 MB）。它保存提交、交换增量 Git bundle、合并文本、处理冲突，支持单文件恢复和预览后恢复整个笔记库，无需系统 Git。自动同步默认关闭，开启后在启动时和应用可见时每分钟执行。
+Git mode syncs ordinary vault files, including attachments and deletions, with configured ignore rules and size limits (100 MB per file by default). It saves commits, exchanges incremental Git bundles, merges text, allows conflict resolution, and restores individual files or the whole vault after a restore preview. It needs no system Git. Automatic sync is off by default; when enabled it runs at startup and every minute while the app is visible.
 
-配置推送/拉取传递 Base URL、模型、三个知识路径、自动打开图谱、远端路径、忽略规则与大小限制。写作设置、输出风格、Skill 设置、批注设置、凭证、同步方式和自动行为保持本地设置；启动时拉取配置默认关闭。迁移步骤、本地历史位置与恢复细节见 [Git 同步说明](./docs/git-sync.md)。
+Configuration push/pull transfers Base URL, model, the three knowledge paths, automatic graph opening, remote path, ignore rules, and file size limit. Writing settings, output style, skill settings, annotation settings, credentials, sync mode, and automatic behavior stay local. Startup configuration pull is off by default. See [Git sync documentation](./docs/git-sync.md) (Chinese) for migration, history storage, and recovery details.
 
-### 查看本地文件改动
+### View local file changes
 
-启用「IStart 数据同步」并选择「Git 版本同步」后，可从以下位置查看改动：
+Enable **IStart Data Sync** and select **Git version sync** to use these entry points:
 
-| 入口 | 功能 |
+| Entry point | Behavior |
 | --- | --- |
-| 文件列表 | 文件名旁显示「新增」「修改」标记，编辑、新建、删除或重命名后停止操作约一秒触发刷新 |
-| 文件右键 / 命令面板 | 选择「查看本地 Git 差异」，或运行「查看当前文件的本地 Git 差异」，查看带行号、颜色和增删符号的逐行比较 |
-| 同步侧栏「本地文件改动」 | 汇总新增、修改、删除数量，按路径或类型筛选，点击文件路径查看差异；已删除文件也可查看旧内容 |
-| 桌面状态栏 | 当前文件有改动时显示 Git 状态，点击打开差异 |
+| File explorer | Added and modified files show text badges. A local scan runs about one second after editing, creating, deleting, or renaming stops |
+| File context menu / command palette | Choose **查看本地 Git 差异**, or run **查看当前文件的本地 Git 差异**, for a line-by-line comparison with line numbers, colors, and addition/deletion signs |
+| Sync sidebar: **本地文件改动** | See added, modified, and deleted counts, filter by path or type, and click a path to view its diff, including old content for deleted files |
+| Desktop status bar | See the current file's Git change status and click to open its diff |
 
-比较基准为**最近本地 Git 提交**。扫描与查看差异不联网、不创建提交，有本地历史时可离线使用；首次扫描可能初始化空的本地 Git 仓库。同步失败时本地提交可能已保存，因此「本地无改动」不代表已经上传或与云端一致，需要执行同步确认。
+The comparison baseline is the **latest local Git commit**. Scanning and viewing diffs use no network and create no commits; existing local history works offline. The first scan may initialize an empty local Git repository. A failed sync may already have saved a local commit, so “no local changes” does not confirm upload or agreement with the cloud; run sync to check.
 
-重命名暂显示为删除旧路径、新增新路径。二进制附件显示字节大小；过大的文本不展开，行数较多时使用双栏原文比较。忽略规则与大小限制和同步保持一致。更多说明见 [查看本地文件改动](./docs/git-sync.md#查看本地文件改动)。
+Renames currently appear as deletion of the old path and addition of the new path. Binary attachments show byte sizes. Large text files are not expanded; documents with many lines use a side-by-side text comparison. Ignore rules and size protections match Git sync. See [local changes documentation (Chinese)](./docs/git-sync.md#查看本地文件改动).
 
 ---
 
-## 贡献
+## Contributing
 
-欢迎提 Issue / PR。请先阅读 [CONTRIBUTING.md](./CONTRIBUTING.md)。安全问题见 [SECURITY.md](./SECURITY.md)。
+PRs and issues welcome. See [CONTRIBUTING.md](./CONTRIBUTING.md). Security issues: [SECURITY.md](./SECURITY.md).
 
-## 协议
+## License
 
-MIT。详见 [LICENSE](./LICENSE)。
+MIT. See [LICENSE](./LICENSE).

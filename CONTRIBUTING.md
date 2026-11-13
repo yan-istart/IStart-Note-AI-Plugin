@@ -20,8 +20,9 @@ Always use `npm ci` rather than `npm install` so the lockfile is respected and b
 | --- | --- |
 | `npm run dev` | Watch mode build to `dist/` |
 | `npm run typecheck` | Run `tsc --noEmit` against `tsconfig.json` (strict mode) |
+| `npm run lint` | Check community scorecard TypeScript and Obsidian API rules; no warnings allowed |
 | `npm run build` | Type-check, then production build to `dist/` |
-| `npm run ci` | Full type-check + build (mirrors GitHub Actions) |
+| `npm run ci` | Lint, run tests, type-check, and build (mirrors GitHub Actions) |
 | `npm run release` | Interactive release (build, tag, GitHub release) — maintainers only |
 | `npm run submit` | Helper for submitting to community plugin store |
 
@@ -84,15 +85,19 @@ If your change is non-trivial, please describe how you manually verified it in t
 
 ## Releasing (maintainers)
 
-Releases are tag-driven. Pushing a tag triggers `.github/workflows/release.yml`, which builds `dist/` and creates a draft release.
+Releases are tag-driven. Pushing a tag triggers `.github/workflows/release.yml`, which validates the plugin, builds `dist/`, attests all three assets, and creates a draft release. Review and publish that draft after the workflow succeeds. The release script queues this workflow and never uploads local assets.
 
 Recommended flow:
 
 ```bash
-npm run release        # interactive: bump version, build, tag, push, draft release
+npm run release        # interactive: bump version, build, tag, push; CI creates the draft
 ```
 
 The release workflow uses `npm ci`, so any change that requires a new lockfile must be committed first.
+
+Production builds copy `manifest.json` unchanged. Do not add timestamps or replace assets after CI uploads them; the community scorecard checks manifest consistency, reproducibility, and provenance. The root README is English; maintain the complete Chinese guide in `README.zh-CN.md`.
+
+`LLMClient.ts` has one documented `no-restricted-globals` exception for opt-in SSE streaming: Obsidian's `requestUrl` has no stream reader. Ordinary requests and pre-stream CORS failures use `requestUrl`. Do not extend this exception to other networking code.
 
 ## Reporting bugs
 

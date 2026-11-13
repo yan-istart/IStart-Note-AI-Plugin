@@ -299,7 +299,7 @@ ${novelSections}
   }
 
   /** 更新作品首页的 current_chapter 与 updated_at */
-  async markCurrentChapter(chapterFile: TFile, projectTitle: string): Promise<void> {
+  async markCurrentChapter(chapterFile: TFile, _projectTitle: string): Promise<void> {
     const folder = chapterFile.parent?.path ?? "";
     const indexFile = this.app.vault.getAbstractFileByPath(normalizePath(`${folder}/_作品.md`));
     if (!(indexFile instanceof TFile)) return;

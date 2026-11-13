@@ -22,7 +22,7 @@ export class ImportAgentBridge {
     for (let offset = 0; offset < units.length; offset += 50) {
       const chunk = units.slice(offset, offset + 50).map(u => ({ index: u.index, title: u.title.slice(0, 200), head: u.head.slice(0, 200) }));
       while (JSON.stringify(chunk).length > 49000) chunk.forEach(u => { u.head = u.head.slice(0, Math.floor(u.head.length * .8)); u.title = u.title.slice(0, Math.floor(u.title.length * .8)); });
-      const parsed: { classifications: { index: number; kind: MaterialKind }[] } = JSON.parse(await this.run("import-classify", { units: JSON.stringify(chunk) }, signal));
+      const parsed = JSON.parse(await this.run("import-classify", { units: JSON.stringify(chunk) }, signal)) as { classifications: { index: number; kind: MaterialKind }[] };
       for (const item of parsed.classifications) result.set(item.index, item.kind);
     }
     return result;

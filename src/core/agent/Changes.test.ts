@@ -1,8 +1,17 @@
 import { describe, it, expect } from "vitest";
-import { applyChanges, coalesceProposal, validateNotePath } from "./Changes";
+import { applyChanges, coalesceProposal, validateNotePath, noteName } from "./Changes";
 import type { ChangeProposal } from "./types";
 
 describe("agent changes", () => {
+  it("rejects every ASCII control in paths and replaces it in generated filenames", () => {
+    for (let code = 0; code < 32; code++) {
+      const char = String.fromCharCode(code);
+      expect(() => validateNotePath(`folder/name${char}.md`)).toThrow();
+      expect(noteName(`name${char}end`)).toBe("name-end");
+    }
+    expect(validateNotePath("资料/中文[引用].md")).toBe("资料/中文[引用].md");
+    expect(noteName("资料[引用]|笔记")).toBe("资料-引用--笔记");
+  });
   it("coalesces shared-index drafts and preserves the original file baseline", () => {
     const a: ChangeProposal = { id: "a", title: "chapter A", status: "pending", changes: [{ path: "a.md", before: "A", after: "A done" }, { path: "index.md", before: "0", after: "1" }] };
     const b: ChangeProposal = { id: "b", title: "chapter B", status: "pending", changes: [{ path: "b.md", before: "B", after: "B done" }, { path: "index.md", before: "1", after: "2" }] };

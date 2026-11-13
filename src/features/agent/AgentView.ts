@@ -358,11 +358,12 @@ export class AgentView extends ItemView {
     this.perform(async () => { const task = this.controller.send(s.id, text); if (this.controller.isRunning(s.id)) this.input.value = ""; await task; });
   }
   private pickNote(): void {
-    const owner = this;
+    const items = this.app.vault.getMarkdownFiles().filter(f => !this.plugin.skillRegistry.isSkillPath(f.path) && !f.path.split("/").some(p => p.startsWith(".")));
+    const choose = (file: TFile) => { this.perform(() => this.controller.attach({ path: file.path })); this.input.focus(); };
     new class extends FuzzySuggestModal<TFile> {
-      getItems(): TFile[] { return owner.app.vault.getMarkdownFiles().filter(f => !owner.plugin.skillRegistry.isSkillPath(f.path) && !f.path.split("/").some(p => p.startsWith("."))); }
+      getItems(): TFile[] { return items; }
       getItemText(file: TFile): string { return file.path; }
-      onChooseItem(file: TFile): void { owner.perform(() => owner.controller.attach({ path: file.path })); owner.input.focus(); }
+      onChooseItem(file: TFile): void { choose(file); }
     }(this.app).open();
   }
   private async openSource(path: string): Promise<void> {

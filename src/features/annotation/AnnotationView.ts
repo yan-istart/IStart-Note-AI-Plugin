@@ -801,12 +801,3 @@ function safeCssColor(value?: string): string | undefined {
   if (/url|var|expression|javascript/i.test(color)) return undefined;
   return color;
 }
-
-function compactInlineSuggestion(text: string): string {
-  return text
-    .split(/\r?\n+/)
-    .map((line) => line.replace(/^\s*[-*+]\s+/, "").replace(/^\s*\d+[.)]\s+/, "").replace(/^\s*#{1,6}\s+/, "").trim())
-    .filter(Boolean)
-    .join("；")
-    .replace(/；{2,}/g, "；");
-}

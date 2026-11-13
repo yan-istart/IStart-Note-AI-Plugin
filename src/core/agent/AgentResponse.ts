@@ -67,7 +67,7 @@ export function parseDecision(raw: string): AgentDecision {
   const parsed = decision(value);
   if (parsed) return parsed;
   // Standalone Markdown/code is a normal answer; malformed protocol stays an error.
-  if (!/^[{\[]/.test(payload) && !/^```json[ \t]*(?:\r?\n|$)/i.test(text)) return { type: "answer", content: raw };
+  if (!/^[{[]/.test(payload) && !/^```json[ \t]*(?:\r?\n|$)/i.test(text)) return { type: "answer", content: raw };
   throw new Error("模型没有返回有效的回答或工具请求");
 }
 

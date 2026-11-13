@@ -111,11 +111,10 @@ class FloatingToolbarView {
     const selection = this.view.state.selection.main;
     if (selection.from !== selection.to) return;
     this.hideHandle();
-    const handle = this.doc.createElement("button");
-    handle.className = "istart-floating-toolbar-handle";
-    handle.type = "button";
-    handle.title = "IStart 操作";
-    handle.setAttribute("aria-label", "打开 IStart 操作");
+    const handle = this.doc.adoptNode(createEl("button", {
+      cls: "istart-floating-toolbar-handle",
+      attr: { type: "button", title: "IStart 操作", "aria-label": "打开 IStart 操作" },
+    }));
     setIcon(handle.createSpan({ cls: "istart-floating-toolbar-handle-icon" }), "istart-assistant");
     handle.addEventListener("pointerdown", (event) => event.preventDefault());
     handle.addEventListener("mousedown", (event) => event.preventDefault());
@@ -137,10 +136,10 @@ class FloatingToolbarView {
     const actions = this.toolbarActions(ctx, hasSelection);
     if (actions.length === 0) return;
 
-    const toolbar = this.doc.createElement("div");
-    toolbar.className = "istart-floating-toolbar";
-    toolbar.setAttribute("role", "toolbar");
-    toolbar.setAttribute("aria-label", "IStart 快捷操作");
+    const toolbar = this.doc.adoptNode(createDiv({
+      cls: "istart-floating-toolbar",
+      attr: { role: "toolbar", "aria-label": "IStart 快捷操作" },
+    }));
 
     for (const action of actions) this.addActionButton(toolbar, action, ctx);
     const more = toolbar.createEl("button", {

@@ -1579,7 +1579,7 @@ button.istart-import-merge {
 .istart-agent-task-active.istart-agent-keyboard-visible .istart-agent-context,
 .istart-agent-task-active.istart-agent-keyboard-visible .istart-agent-composer-meta,
 .istart-agent-task-active.istart-agent-keyboard-visible .istart-workbench-heading { display: none; }
-.istart-agent-root { display:flex; flex-direction:column; height:100%; min-height:0; min-width:0; padding:0 !important; overflow:hidden; }
+.workspace-leaf-content .istart-agent-root { display:flex; flex-direction:column; height:100%; min-height:0; min-width:0; padding:0; overflow:hidden; }
 .istart-agent-header,.istart-agent-sessionbar,.istart-agent-composer-actions,.istart-agent-composer-meta { display:flex; align-items:center; gap:8px; }
 .istart-agent-header { justify-content:space-between; padding:10px 12px; border-bottom:1px solid var(--background-modifier-border); }
 .istart-agent-brand { display:flex; flex-direction:row-reverse; align-items:center; gap:8px; font-weight:var(--font-semibold); }
@@ -1619,7 +1619,7 @@ button.istart-import-merge {
 .istart-agent-skills,.istart-agent-muted { color:var(--text-muted); font-size:var(--font-smallest); }
 .istart-agent-skills { margin-bottom:8px; }
 .istart-agent-sources,.istart-agent-proposal-actions,.istart-agent-message-actions { display:flex; flex-wrap:wrap; align-items:center; gap:6px; margin-top:10px; }
-.istart-agent-sources button { background:var(--background-secondary); color:var(--text-accent); font-size:var(--font-smallest) !important; }
+.istart-agent-root .istart-agent-sources button { background:var(--background-secondary); color:var(--text-accent); font-size:var(--font-smallest); }
 .istart-agent-proposal { margin:12px 0; border:1px solid var(--background-modifier-border); padding:12px; border-radius:8px; }
 .istart-agent-proposal-title { font-weight:var(--font-semibold); }
 .istart-agent-change-path { font-size:var(--font-smallest); margin-top:10px; overflow-wrap:anywhere; }
@@ -1648,7 +1648,7 @@ button.istart-import-merge {
 .istart-agent-empty { padding:20px 2px; }
 .istart-agent-empty h3 { margin:0 0 8px; }
 .istart-agent-empty p { color:var(--text-muted); font-size:var(--font-smaller); }
-.istart-agent-empty > button { display:flex !important; width:100%; margin:8px 0; text-align:left; }
+.istart-agent-root .istart-agent-empty > button { display:flex; width:100%; margin:8px 0; text-align:left; }
 .istart-agent-name-input { width:100%; }
 .istart-agent-mobile .istart-agent-composer { padding-bottom:max(6px,env(safe-area-inset-bottom)); }
 .istart-agent-mobile .istart-agent-composer textarea { font-size:16px; }
