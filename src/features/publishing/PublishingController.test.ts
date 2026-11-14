@@ -33,6 +33,23 @@ function setup() {
 }
 
 describe("publishing task orchestration", () => {
+  it("connects to an independently running local service using its existing token", async () => {
+    const { controller } = setup();
+    controller.device.value.mode = "local";
+    controller.device.value.port = 28123;
+    controller.device.token = "local-service-access-token";
+    const accounts = [{ id: "zhihu", name: "知乎", username: "writer", isAuthenticated: true }];
+    const status = vi.mocked(PublishingClient.prototype.status).mockImplementation(async function (this: PublishingClient) {
+      expect(this.url).toBe("http://127.0.0.1:28123");
+      return { protocol: "istart-publishing-v1", serverId: "local-1", extensionConnected: true };
+    });
+    vi.spyOn(PublishingClient.prototype, "accounts").mockResolvedValue(accounts);
+    await controller.connect();
+    expect(status).toHaveBeenCalledTimes(1);
+    expect(controller.accounts).toEqual(accounts);
+    expect(controller.device.token).toBe("local-service-access-token");
+    controller.dispose();
+  });
   it("uses the selected file, persists intent before POST, and transmits image bytes rather than vault paths", async () => {
     const { controller, note } = setup();
     const send = vi.spyOn(PublishingClient.prototype, "send").mockImplementation(async request => {

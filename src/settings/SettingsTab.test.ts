@@ -19,7 +19,7 @@ describe("settings search compatibility", () => {
     const pages = tab.getSettingDefinitions();
     expect(pages).toHaveLength(8);
     const aliases = pages.flatMap(page => "type" in page && page.type === "page" ? page.items?.flatMap(item => "aliases" in item ? item.aliases ?? [] : []) ?? [] : []);
-    expect(aliases).toEqual(expect.arrayContaining(["API Key", "Base URL", "默认续写字数", "Skill 根目录", "默认批注形式", "移动端启用", "同步方式", "App Secret", "远程服务地址", "本地安装并启动"]));
+    expect(aliases).toEqual(expect.arrayContaining(["API Key", "Base URL", "默认续写字数", "Skill 根目录", "默认批注形式", "移动端启用", "同步方式", "App Secret", "分发服务地址", "连接本机服务", "部署说明"]));
   });
 
   it("renders a search result in the matching section only when opened", () => {

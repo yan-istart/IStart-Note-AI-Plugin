@@ -16,9 +16,9 @@ describe("publishing secret version compatibility", () => {
     } as unknown as App;
     const config = new PublishingDeviceConfig(app);
     config.save();
-    config.token = "session-token"; config.extensionToken = "session-extension";
+    config.token = "session-token";
     expect(config.hasPersistentSecrets).toBe(false);
-    expect(config.token).toBe("session-token"); expect(config.extensionToken).toBe("session-extension");
+    expect(config.token).toBe("session-token");
   });
   it("persists device settings on 1.8.7 without accessing SecretStorage", () => {
     vi.mocked(requireApiVersion).mockImplementation(version => version === "1.8.7");
@@ -38,9 +38,23 @@ describe("publishing secret version compatibility", () => {
     const secrets = new Map<string, string>();
     const app = { secretStorage: { getSecret: (key: string) => secrets.get(key) ?? null, setSecret: (key: string, value: string) => { secrets.set(key, value); } } } as unknown as App;
     const config = new PublishingDeviceConfig(app);
-    config.token = "remote"; config.value.mode = "local"; config.token = "local"; config.extensionToken = "extension";
+    config.token = "remote"; config.value.mode = "local"; config.token = "local";
     expect(config.hasPersistentSecrets).toBe(true); expect(config.token).toBe("local");
     config.value.mode = "remote"; expect(config.token).toBe("remote");
-    expect(config.extensionToken).toBe("extension"); expect(secrets.size).toBe(3);
+    expect(secrets.size).toBe(2);
+  });
+  it("keeps the old local endpoint and access token for an independently started service", () => {
+    vi.mocked(requireApiVersion).mockReturnValue(true);
+    const id = "12345678-1234-1234-1234-123456789abc";
+    const app = {
+      loadLocalStorage: () => ({ id, mode: "local", port: 28123, nodePath: "/old/node", bridgePort: 28125 }),
+      saveLocalStorage: vi.fn(),
+      secretStorage: { getSecret: (key: string) => key === `istart-publishing-${id}-local` ? "existing-token" : null },
+    } as unknown as App;
+    const config = new PublishingDeviceConfig(app);
+    expect(config.value).toEqual({ id, mode: "local", port: 28123, url: "" });
+    expect(config.token).toBe("existing-token");
+    config.save();
+    expect(app.saveLocalStorage).toHaveBeenCalledWith("istart-publishing-device-v1", config.value);
   });
 });

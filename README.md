@@ -213,7 +213,7 @@ Settings are organized into eight tabs:
 
 | Tab | Key settings |
 | --- | --- |
-| **Publishing** | Device-local service connection, desktop local service management, publishing snapshot folder |
+| **Publishing** | Device-local connection to an independently deployed service, publishing snapshot folder |
 | **Knowledge** | Q&A path, Concepts path, Questions index path, index status + rebuild |
 | **Writing** | Works path (`Writing`), full document/project context by default; nearby mode uses 2,000 characters per side, continuation target (800 Chinese characters), insertion target (200 Chinese characters) |
 | **Skill** | Enable auto-attach, writing-only scope, skill roots, maximum injected characters, discovered skill list |
@@ -368,7 +368,7 @@ Annotations do not create a separate folder or index. They live inside the sourc
 
 ### Multi-platform article distribution
 
-Open **IStart 工作台 → 内容分发** to preview a Markdown note and send image articles to WeChat Official Accounts, Zhihu and Bilibili column drafts through Wechatsync. No AI API key is required. Desktop supports a configured service URL or a locally managed service (Node.js 22+); mobile uses a remote HTTPS service URL. The browser extension and platform logins remain required.
+Open **IStart 工作台 → 内容分发** to preview a Markdown note and send image articles to WeChat Official Accounts, Zhihu and Bilibili column drafts through Wechatsync. No AI API key is required. Desktop connects to an independently started local service or a configured HTTPS service URL; mobile uses a remote HTTPS service URL. The companion service requires Node.js 22+ and is distributed separately; the plugin does not install or start it. The browser extension and platform logins remain required.
 
 Publishing snapshots and image copies are created on demand under configurable `IStart/Publishing/`, with per-attempt records and recovery after lost responses. Generated publishing drafts are excluded from knowledge retrieval. Connection preferences are device-local; tokens use SecretStorage where supported, with session-only fallback on older Obsidian. Unknown delivery outcomes never trigger automatic resubmission. Setup, remote deployment, limitations and API details: [图文分发说明](./docs/publishing.md).
 
@@ -411,7 +411,7 @@ src/
 
 ## Privacy
 
-AI features send your selection and partial note context to the configured chat-completions endpoint. AI annotations only use the network when you explicitly click **AI draft**, **AI rewrite**, run **AI annotation**, or request **AI suggestions**; ordinary highlights, annotation editing, and sidebar parsing are local. Sync features upload to your own Baidu Pan. Git sync excludes hidden paths, the Obsidian config directory, credentials, and Git metadata. History retains past content after deletion and has no additional encryption. Separate configuration sync excludes API keys and Baidu credentials. In file mode, enabling plugin backup uploads the plugin `data.json` (including credentials) and selected Obsidian configuration files. No telemetry. No plugin-operated servers. Full details in [PRIVACY.md](./PRIVACY.md).
+AI features send your selection and partial note context to the configured chat-completions endpoint. AI annotations only use the network when you explicitly click **AI draft**, **AI rewrite**, run **AI annotation**, or request **AI suggestions**; ordinary highlights, annotation editing, and sidebar parsing are local. Sync features upload to your own Baidu Pan. Git sync excludes hidden paths, the Obsidian config directory, credentials, and Git metadata. History retains past content after deletion and has no additional encryption. Separate configuration sync excludes API keys and Baidu credentials. File backup excludes plugin executables, plugin `data.json`, and Obsidian configuration files. No telemetry. No plugin-operated servers. Full details in [PRIVACY.md](./PRIVACY.md).
 
 ---
 
@@ -421,7 +421,7 @@ Enable **IStart Data Sync** under **Settings → Data Sync**, enter your Baidu A
 
 Sync is disabled by default. New installations default to Git mode; older configurations without a mode retain file sync until you select Git explicitly. All devices must use Git mode with the same remote path. Existing cloud backups are preserved; restore any old backup in file mode before your first Git sync if needed. See [Git sync documentation](./docs/git-sync.md).
 
-File mode retains backup, restore, status scanning, bidirectional sync, per-file conflict choices, and optional plugin backup. Plugin backup is upload-only: restoring notes never restores plugin executables or Obsidian configuration files. Install and update the plugin through Obsidian; use configuration push/pull to transfer supported settings. Its “automatic backup” setting is retained, but current note-generation flows do not trigger it; use manual backup.
+File mode retains note/attachment backup, restore, status scanning, bidirectional sync, and per-file conflict choices. Plugin executables and Obsidian configuration files are excluded from both backup and restore, including when older settings enabled plugin backup. Install and update the plugin through Obsidian; use configuration push/pull to transfer supported settings. Its “automatic backup” setting is retained, but current note-generation flows do not trigger it; use manual backup.
 
 Git mode syncs ordinary vault files, including attachments and deletions, with configured ignore rules and size limits (100 MB per file by default). It saves commits, exchanges incremental Git bundles, merges text, allows conflict resolution, and restores individual files or the whole vault after a restore preview. It needs no system Git. Automatic sync is off by default; when enabled it runs at startup and every minute while the app is visible.
 

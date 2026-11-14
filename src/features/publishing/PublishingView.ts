@@ -45,7 +45,7 @@ export class PublishingView extends ItemView {
     root.createEl("h4", { text: "图文分发" });
     root.createEl("p", { text: controller.message, cls: "istart-publishing-status", attr: { role: "status", "aria-live": "polite" } });
     const settings = root.createEl("details", { cls: "istart-publishing-connection" }); settings.open = this.settingsOpen || !controller.connection;
-    settings.createEl("summary", { text: Platform.isMobile ? "服务连接" : "服务连接与本地安装" });
+    settings.createEl("summary", { text: "服务连接" });
     settings.addEventListener("toggle", () => { if (settings.isConnected) this.settingsOpen = settings.open; });
     renderPublishingConnection(settings, this.plugin);
     const actions = root.createDiv({ cls: "istart-publishing-actions" });

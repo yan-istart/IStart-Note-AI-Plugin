@@ -402,7 +402,7 @@ src/
 
 ## Privacy
 
-AI features send your selection and partial note context to the configured chat-completions endpoint. AI annotations only use the network when you explicitly click **AI draft**, **AI rewrite**, run **AI annotation**, or request **AI suggestions**; ordinary highlights, annotation editing, and sidebar parsing are local. Sync features upload to your own Baidu Pan. Git sync excludes hidden paths, the Obsidian config directory, credentials, and Git metadata. History retains past content after deletion and has no additional encryption. Separate configuration sync excludes API keys and Baidu credentials. In file mode, enabling plugin backup uploads the plugin `data.json` (including credentials) and selected Obsidian configuration files. No telemetry. No plugin-operated servers. Full details in [PRIVACY.md](./PRIVACY.md).
+AI features send your selection and partial note context to the configured chat-completions endpoint. AI annotations only use the network when you explicitly click **AI draft**, **AI rewrite**, run **AI annotation**, or request **AI suggestions**; ordinary highlights, annotation editing, and sidebar parsing are local. Sync features upload to your own Baidu Pan. Git sync excludes hidden paths, the Obsidian config directory, credentials, and Git metadata. History retains past content after deletion and has no additional encryption. Separate configuration sync excludes API keys and Baidu credentials. File backup excludes plugin executables, plugin `data.json`, and Obsidian configuration files. No telemetry. No plugin-operated servers. Full details in [PRIVACY.md](./PRIVACY.md).
 
 ---
 
@@ -412,7 +412,7 @@ Enable **IStart Data Sync** under **Settings → Data Sync**, enter your Baidu A
 
 Sync is disabled by default. New installations default to Git mode; older configurations without a mode retain file sync until you select Git explicitly. All devices must use Git mode with the same remote path. Existing cloud backups are preserved; restore any old backup in file mode before your first Git sync if needed. See [Git sync documentation](./docs/git-sync.md).
 
-File mode retains backup, restore, status scanning, bidirectional sync, per-file conflict choices, and optional plugin backup. Plugin backup is upload-only: restoring notes never restores plugin executables or Obsidian configuration files. Install and update the plugin through Obsidian; use configuration push/pull to transfer supported settings. Its “automatic backup” setting is retained, but current note-generation flows do not trigger it; use manual backup.
+File mode retains note/attachment backup, restore, status scanning, bidirectional sync, and per-file conflict choices. Plugin executables and Obsidian configuration files are excluded from both backup and restore, including when older settings enabled plugin backup. Install and update the plugin through Obsidian; use configuration push/pull to transfer supported settings. Its “automatic backup” setting is retained, but current note-generation flows do not trigger it; use manual backup.
 
 Git mode syncs ordinary vault files, including attachments and deletions, with configured ignore rules and size limits (100 MB per file by default). It saves commits, exchanges incremental Git bundles, merges text, allows conflict resolution, and restores individual files or the whole vault after a restore preview. It needs no system Git. Automatic sync is off by default; when enabled it runs at startup and every minute while the app is visible.
 

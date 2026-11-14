@@ -10,13 +10,13 @@ import { publishingFolder } from "../core/publishing/types";
 type SettingsSection = "knowledge" | "writing" | "skill" | "annotation" | "interface" | "sync" | "publishing" | "auxiliary";
 
 const SETTINGS_SECTIONS: { id: SettingsSection; label: string; aliases: string[] }[] = [
-  { id: "publishing", label: "内容分发", aliases: ["远程服务地址", "本地安装并启动", "分发目录", "Wechatsync", "图文分发"] },
+  { id: "publishing", label: "内容分发", aliases: ["分发服务地址", "连接本机服务", "本机服务端口", "服务访问令牌", "部署说明", "分发目录", "Wechatsync", "图文分发"] },
   { id: "knowledge", label: "知识", aliases: ["知识路径", "Q&A 笔记目录", "问题索引目录", "概念页目录", "知识索引", "索引状态", "生成笔记后自动打开图谱"] },
   { id: "writing", label: "写作", aliases: ["写作路径", "作品目录", "续写与插写", "写作上下文范围", "上下文长度", "默认续写字数", "默认插写字数"] },
   { id: "skill", label: "Skill", aliases: ["写作 Skill", "启用自动附带", "仅在写作场景注入", "Skill 根目录", "最大注入字符", "已发现 Skill"] },
   { id: "annotation", label: "批注", aliases: ["侧边栏批注", "默认批注形式", "移动端跳转后收起侧栏", "打开批注侧边栏", "使用方式"] },
   { id: "interface", label: "界面", aliases: ["悬浮工具栏", "启用悬浮工具栏", "选中文字时显示", "光标空闲时显示入口", "移动端启用"] },
-  { id: "sync", label: "数据同步", aliases: ["IStart 数据同步", "启用 IStart 数据同步", "存储服务", "同步方式", "自动 Git 同步", "手动 Git 整库同步", "自动备份", "备份插件本身", "忽略规则", "单文件大小限制（MB）", "跨设备配置同步", "启动时自动拉取配置", "百度网盘配置", "App ID", "App Secret", "授权状态", "远端路径"] },
+  { id: "sync", label: "数据同步", aliases: ["IStart 数据同步", "启用 IStart 数据同步", "存储服务", "同步方式", "自动 Git 同步", "手动 Git 整库同步", "自动备份", "忽略规则", "单文件大小限制（MB）", "跨设备配置同步", "启动时自动拉取配置", "百度网盘配置", "App ID", "App Secret", "授权状态", "远端路径"] },
   { id: "auxiliary", label: "辅助", aliases: ["AI 服务", "API Key", "Base URL", "模型", "输出风格", "Agent 对话", "打开 AI 助手侧边栏", "流式输出", "每轮工具步数上限", "上下文资料预算", "共享会话历史", "隐私与诊断"] },
 ];
 
@@ -625,11 +625,6 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         .setName("自动备份")
         .setDesc("原有文件备份偏好，默认关闭")
         .addToggle((t) => t.setValue(cfg.autoBackup).onChange(async (v) => { cfg.autoBackup = v; await this.plugin.saveSettings(); }));
-
-      new Setting(el)
-        .setName("备份插件本身")
-        .setDesc("仅上传备份，包含 data.json 中的凭证。插件程序文件请通过 Obsidian 安装或更新；恢复笔记不会覆盖插件和 Obsidian 配置。")
-        .addToggle((t) => t.setValue(cfg.backupPlugin).onChange(async (v) => { cfg.backupPlugin = v; await this.plugin.saveSettings(); }));
     }
 
     new Setting(el)

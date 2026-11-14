@@ -1,6 +1,5 @@
 import esbuild from "esbuild";
 import process from "process";
-import { builtinModules } from "module";
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from "fs";
 import { buildPublishingRuntime } from "./scripts/build-publishing-service.mjs";
 
@@ -19,6 +18,7 @@ const context = await esbuild.context({
   entryPoints: ["src/main.ts"],
   inject: ["src/core/sync/browserBuffer.ts"],
   bundle: true,
+  platform: "browser",
   external: [
     "obsidian",
     "electron",
@@ -33,18 +33,12 @@ const context = await esbuild.context({
     "@lezer/common",
     "@lezer/highlight",
     "@lezer/lr",
-    // Git's browser dependencies need the bundled Buffer polyfill on mobile.
-    ...builtinModules.filter((name) => name !== "buffer"),
   ],
   format: "cjs",
   target: "es2018",
   logLevel: "info",
   sourcemap: prod ? false : "inline",
   treeShaking: true,
-  define: {
-    ISTART_PUBLISHING_GATEWAY: JSON.stringify(publishingRuntime.gateway),
-    ISTART_PUBLISHING_WORKER: JSON.stringify(publishingRuntime.worker),
-  },
   outfile: "dist/main.js",
 });
 

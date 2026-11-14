@@ -189,8 +189,19 @@ describe("legacy file conflict application", () => {
 
 
 describe("file restore boundaries", () => {
+  it("backs up only notes even when an old installation enabled plugin backup", async () => {
+    const a = device(); Object.assign(a.config, { backupPlugin: true });
+    a.note("note.md", "note");
+    a.note(".obsidian/plugins/istart-note-ai/main.js", "installed code");
+    a.note(".obsidian/plugins/istart-note-ai/data.json", "credentials");
+    a.note(".obsidian/app.json", "settings");
+    const read = vi.spyOn(a.app.vault, "readBinary");
+    expect(await new BaiduSyncService(a.app, a.config).backup()).toMatchObject({ uploaded: 1, failed: 0 });
+    expect(read.mock.calls.map(([file]) => file.path)).toEqual(["note.md"]);
+    expect([...cloud.files.keys()].sort()).toEqual(["/notes/istart-sync-meta.json", "/notes/note.md"]);
+  });
   it.each([false, true])("restores notes with overwrite=%s without installing legacy plugin backups or hidden files", async overwrite => {
-    const a = device(); a.config.backupPlugin = true;
+    const a = device(); Object.assign(a.config, { backupPlugin: true });
     a.note(".obsidian/plugins/istart-note-ai/main.js", "installed code");
     a.note(".obsidian/plugins/istart-note-ai/manifest.json", "installed manifest");
     a.note(".obsidian/app.json", "local settings");

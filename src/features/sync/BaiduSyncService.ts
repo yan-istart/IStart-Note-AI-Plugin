@@ -151,13 +151,6 @@ export class BaiduSyncService {
     result.skipped = plans.length - uploadPlans.length;
     await this.saveMeta(meta);
 
-    // 备份插件本身
-    if (this.config.backupPlugin) {
-      const pluginResult = await this.backupPlugin();
-      result.uploaded += pluginResult.uploaded;
-      result.failed += pluginResult.failed;
-    }
-
     return result;
   }
 
@@ -428,62 +421,6 @@ export class BaiduSyncService {
     if (size > this.config.fileSizeLimitMB * 1024 * 1024) return true;
     if (this.config.ignorePattern && new RegExp(this.config.ignorePattern).test(path)) return true;
     return false;
-  }
-
-  /**
-   * 备份插件本身和 Obsidian 关键配置到百度云。
-   * 插件文件存储在 {remotePath}/_plugin/
-   * 配置文件存储在 {remotePath}/_obsidian-config/
-   */
-  async backupPlugin(): Promise<{ uploaded: number; failed: number }> {
-    if (!this.config.backupPlugin) return { uploaded: 0, failed: 0 };
-
-    let uploaded = 0;
-    let failed = 0;
-
-    // 备份插件文件
-    const pluginDir = `${this.app.vault.configDir}/plugins/istart-note-ai`;
-    const pluginFiles = ["main.js", "manifest.json", "styles.css", "data.json"];
-    const remotePluginDir = `${this.config.remotePath}/_plugin`.replace(/\/+/g, "/");
-    await this.client.mkdir(remotePluginDir);
-
-    for (const fileName of pluginFiles) {
-      const result = await this.uploadConfigFile(`${pluginDir}/${fileName}`, `${remotePluginDir}/${fileName}`);
-      if (result === "ok") uploaded++;
-      else if (result === "failed") failed++;
-    }
-
-    // 备份 Obsidian 关键配置
-    const configDir = this.app.vault.configDir;
-    const configFiles = [
-      `${configDir}/app.json`,                // 全局设置（含移动端工具栏）
-      `${configDir}/hotkeys.json`,            // 快捷键
-      `${configDir}/community-plugins.json`,  // 已安装插件列表
-      `${configDir}/appearance.json`,         // 外观设置
-    ];
-    const remoteConfigDir = `${this.config.remotePath}/_obsidian-config`.replace(/\/+/g, "/");
-    await this.client.mkdir(remoteConfigDir);
-
-    for (const filePath of configFiles) {
-      const fileName = filePath.split("/").pop()!;
-      const result = await this.uploadConfigFile(filePath, `${remoteConfigDir}/${fileName}`);
-      if (result === "ok") uploaded++;
-      else if (result === "failed") failed++;
-    }
-
-    return { uploaded, failed };
-  }
-
-  private async uploadConfigFile(localPath: string, remotePath: string): Promise<"ok" | "failed" | "skipped"> {
-    try {
-      const exists = await this.app.vault.adapter.exists(localPath);
-      if (!exists) return "skipped";
-      const content = await this.app.vault.adapter.readBinary(localPath);
-      const ok = await this.client.uploadFile(content, remotePath);
-      return ok ? "ok" : "failed";
-    } catch {
-      return "skipped";
-    }
   }
 
   private async writeLocalFile(localPath: string, content: ArrayBuffer) {

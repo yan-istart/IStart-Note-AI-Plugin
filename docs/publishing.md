@@ -4,22 +4,24 @@
 
 首版面向微信公众号、知乎、B 站专栏的长文章与正文图片。发送结果是平台草稿，仍需进入平台检查正文、图片及排版。实际保存行为依赖 Wechatsync 扩展与平台接口；无法确定保存为草稿时，任务显示「结果未知」。
 
-## PC：本地安装并启动
+## PC：连接本机服务
 
 1. 安装 **Node.js 22 或更高版本**，以及 [Wechatsync 浏览器扩展](https://github.com/wechatsync/Wechatsync)。
-2. 选择「本地安装并启动」，点击「安装并启动 / 测试连接」。插件从自身安装包解包网关与 MCP 服务，无需 npm 安装依赖或克隆 Wechatsync 仓库。
-3. 将界面中复制的「扩展服务器地址」填入扩展桥接设置，包含 `/extension?key=…`。将「扩展 Token」填入扩展 Token 设置并启用连接。
-4. 在该浏览器正常登录目标平台，再测试连接、核对显示的账号。
+2. 按下方「自行部署配套服务」说明下载或构建两个服务文件，设置令牌并独立启动服务。
+3. 在插件中选择「连接本机服务」，填写 HTTP 端口（默认 `27123`）与部署时设置的 `PUBLISHING_TOKEN`，点击「测试连接并刷新账号」。
+4. 在浏览器扩展桥接设置中填写 `ws://127.0.0.1:27125/extension?key=<EXTENSION_TOKEN>`，扩展 Token 填写部署时设置的 `EXTENSION_TOKEN`。在该浏览器登录目标平台，再测试连接、核对显示的账号。
 
-本地 HTTP 默认 `127.0.0.1:27123`，浏览器 WebSocket 默认 `127.0.0.1:27125`。端口可以修改；更改后重启服务并更新扩展地址。Node 自动检测失败时可以填写可执行文件的完整路径。路径带空格也支持，启动不经过 shell。
+插件通过 HTTP/HTTPS 连接服务；服务的安装、启动、停止和更新由用户或系统进程管理器负责。关闭插件不会停止独立运行的服务。服务侧任务记录保存在 `PUBLISHING_DATA` 指定的目录，默认是程序目录下的 `jobs`。
 
-服务程序和服务侧发送记录保存在本机用户目录 `~/.istart-publishing/<设备配置ID>/`，与笔记库分开。程序随当前插件版本解包，点击重启会重新解包当前版本。关闭插件会停止其自有服务；正在发送的任务可能变成「结果未知」，需要到平台核对。
+访问令牌使用 Obsidian SecretStorage（1.11.4+）；旧版本只在本次会话保留。连接模式、端口和远程地址使用设备本地存储（1.8.7+）；更旧版本配置只在会话中保留。不会写入插件 `data.json` 或同步稿件。不同模式使用独立的访问令牌。
 
-访问令牌与扩展 Token 使用 Obsidian SecretStorage（1.11.4+）；旧版本只在本次会话保留，重启后需重新配置扩展。连接模式、端口和远程地址使用设备本地存储（1.8.7+）；更旧版本配置只在会话中保留。不会写入插件 `data.json` 或同步稿件。不同模式使用独立的访问令牌。
+### 从旧版本迁移
+
+旧版「本地安装并启动」改为「连接本机服务」，保留原 HTTP 端口及 SecretStorage 中的访问令牌。升级后需独立部署并启动服务，在插件中填写服务访问令牌，同时在浏览器扩展中配置扩展 Token。旧版保存在 `~/.istart-publishing/<设备配置ID>/` 的程序及任务文件不会自动删除；若需保留旧任务查询，将其 `jobs` 路径作为新服务的 `PUBLISHING_DATA`，并使用原令牌。旧服务凭证的 SecretStorage 名称分别为 `istart-publishing-<设备配置ID>-local` 和 `istart-extension-<设备配置ID>`；也可重新设置两个不同的随机令牌并更新插件与扩展配置。
 
 ## PC / 手机：连接已有服务
 
-选择「连接已有服务」，填写 **IStart 配套分发服务** 的 HTTPS 地址及服务访问令牌。移动端仅提供此模式。本机回环地址允许 HTTP，其他地址要求 HTTPS；在同一局域网时也应通过受信任的 HTTPS 入口访问。
+在桌面端选择「连接已有服务」，填写 **IStart 配套分发服务** 的 HTTPS 地址及服务访问令牌。移动端仅提供此模式。本机回环地址允许 HTTP，其他地址要求 HTTPS；在同一局域网时也应通过受信任的 HTTPS 入口访问。
 
 这不是任意 MCP URL：客户端使用下述版本化 HTTP API，服务内部通过 stdio MCP 与浏览器桥接通信。手机上传图片数据，不会把手机文件路径交给电脑读取。
 
@@ -27,7 +29,7 @@
 
 ## 自行部署配套服务
 
-从本仓库构建（Node.js 22+）：
+从 [GitHub Releases](https://github.com/yan-istart/IStart-Note-AI-Plugin/releases) 下载 `publishing-service.cjs` 与 `publishing-mcp.cjs`，或从本仓库构建（Node.js 22+）：
 
 ```sh
 npm ci
@@ -39,7 +41,7 @@ npm run build:publishing-service
 - `dist/publishing-service.cjs`
 - `dist/publishing-mcp.cjs`
 
-两者已包含依赖，可直接运行，无需在服务机器执行 `npm install`。依赖许可证附在文件头和 `dist/THIRD_PARTY_PUBLISHING_NOTICES.txt` 中。插件常规 `main.js` 也已内嵌这两个服务文件。
+两者已包含依赖，可直接运行，无需在服务机器执行 `npm install`。依赖许可证附在文件头和 `dist/THIRD_PARTY_PUBLISHING_NOTICES.txt` 中。两个服务文件独立于插件发布，`main.js` 不包含服务程序。
 
 配置环境变量后运行 `node publishing-service.cjs`。令牌各自使用随机、至少 24 字符的不同值，通过进程管理器或环境配置传入，不写入 Vault：
 

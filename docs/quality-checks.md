@@ -27,8 +27,8 @@ npm run ci
 
 - Manifest 仍声明最低版本 1.7.2；设备配置读写在 `requireApiVersion("1.8.7")` 保护下使用，旧版本仅在会话中保留设备配置；SecretStorage 在 `requireApiVersion("1.11.4")` 保护下使用，旧版本仅保留会话令牌。
 - 新版破坏性按钮样式在 `requireApiVersion("1.13.0")` 保护下使用，旧版本保留兼容样式。
-- 本地分发服务仅在 `Platform.isDesktop` 检查通过后加载 Node 模块。
-- 文件恢复排除隐藏路径、Obsidian 配置目录、旧插件备份及同步元数据，并拒绝越界路径。已移除恢复插件程序文件的入口及实现，插件备份仅上传。
+- 插件按浏览器平台打包，构建及完整插件打包测试阻止引入 Node 内置模块。分发配套服务作为独立发布文件构建，不嵌入插件，不由插件安装或启动。
+- 文件恢复排除隐藏路径、Obsidian 配置目录、旧插件备份及同步元数据，并拒绝越界路径。已移除插件程序与 Obsidian 配置的备份及恢复入口，旧插件备份设置不再生效。
 - 插件计时器使用 `window` API，前台可见性使用 `activeDocument`。
 - Git 的 Buffer 明确来自浏览器包入口 `buffer/index.js`，浏览器构建测试验证无需 Node 全局对象。
 - 普通 HTTP 请求使用 Obsidian `requestUrl`。仅可选 AI SSE 流式传输使用 `window.fetch`，因为 `requestUrl` 不提供流读取与 AbortSignal；现有测试覆盖 SSE、跨域回退和取消，不使用 ESLint disable 注释跳过限制。

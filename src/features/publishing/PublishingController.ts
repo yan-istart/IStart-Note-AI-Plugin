@@ -7,11 +7,9 @@ import { base64Image, contentFingerprint } from "../../core/publishing/types";
 import type { CompiledArticle, PublishingAccount, PublishingRecord, PublishingSnapshot, PublishingStatus } from "../../core/publishing/types";
 import { PublishingStore } from "./PublishingStore";
 import { PublishingDeviceConfig } from "./DeviceConfig";
-import { LocalPublishingService } from "./LocalPublishingService";
 
 export class PublishingController {
   readonly device: PublishingDeviceConfig;
-  readonly local: LocalPublishingService;
   readonly store: PublishingStore;
   article: CompiledArticle | null = null;
   sourcePath = "";
@@ -31,7 +29,6 @@ export class PublishingController {
   constructor(private plugin: DeepSeekPlugin) {
     this.device = new PublishingDeviceConfig(plugin.app);
     if (Platform.isMobile) this.device.value.mode = "remote";
-    this.local = new LocalPublishingService(this.device);
     this.store = new PublishingStore(plugin.app, () => plugin.settings.publishing.folder);
   }
   onChange(listener: () => void): () => void { this.listeners.add(listener); return () => { this.listeners.delete(listener); }; }
@@ -46,14 +43,13 @@ export class PublishingController {
     catch (error) { this.message = error instanceof Error ? error.message : "分发操作失败"; }
     finally { this.busy = false; this.notify(); }
   }
-  resetConnection(): void { this.connection = null; this.accounts = []; this.selected.clear(); this.device.save(); this.notify(); }
+  resetConnection(notify = true): void { this.connection = null; this.accounts = []; this.selected.clear(); this.device.save(); if (notify) this.notify(); }
   async connect(): Promise<void> {
     this.connection = null; this.accounts = []; this.selected.clear();
-    if (this.device.value.mode === "local" && !Platform.isMobile) await this.local.start();
     const client = this.client();
     this.connection = await client.status();
     if (this.connection.extensionConnected) this.accounts = await client.accounts();
-    this.message = this.connection.extensionConnected ? "服务与浏览器扩展已连接，请核对账号并选择平台。" : "服务已启动，等待浏览器扩展连接。请按下方连接说明配置扩展。";
+    this.message = this.connection.extensionConnected ? "服务与浏览器扩展已连接，请核对账号并选择平台。" : "已连接服务，等待浏览器扩展连接。请按部署说明配置扩展。";
   }
   async prepare(file: TFile | null): Promise<void> {
     if (!file || file.extension !== "md") throw new Error("请先选择 Markdown 笔记");
@@ -151,5 +147,5 @@ export class PublishingController {
     }
     await this.send(failed);
   }
-  dispose(): void { this.disposed = true; if (this.timer) window.clearTimeout(this.timer); this.local.dispose(); this.listeners.clear(); }
+  dispose(): void { this.disposed = true; if (this.timer) window.clearTimeout(this.timer); this.listeners.clear(); }
 }

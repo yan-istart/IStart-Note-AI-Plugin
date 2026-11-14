@@ -1,8 +1,8 @@
 # Privacy Policy
 
-_Last updated: 2026-11-13. [简体中文版本 →](./PRIVACY.zh-CN.md)_
+_Last updated: 2026-11-14. [简体中文版本 →](./PRIVACY.zh-CN.md)_
 
-This document describes what data IStart-Note-AI handles, where it goes, and how to control it. The plugin runs inside your Obsidian client and can launch a companion publishing service on desktop. There are no developer-operated servers, analytics, or telemetry.
+This document describes what data IStart-Note-AI handles, where it goes, and how to control it. The plugin runs inside your Obsidian client and connects to an independently deployed companion publishing service. There are no developer-operated servers, analytics, or telemetry.
 
 ## Summary
 
@@ -16,7 +16,7 @@ This document describes what data IStart-Note-AI handles, where it goes, and how
 
 Distribution is initiated by an explicit send action, independently of AI requests. The destination is the companion service URL configured on that device: a loopback HTTP service on desktop or a remote HTTPS service. It receives the complete prepared article, inline image data, optional cover, request identifier and selected browser account names/identifiers. Browser platform cookies stay in the browser extension; the plugin does not collect them.
 
-Connection preferences use device-local vault storage where supported; publishing access tokens and extension tokens use SecretStorage on Obsidian 1.11.4+, or memory for the current session. They are not added to plugin `data.json` or publishing records. The local service scripts and task results live under `~/.istart-publishing/<device-ID>/`; tokens are passed to child processes through environment variables. Local installation unpacks bundled scripts and does not download runtime packages. Node.js installation and browser extension installation are separate user actions.
+Connection preferences use device-local vault storage where supported; publishing access tokens use SecretStorage on Obsidian 1.11.4+, or memory for the current session. They are not added to plugin `data.json` or publishing records. Users install, start and update the companion service, Node.js and browser extension independently. The plugin communicates with the running service over HTTP/HTTPS. Service task results are stored in the directory configured by its operator (`PUBLISHING_DATA`).
 
 Article snapshots, copied attachments, source paths, content hashes, account labels and per-attempt results are stored under configurable `IStart/Publishing/`. This ordinary vault directory can be included by enabled sync/backup tools. Returned draft URLs have credential-like query parameters removed. The companion service persists job IDs, content hashes, account labels and results, not full article text or image data. Requests remain in memory during processing, and browser extensions/platforms may maintain their own history.
 
@@ -51,7 +51,7 @@ You are subject to the privacy policy of whichever provider you configure. Revie
 
 ## Agent conversation history
 
-Manuscript classification and metadata analysis are also recorded Agent tasks. History includes excerpts from user-selected sources, task parameters and analysis results, without external source paths. Proofreading reports retain source snapshots and verified corrections; chosen insertion positions are saved with the session. Opt-in shared history includes this data. Copy actions write only the selected content to the system clipboard.
+Manuscript classification and metadata analysis are also recorded Agent tasks. History includes excerpts from user-selected sources, task parameters and analysis results, without external source paths. Proofreading reports retain source snapshots and verified corrections; chosen insertion positions are saved with the session. Opt-in shared history includes this data. Copy actions write only the selected content to the system clipboard; the plugin does not read clipboard contents. Vault search, indexes, annotations, and sync enumerate vault file paths for their respective features.
 
 Task parameters, unsubmitted task cards, and captured selections/cursors are saved with conversations and included in opt-in shared history. Explicit task actions invoke their tools directly; required source text and parameters are sent to the configured AI service according to that tool's behavior.
 
@@ -75,8 +75,7 @@ After enabling sync, the plugin can upload to your own Baidu Pan account at the 
 - **Notes**: the markdown files in the folders you choose to sync.
 - **Git mode**: version bundles containing included notes, attachments, and earlier versions (including deleted content), under `_istart-git/v1/`. Hidden files, the vault configuration directory, and plugin credentials are excluded from Git note synchronization.
 - **Plugin config (optional)**: a small JSON file containing non-secret plugin settings.
-- **Plugin itself (optional)**: the compiled plugin files in `.obsidian/plugins/istart-note-ai/`.
-- **Obsidian config (optional)**: a curated set of files from `.obsidian/` (toolbar, hotkeys, appearance, community-plugins).
+Plugin executables, plugin `data.json`, and Obsidian configuration files are excluded from backup and restore. Older plugin-backup preferences are ignored. Existing cloud copies are not automatically deleted; remove legacy `_plugin/` and `_obsidian-config/` backups in Baidu Pan if no longer needed.
 
 Files are uploaded over HTTPS using the Baidu Pan REST API. The plugin **does not encrypt files end-to-end**; treat your Baidu Pan account security as the boundary.
 
@@ -109,7 +108,7 @@ The plugin runs on Obsidian Mobile and follows the same rules. AI requests go to
 
 ## Data retention and deletion
 
-- **Local data**: delete `<your-vault>/.obsidian/plugins/istart-note-ai/data.json` to remove general settings and AI/Baidu credentials. Clear publishing secrets in Obsidian SecretStorage and remove publishing snapshots/device preferences separately. Stop the local service before removing `~/.istart-publishing/<device-ID>/`.
+- **Local data**: delete `<your-vault>/.obsidian/plugins/istart-note-ai/data.json` to remove general settings and AI/Baidu credentials. Clear publishing secrets in Obsidian SecretStorage and remove publishing snapshots/device preferences separately. Stop independently deployed services before removing their configured task directories. Legacy service files under `~/.istart-publishing/<device-ID>/` can be removed manually once no longer needed.
 - **Baidu Pan**: open the Baidu Pan web UI or app and delete the folder you configured (default: `/apps/istart-note-ai`) to remove uploaded notes.
 - **AI provider**: refer to the provider's data retention policy. The plugin does not retain anything itself.
 
