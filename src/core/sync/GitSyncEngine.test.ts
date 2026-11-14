@@ -9,7 +9,19 @@ const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 const directories: string[] = [];
 
-afterEach(async () => { await Promise.all(directories.splice(0).map((path) => fs.rm(path, { recursive: true, force: true }))); });
+afterEach(async () => {
+  await Promise.all(directories.splice(0).map((path) => fs.rm(path, {
+    recursive: true, force: true, maxRetries: 5, retryDelay: 100,
+  })));
+});
+
+function nativeGit(args: string[], cwd?: string): string {
+  // A detached maintenance process can still write .git after fetch exits,
+  // racing afterEach's directory removal. Keep test repositories maintenance-free.
+  return execFileSync("git", ["-c", "maintenance.auto=false", "-c", "gc.auto=0", ...args], {
+    cwd, stdio: "pipe", encoding: "utf8",
+  });
+}
 
 async function device(): Promise<GitSyncEngine> {
   const dir = await fs.mkdtemp(join(tmpdir(), "istart-git-test-"));
@@ -178,15 +190,15 @@ describe("Git sync across independent devices", () => {
     const first = await a.head();
     const full = join(a.dir, "full.bundle");
     await fs.writeFile(full, await a.bundle(first));
-    execFileSync("git", ["--git-dir", join(a.dir, "repo"), "bundle", "verify", full], { stdio: "pipe" });
+    nativeGit(["--git-dir", join(a.dir, "repo"), "bundle", "verify", full]);
     const clone = join(b.dir, "clone");
-    execFileSync("git", ["clone", full, clone], { stdio: "pipe" });
+    nativeGit(["clone", full, clone]);
     await a.snapshot(notes({ "note.md": "second" }));
     const incremental = join(a.dir, "incremental.bundle");
     await fs.writeFile(incremental, await a.bundle(await a.head(), first));
-    execFileSync("git", ["bundle", "verify", incremental], { cwd: clone, stdio: "pipe" });
-    execFileSync("git", ["fetch", incremental, "main"], { cwd: clone, stdio: "pipe" });
-    expect(execFileSync("git", ["show", "FETCH_HEAD:note.md"], { cwd: clone, encoding: "utf8" })).toBe("second");
+    nativeGit(["bundle", "verify", incremental], clone);
+    nativeGit(["fetch", incremental, "main"], clone);
+    expect(nativeGit(["show", "FETCH_HEAD:note.md"], clone)).toBe("second");
   });
 
   it("protects ignored tracked paths and rejects unsafe or colliding names", async () => {
