@@ -205,9 +205,9 @@ Run `npm run check:obsidian` for the official Obsidian recommended quality check
 
 ## Configuration
 
-Default AI settings: Base URL `https://api.deepseek.com`, model `deepseek-v4-flash`, output style `knowledge-base`. Enter the root URL without a trailing slash or `/v1/chat/completions`, since the client appends that suffix.
+Default AI settings: Base URL `https://api.deepseek.com`, model `deepseek-flash`, output style `knowledge-base`. Enter the root URL without a trailing slash or `/v1/chat/completions`, since the client appends that suffix.
 
-The model dropdown offers `deepseek-v4-flash` and `deepseek-v4-pro`. Compatible endpoints must accept the selected model name; there is no custom-model input or provider manager.
+The model dropdown offers `deepseek-flash` (DeepSeek V4.1 Flash, recommended), `deepseek-v4-pro`, and the legacy `deepseek-v4-flash` name. On the official DeepSeek endpoint, both Flash names currently route to DeepSeek V4.1 Flash; existing selections are preserved. Model versions on other compatible endpoints depend on the provider. There is no custom-model input or provider manager. See the [official model details](https://api-docs.deepseek.com/quick_start/pricing/).
 
 Settings are organized into eight tabs:
 
@@ -421,7 +421,7 @@ Enable **IStart Data Sync** under **Settings → Data Sync**, enter your Baidu A
 
 Sync is disabled by default. New installations default to Git mode; older configurations without a mode retain file sync until you select Git explicitly. All devices must use Git mode with the same remote path. Existing cloud backups are preserved; restore any old backup in file mode before your first Git sync if needed. See [Git sync documentation](./docs/git-sync.md).
 
-File mode retains backup, restore, status scanning, bidirectional sync, per-file conflict choices, and optional plugin backup. Its “automatic backup” setting is retained, but current note-generation flows do not trigger it; use manual backup.
+File mode retains backup, restore, status scanning, bidirectional sync, per-file conflict choices, and optional plugin backup. Plugin backup is upload-only: restoring notes never restores plugin executables or Obsidian configuration files. Install and update the plugin through Obsidian; use configuration push/pull to transfer supported settings. Its “automatic backup” setting is retained, but current note-generation flows do not trigger it; use manual backup.
 
 Git mode syncs ordinary vault files, including attachments and deletions, with configured ignore rules and size limits (100 MB per file by default). It saves commits, exchanges incremental Git bundles, merges text, allows conflict resolution, and restores individual files or the whole vault after a restore preview. It needs no system Git. Automatic sync is off by default; when enabled it runs at startup and every minute while the app is visible.
 

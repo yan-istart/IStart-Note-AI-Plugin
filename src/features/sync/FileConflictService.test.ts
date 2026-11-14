@@ -186,3 +186,49 @@ describe("legacy file conflict application", () => {
     await expect(service.apply(conflicts, new Map([[conflicts[0].key, { choice: "local" }]]))).rejects.toThrow("同步设置已变化");
   });
 });
+
+
+describe("file restore boundaries", () => {
+  it.each([false, true])("restores notes with overwrite=%s without installing legacy plugin backups or hidden files", async overwrite => {
+    const a = device(); a.config.backupPlugin = true;
+    a.note(".obsidian/plugins/istart-note-ai/main.js", "installed code");
+    a.note(".obsidian/plugins/istart-note-ai/manifest.json", "installed manifest");
+    a.note(".obsidian/app.json", "local settings");
+    const excluded = ["_plugin/main.js", "_plugin/manifest.json", "_plugin/data.json", "_obsidian-config/app.json", "_istart-git/pack", ".obsidian/plugins/istart-note-ai/main.js", ".obsidian/app.json", "folder/../../.obsidian/plugins/istart-note-ai/main.js", "folder\\..\\main.js", "istart-config.json", "istart-sync-meta.json"];
+    excluded.forEach(path => remote(path, "untrusted")); remote("folder/note.md", "restored note");
+    const result = await new BaiduSyncService(a.app, a.config).restore("", overwrite);
+    expect(result).toMatchObject({ downloaded: 1, skipped: excluded.length, failed: 0 });
+    expect(a.content("folder/note.md")).toBe("restored note");
+    expect(a.content(".obsidian/plugins/istart-note-ai/main.js")).toBe("installed code");
+    expect(a.content(".obsidian/plugins/istart-note-ai/manifest.json")).toBe("installed manifest");
+    expect(a.content(".obsidian/app.json")).toBe("local settings"); expect(a.files.size).toBe(4);
+  });
+
+  it("keeps the selected folder in restored paths and respects overwrite and ignore rules", async () => {
+    const a = device(); a.config.ignorePattern = "ignored";
+    a.note("folder/existing.md", "local"); remote("folder/existing.md", "cloud");
+    remote("folder/new.md", "new note"); remote("folder/ignored.md", "ignored");
+    const service = new BaiduSyncService(a.app, a.config);
+    expect(await service.restore("folder/")).toMatchObject({ downloaded: 1, skipped: 2, failed: 0 });
+    expect(a.content("folder/existing.md")).toBe("local"); expect(a.content("folder/new.md")).toBe("new note");
+    expect(await service.restore("folder", true)).toMatchObject({ downloaded: 2, skipped: 1, failed: 0 });
+    expect(a.content("folder/existing.md")).toBe("cloud"); expect(a.files.has("new.md")).toBe(false);
+  });
+
+  it.each([".obsidian/plugins/istart-note-ai", "_plugin", "../notes", "folder/../notes", "/notes", "folder\\notes"])("rejects excluded restore scope %s", async folder => {
+    const a = device();
+    await expect(new BaiduSyncService(a.app, a.config).restore(folder, true)).rejects.toThrow("目录超出笔记同步范围");
+    expect(a.files.size).toBe(0);
+  });
+
+  it("excludes a custom Obsidian config directory and protects it during force-restore selection", async () => {
+    const a = device(); Object.assign(a.app.vault, { configDir: "custom-config" });
+    a.note("custom-config/plugins/istart-note-ai/main.js", "installed"); a.note("note.md", "note");
+    remote("custom-config/plugins/istart-note-ai/main.js", "untrusted");
+    const service = new BaiduSyncService(a.app, a.config);
+    expect(a.app.vault.getFiles().filter(file => service.isSyncableFile(file)).map(file => file.path)).toEqual(["note.md"]);
+    expect(() => service.assertSyncFolder("custom-config")).toThrow("目录超出笔记同步范围");
+    expect(await service.restore("", true)).toMatchObject({ downloaded: 0, skipped: 1 });
+    expect(a.content("custom-config/plugins/istart-note-ai/main.js")).toBe("installed");
+  });
+});

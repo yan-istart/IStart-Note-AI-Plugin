@@ -36,7 +36,7 @@ IStart-Note-AI is an Obsidian plugin built around three business scenarios: **Kn
 
 - **Knowledge** — turn scattered notes into a searchable, interlinked knowledge system: Q&A generation, concept pages, reading project templates, vault Q&A with source citations, and a knowledge-debt dashboard.
 - **Writing** — turn ideas into works (web novels, papers, long-form articles): generate outlines, characters, and world settings; continue writing from the cursor with setting injection; generate the next chapter; import existing manuscripts (split, classify, clean) without touching the originals.
-- **Auxiliary** — AI assistant, sidebar annotations, typo checking with source navigation, configurable chat-completions endpoint with two fixed DeepSeek model choices, multiple output styles, and optional IStart Data Sync with Baidu Pan storage.
+- **Auxiliary** — AI assistant, sidebar annotations, typo checking with source navigation, configurable chat-completions endpoint with built-in DeepSeek model choices, multiple output styles, and optional IStart Data Sync with Baidu Pan storage.
 
 For the full English documentation see [README.en.md](./README.en.md).
 
@@ -229,9 +229,9 @@ npm ci && npm run build
 
 ## 设置
 
-AI 默认值：Base URL 为 `https://api.deepseek.com`，模型为 `deepseek-v4-flash`，输出风格为 `knowledge-base`。Base URL 填根地址，不加末尾斜杠或 `/v1/chat/completions`，客户端会追加该后缀。
+AI 默认值：Base URL 为 `https://api.deepseek.com`，模型为 `deepseek-flash`，输出风格为 `knowledge-base`。Base URL 填根地址，不加末尾斜杠或 `/v1/chat/completions`，客户端会追加该后缀。
 
-模型下拉框提供 `deepseek-v4-flash` 和 `deepseek-v4-pro`；其他兼容端点需接受所选模型名称。当前没有自定义模型输入或服务商管理器。
+模型下拉框提供 `deepseek-flash`（DeepSeek V4.1 Flash，推荐）、`deepseek-v4-pro` 和兼容保留的旧名称 `deepseek-v4-flash`。使用 DeepSeek 官方接口时，两个 Flash 名称目前均指向 V4.1 Flash；已有模型选择保持不变。其他兼容端点的模型版本由服务商决定。当前没有自定义模型输入或服务商管理器，详见[官方模型说明](https://api-docs.deepseek.com/quick_start/pricing/)。
 
 设置页按七个标签组织:
 
@@ -439,7 +439,7 @@ Git 模式：在设置 → 数据同步中启用「IStart 数据同步」，在�
 
 同步默认关闭；新安装默认选择 Git 模式，未记录同步方式的已有配置保留原有文件模式，需要手动切换到 Git。各设备需使用相同远端路径与 Git 模式，旧备份不会被删除。首次 Git 同步从当前本地笔记创建历史；若需要旧云端备份，请先用原有模式恢复。详见 [Git 同步说明](./docs/git-sync.md)。
 
-文件模式保留备份、恢复、状态扫描、双向同步、逐文件冲突选择与可选插件备份。「自动备份」设置仍保留，但当前笔记生成流程没有触发该操作，请使用手动备份。
+文件模式保留备份、恢复、状态扫描、双向同步、逐文件冲突选择与可选插件备份。插件备份仅上传；恢复笔记不会恢复插件程序或 Obsidian 配置文件。插件安装与更新请通过 Obsidian 完成，支持的设置项可通过配置推送/拉取迁移。「自动备份」设置仍保留，但当前笔记生成流程没有触发该操作，请使用手动备份。
 
 Git 模式同步符合规则的普通 Vault 文件，包含附件与删除，使用忽略正则与大小限制（默认单文件 100 MB）。它保存提交、交换增量 Git bundle、合并文本、处理冲突，支持单文件恢复和预览后恢复整个笔记库，无需系统 Git。自动同步默认关闭，开启后在启动时和应用可见时每分钟执行。
 

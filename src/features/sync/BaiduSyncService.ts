@@ -58,7 +58,7 @@ export class BaiduSyncService {
     let done = 0;
 
     for (const plan of plans) {
-      if (plan.action === SyncAction.Unchanged) {
+      if (plan.action === SyncAction.Unchanged || this.shouldIgnorePath(plan.path, 0)) {
         result.skipped++;
         continue;
       }
@@ -175,15 +175,17 @@ export class BaiduSyncService {
     const result: SyncResult = { uploaded: 0, downloaded: 0, conflicts: [], deleted: 0, skipped: 0, failed: 0, errors: [] };
 
     const remoteRoot = this.remoteRoot(localFolder);
-    const gitRoot = `${this.config.remotePath.replace(/\/+$/, "")}/_istart-git/`;
-    const remoteFiles = (await this.client.listAllFiles(remoteRoot)).filter((entry) => !entry.path.startsWith(gitRoot));
+    const remoteFiles = await this.client.listAllFiles(remoteRoot, true);
+    const root = this.config.remotePath.replace(/\/+$/, "");
     const total = remoteFiles.filter((f) => !f.isdir).length;
 
     let done = 0;
     for (const entry of remoteFiles) {
       if (entry.isdir) continue;
       done++;
-      const localPath = this.toLocalPath(entry.path, remoteRoot);
+      if (!entry.path.startsWith(remoteRoot + "/")) { result.skipped++; continue; }
+      const localPath = entry.path.slice(root.length + 1);
+      if (this.shouldIgnorePath(localPath, entry.size)) { result.skipped++; continue; }
       onProgress?.(done, total, localPath);
 
       if (!overwrite && this.app.vault.getAbstractFileByPath(localPath)) {
@@ -402,22 +404,25 @@ export class BaiduSyncService {
 
   // ── 工具方法 ───────────────────────────────────────────────
 
+  assertSyncFolder(folder: string): void {
+    if (folder && this.shouldIgnorePath(folder.replace(/\/+$/, ""), 0)) throw new Error("目录超出笔记同步范围");
+  }
+
+  isSyncableFile(file: TFile): boolean { return !this.shouldIgnore(file); }
+
   private remoteRoot(localFolder: string): string {
-    return `${this.config.remotePath}${localFolder ? "/" + localFolder : ""}`.replace(/\/+/g, "/");
+    this.assertSyncFolder(localFolder);
+    return `${this.config.remotePath}${localFolder ? "/" + localFolder : ""}`.replace(/\/+/g, "/").replace(/\/+$/, "");
   }
 
   private toRemotePath(localPath: string, _localFolder: string): string {
     return `${this.config.remotePath}/${localPath}`.replace(/\/+/g, "/");
   }
 
-  private toLocalPath(remotePath: string, remoteRoot: string): string {
-    return remotePath.replace(remoteRoot + "/", "").replace(/^\//, "");
-  }
-
   private shouldIgnore(file: TFile): boolean { return this.shouldIgnorePath(file.path, file.stat.size); }
 
   private shouldIgnorePath(path: string, size: number): boolean {
-    if (path.split("/").some(part => part.startsWith("."))) return true;
+    if (!path || /[\\:]/.test(path) || Array.from(path).some(char => char.charCodeAt(0) < 32) || path.split("/").some(part => !part || part.startsWith("."))) return true;
     if (path === this.app.vault.configDir || path.startsWith(`${this.app.vault.configDir}/`)) return true;
     if (/^(?:_istart-git|_plugin|_obsidian-config)(?:\/|$)/.test(path) || path === META_FILENAME || path === CONFIG_FILENAME) return true;
     if (size > this.config.fileSizeLimitMB * 1024 * 1024) return true;
@@ -481,58 +486,8 @@ export class BaiduSyncService {
     }
   }
 
-  /**
-   * 从百度云恢复插件文件和 Obsidian 配置到本地。
-   */
-  async restorePlugin(): Promise<{ downloaded: number; failed: number }> {
-    let downloaded = 0;
-    let failed = 0;
-
-    // 恢复插件文件
-    const remotePluginDir = `${this.config.remotePath}/_plugin`.replace(/\/+/g, "/");
-    const pluginDir = `${this.app.vault.configDir}/plugins/istart-note-ai`;
-    const dirExists = await this.app.vault.adapter.exists(pluginDir);
-    if (!dirExists) await this.app.vault.adapter.mkdir(pluginDir);
-
-    const pluginFiles = await this.client.listFiles(remotePluginDir);
-    for (const entry of pluginFiles) {
-      if (entry.isdir) continue;
-      const result = await this.downloadConfigFile(entry.path, `${pluginDir}/${entry.server_filename}`);
-      if (result === "ok") downloaded++;
-      else if (result === "failed") failed++;
-    }
-
-    // 恢复 Obsidian 配置
-    const remoteConfigDir = `${this.config.remotePath}/_obsidian-config`.replace(/\/+/g, "/");
-    const configFiles = await this.client.listFiles(remoteConfigDir);
-    for (const entry of configFiles) {
-      if (entry.isdir) continue;
-      const result = await this.downloadConfigFile(entry.path, `${this.app.vault.configDir}/${entry.server_filename}`);
-      if (result === "ok") downloaded++;
-      else if (result === "failed") failed++;
-    }
-
-    return { downloaded, failed };
-  }
-
-  private async downloadConfigFile(remotePath: string, localPath: string): Promise<"ok" | "failed"> {
-    try {
-      const content = await this.client.downloadFile(remotePath);
-      if (!content) return "failed";
-      // 确保目录存在
-      const dir = localPath.substring(0, localPath.lastIndexOf("/"));
-      if (dir) {
-        const exists = await this.app.vault.adapter.exists(dir);
-        if (!exists) await this.app.vault.adapter.mkdir(dir);
-      }
-      await this.app.vault.adapter.writeBinary(localPath, content);
-      return "ok";
-    } catch {
-      return "failed";
-    }
-  }
-
   private async writeLocalFile(localPath: string, content: ArrayBuffer) {
+    if (this.shouldIgnorePath(localPath, content.byteLength)) throw new Error(`文件超出同步范围：${localPath}`);
     const dir = localPath.substring(0, localPath.lastIndexOf("/"));
     if (dir) {
       const exists = await this.app.vault.adapter.exists(dir);

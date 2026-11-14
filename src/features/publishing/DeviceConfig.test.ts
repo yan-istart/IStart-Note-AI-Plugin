@@ -9,11 +9,29 @@ afterEach(() => vi.restoreAllMocks());
 describe("publishing secret version compatibility", () => {
   it("never reads the new API on older apps and keeps session credentials usable", () => {
     vi.mocked(requireApiVersion).mockReturnValue(false);
-    const app = { get secretStorage(): never { throw new Error("API unavailable on this app"); } } as unknown as App;
+    const app = {
+      get loadLocalStorage(): never { throw new Error("API unavailable on this app"); },
+      get saveLocalStorage(): never { throw new Error("API unavailable on this app"); },
+      get secretStorage(): never { throw new Error("API unavailable on this app"); },
+    } as unknown as App;
     const config = new PublishingDeviceConfig(app);
+    config.save();
     config.token = "session-token"; config.extensionToken = "session-extension";
     expect(config.hasPersistentSecrets).toBe(false);
     expect(config.token).toBe("session-token"); expect(config.extensionToken).toBe("session-extension");
+  });
+  it("persists device settings on 1.8.7 without accessing SecretStorage", () => {
+    vi.mocked(requireApiVersion).mockImplementation(version => version === "1.8.7");
+    const load = vi.fn(() => ({ url: "https://example.com" })), save = vi.fn();
+    const app = {
+      loadLocalStorage: load, saveLocalStorage: save,
+      get secretStorage(): never { throw new Error("SecretStorage unavailable"); },
+    } as unknown as App;
+    const config = new PublishingDeviceConfig(app);
+    expect(config.value.url).toBe("https://example.com");
+    config.save(); config.token = "session";
+    expect(save).toHaveBeenCalledWith("istart-publishing-device-v1", config.value);
+    expect(config.token).toBe("session"); expect(config.hasPersistentSecrets).toBe(false);
   });
   it("uses persistent, separately named secrets on supported apps", () => {
     vi.mocked(requireApiVersion).mockReturnValue(true);

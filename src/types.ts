@@ -5,7 +5,7 @@ export interface DeepSeekSettings {
   agent: AgentSettings;
   apiKey: string;
   baseUrl: string;
-  model: "deepseek-v4-flash" | "deepseek-v4-pro";
+  model: "deepseek-flash" | "deepseek-v4-flash" | "deepseek-v4-pro";
   outputStyle: "minimal" | "technical" | "product" | "academic" | "knowledge-base" | "story" | "dashboard";
   savePath: string;
   autoOpenGraph: boolean;
@@ -146,7 +146,7 @@ export const DEFAULT_SETTINGS: DeepSeekSettings = {
   agent: { ...DEFAULT_AGENT_SETTINGS },
   apiKey: "",
   baseUrl: "https://api.deepseek.com",
-  model: "deepseek-v4-flash",
+  model: "deepseek-flash",
   outputStyle: "knowledge-base",
   savePath: "Knowledge/Q&A",
   autoOpenGraph: false,
@@ -172,7 +172,7 @@ export const DEFAULT_SETTINGS: DeepSeekSettings = {
 export interface SyncableConfig {
   // DeepSeek
   baseUrl: string;
-  model: "deepseek-v4-flash" | "deepseek-v4-pro";
+  model: DeepSeekSettings["model"];
   // 路径
   savePath: string;
   conceptsPath: string;

@@ -522,12 +522,14 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("模型")
+      .setDesc("DeepSeek 官方接口推荐选择 V4.1 Flash；旧版 Flash 名称仍可兼容调用最新模型。其他兼容服务的模型版本由服务商决定。")
       .addDropdown((d) =>
-        d.addOption("deepseek-v4-flash", "deepseek-v4-flash（快速）")
-          .addOption("deepseek-v4-pro", "deepseek-v4-pro（深度推理）")
+        d.addOption("deepseek-flash", "DeepSeek V4.1 Flash（推荐）")
+          .addOption("deepseek-v4-pro", "DeepSeek V4 Pro")
+          .addOption("deepseek-v4-flash", "deepseek-v4-flash（旧名称，兼容保留）")
           .setValue(this.plugin.settings.model)
           .onChange(async (v: string) => {
-            this.plugin.settings.model = v as "deepseek-v4-flash" | "deepseek-v4-pro";
+            this.plugin.settings.model = v as DeepSeekSettings["model"];
             await this.plugin.saveSettings();
           })
       );
@@ -626,6 +628,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
 
       new Setting(el)
         .setName("备份插件本身")
+        .setDesc("仅上传备份，包含 data.json 中的凭证。插件程序文件请通过 Obsidian 安装或更新；恢复笔记不会覆盖插件和 Obsidian 配置。")
         .addToggle((t) => t.setValue(cfg.backupPlugin).onChange(async (v) => { cfg.backupPlugin = v; await this.plugin.saveSettings(); }));
     }
 

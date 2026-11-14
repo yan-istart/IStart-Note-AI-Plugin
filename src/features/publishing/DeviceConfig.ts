@@ -16,7 +16,7 @@ export class PublishingDeviceConfig {
   private sessionTokens = { local: "", remote: "" };
   private sessionExtensionToken = "";
   constructor(private app: App) {
-    const raw: unknown = typeof app.loadLocalStorage === "function" ? app.loadLocalStorage(KEY) : null;
+    const raw: unknown = requireApiVersion("1.8.7") && typeof app.loadLocalStorage === "function" ? app.loadLocalStorage(KEY) : null;
     const saved = raw && typeof raw === "object" ? raw as Partial<PublishingDevice> : {};
     this.value = {
       id: typeof saved.id === "string" && /^[a-f\d-]{36}$/.test(saved.id) ? saved.id : crypto.randomUUID(),
@@ -27,7 +27,7 @@ export class PublishingDeviceConfig {
       bridgePort: Number.isInteger(saved.bridgePort) && saved.bridgePort! > 1024 && saved.bridgePort! < 65535 ? saved.bridgePort! : 27125,
     };
   }
-  save(): void { if (typeof this.app.saveLocalStorage === "function") this.app.saveLocalStorage(KEY, this.value); }
+  save(): void { if (requireApiVersion("1.8.7") && typeof this.app.saveLocalStorage === "function") this.app.saveLocalStorage(KEY, this.value); }
   get token(): string {
     if (requireApiVersion("1.11.4") && this.app.secretStorage) return this.app.secretStorage.getSecret(`istart-publishing-${this.value.id}-${this.value.mode}`) ?? this.sessionTokens[this.value.mode];
     return this.sessionTokens[this.value.mode];

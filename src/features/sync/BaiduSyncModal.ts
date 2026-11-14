@@ -189,13 +189,14 @@ export class BaiduSyncModal extends Modal {
   }
 
   private async runForceRestore(service: BaiduSyncService) {
+    service.assertSyncFolder(this.folder);
     const notice = new Notice("强制覆盖：清理本地文件...", 0);
 
     // 1. 删除本地指定目录下的所有文件
-    const files = this.app.vault.getFiles();
+    const files = this.app.vault.getFiles().filter(file => service.isSyncableFile(file));
     const targetFiles = this.folder
-      ? files.filter((f) => f.path.startsWith(this.folder))
-      : files.filter((f) => !f.path.split("/").some((p) => p.startsWith(".")));
+      ? files.filter((f) => f.path === this.folder || f.path.startsWith(this.folder.replace(/\/+$/, "") + "/"))
+      : files;
 
     for (const f of targetFiles) {
       try {
@@ -213,14 +214,6 @@ export class BaiduSyncModal extends Modal {
     new Notice(
       `强制覆盖完成：删除本地 ${targetFiles.length} 个文件，从云端恢复 ${result.downloaded} 个文件`
     );
-
-    // 3. 恢复插件（如果有备份）
-    if (this.config.backupPlugin) {
-      const pluginResult = await service.restorePlugin();
-      if (pluginResult.downloaded > 0) {
-        new Notice(`插件文件已恢复（${pluginResult.downloaded} 个文件），请重启 Obsidian`);
-      }
-    }
   }
 
   onClose() {

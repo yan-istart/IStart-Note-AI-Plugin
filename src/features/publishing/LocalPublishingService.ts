@@ -14,7 +14,7 @@ export class LocalPublishingService {
   constructor(private config: PublishingDeviceConfig) {}
   get running(): boolean { return !!this.process && this.process.exitCode === null && !this.process.killed; }
   private modules() {
-    if (Platform.isMobile || typeof require === "undefined") throw new Error("本地分发服务仅支持桌面端");
+    if (!Platform.isDesktop || typeof require === "undefined") throw new Error("本地分发服务仅支持桌面端");
     return { fs: require("fs") as typeof import("fs"), path: require("path") as typeof import("path"),
       os: require("os") as typeof import("os"), child: require("child_process") as typeof import("child_process"),
       environment: require("process") as typeof import("process") };
