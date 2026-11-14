@@ -190,6 +190,9 @@
   color: var(--text-normal);
 }
 
+.istart-sync-file-info { min-width: 0; display: flex; flex-direction: column; }
+.istart-sync-file-folder { color: var(--text-muted); font-size: var(--font-smallest); overflow-wrap: anywhere; }
+
 .istart-sync-file-actions {
   display: flex;
   gap: 4px;
@@ -1621,6 +1624,8 @@ button.istart-import-merge {
 .istart-agent-root pre.istart-agent-diff-before { background:rgba(var(--color-red-rgb),.12); color:var(--text-normal); border-left:2px solid var(--color-red); padding:8px; }
 .istart-agent-root pre.istart-agent-diff-after { background:rgba(var(--color-green-rgb),.12); color:var(--text-normal); border-left:2px solid var(--color-green); padding:8px; }
 .istart-agent-composer { display:flex; flex-direction:column; flex:0 1 auto; min-height:0; max-height:65%; padding:10px 12px 6px; border-top:1px solid var(--background-modifier-border); background:var(--background-primary); }
+.istart-agent-input-shell { min-width: 0; flex-shrink: 0; }
+.istart-agent-input-row { display: contents; }
 .istart-agent-composer textarea { display:block; width:100%; min-height:70px; max-height:220px; resize:vertical; }
 .istart-agent-composer-actions { margin-top:8px; flex-shrink:0; flex-wrap:wrap; }
 .istart-agent-composer-actions > button:last-child { margin-left:auto; }
@@ -1685,8 +1690,8 @@ button.istart-import-merge {
 .istart-git-diff-number { width: 4em; text-align: right; padding-inline-end: 8px; color: var(--text-muted); user-select: none; flex-shrink: 0; }
 .istart-git-diff-sign { width: 2em; text-align: center; user-select: none; flex-shrink: 0; }
 .istart-git-diff-text { white-space: pre; tab-size: 4; }
-.istart-git-change-filters .setting-item { display: block; border: 0; padding: 8px 0; }
-.istart-git-change-filters .setting-item-control { flex-wrap: wrap; justify-content: flex-start; gap: 6px; }
+.istart-git-change-filters { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 6px; padding: 8px 0; }
+.istart-git-change-filters select { max-width: 120px; }
 .istart-git-change-filters input { min-width: 0; width: 100%; }
 /* Typo review sidebar */
 .istart-typo-root { padding: 12px; overflow-y: auto; }
@@ -1842,6 +1847,9 @@ button.istart-import-merge {
   outline-offset: 2px;
 }
 .istart-annotations-body { display: flex; flex-direction: column; gap: 8px; }
+.istart-annotations-summary { display: flex; align-items: center; min-width: 0; gap: 8px; }
+.istart-annotations-summary .istart-annotations-status { flex: 1; min-width: 0; }
+.istart-annotations-filter-select { display: none; }
 .istart-annotations-body > * { flex-shrink: 0; }
 .istart-annotations-body .istart-annotations-list { flex: none; overflow: visible; }
 .istart-annotation-card:focus-within .istart-annotation-more { opacity: 1; }
@@ -1862,13 +1870,13 @@ button.istart-import-merge {
 .istart-sidebar-keyboard-visible .istart-sidebar-dismiss-keyboard { display: inline-flex; }
 .istart-agent-status { max-height: 64px; overflow-y: auto; }
 .istart-agent-root.istart-sidebar-keyboard-visible .istart-workbench-heading,
-.istart-agent-root.istart-sidebar-keyboard-visible .istart-agent-sessionbar,
-.istart-agent-root.istart-sidebar-keyboard-visible .istart-agent-context,
 .istart-agent-root.istart-sidebar-keyboard-visible .istart-agent-status:not(.is-error),
 .istart-agent-root.istart-sidebar-keyboard-visible .istart-agent-shortcuts { display: none; }
 .istart-sidebar-keyboard-visible .istart-agent-composer { padding-bottom: 8px; }
 .istart-agent-root.istart-sidebar-compact-keyboard > .istart-workbench-nav { display: none; }
-.istart-agent-root.istart-sidebar-compact-keyboard .istart-agent-composer { flex: 1 1 auto; max-height: 100%; }
+.istart-agent-root.istart-sidebar-compact-keyboard .istart-agent-sessionbar,
+.istart-agent-root.istart-sidebar-compact-keyboard .istart-agent-context { display: none; }
+.istart-agent-root.istart-sidebar-compact-keyboard .istart-agent-composer { max-height: 100%; }
 .istart-sidebar-keyboard-visible .istart-workbench-body { padding-bottom: 12px; }
 .istart-sidebar-mobile :is(button, select, summary) { min-height: 44px; }
 .istart-sidebar-mobile .istart-agent-icon-button { min-width: 44px; }
@@ -1877,24 +1885,95 @@ button.istart-import-merge {
 .istart-sidebar-mobile .istart-annotations-chip { min-height: 44px; }
 .istart-sidebar-mobile .istart-annotations-search input { height: 44px; }
 .workspace-leaf-content .istart-typo-root { overflow-y: auto; padding-bottom: max(12px, env(safe-area-inset-bottom, 0px)); }
+
+/* Mobile conversation: references, input and send stay together above the keyboard. */
+.istart-agent-mobile .istart-agent-composer { flex: 0 0 auto; max-height: 70%; border-top: 0; padding: 0 10px max(6px, env(safe-area-inset-bottom, 0px)); gap: 6px; }
+.istart-agent-mobile .istart-agent-shortcuts,
+.istart-agent-mobile .istart-agent-input-options,
+.istart-agent-mobile .istart-agent-story-hint { display: none; }
+.istart-agent-mobile .istart-agent-input-shell { border: 1px solid var(--background-modifier-border); border-radius: 18px; background: var(--background-primary); padding: 6px; }
+.istart-agent-mobile .istart-agent-input-row { display: flex; align-items: flex-end; min-width: 0; gap: 4px; }
+.istart-agent-mobile .istart-agent-input-row textarea { flex: 1; min-width: 0; height: var(--istart-agent-input-height, 44px); min-height: 44px; max-height: 128px; padding: 10px 6px; border: 0; border-radius: 10px; box-shadow: none; background: transparent; resize: none; line-height: 24px; font-size: 16px; }
+.istart-agent-mobile .istart-agent-input-row textarea::placeholder { font-size: var(--font-ui-small); }
+.istart-agent-mobile .istart-agent-send { width: 44px; height: 44px; min-width: 44px; min-height: 44px; border-radius: 50%; padding: 0; }
+.istart-agent-mobile .istart-agent-send:disabled { opacity: 1; background: var(--background-secondary); color: var(--text-muted); }
+.istart-agent-mobile .istart-agent-send svg { width: 20px; height: 20px; }
+.istart-agent-mobile .istart-agent-send-label { display: none; }
+.istart-agent-mobile .istart-agent-composer-actions { flex-wrap: nowrap; gap: 2px; margin-top: 2px; }
+.istart-agent-mobile .istart-agent-composer-actions > button:last-child { margin-left: 0; }
+.istart-agent-mobile .istart-agent-composer-actions .istart-agent-action-label { display: none; }
+.istart-agent-mobile .istart-agent-mobile-mode { gap: 5px; font-size: var(--font-ui-small); white-space: nowrap; }
+.istart-agent-mobile .istart-agent-mobile-mode svg { width: 13px; height: 13px; }
+.istart-agent-mobile .istart-agent-mobile-search { margin-left: auto; gap: 5px; padding-inline: 8px; white-space: nowrap; font-size: var(--font-ui-smaller); }
+.istart-agent-mobile .istart-agent-mobile-search[aria-pressed="true"] { color: var(--text-accent); background: var(--background-secondary); border-radius: 8px; }
+.istart-agent-mobile .istart-agent-context { flex: 0 0 auto; flex-wrap: nowrap; align-items: center; gap: 4px; max-height: none; padding: 0; overflow: hidden; }
+.istart-agent-mobile .istart-agent-context .istart-agent-text-button { min-height: 44px; max-width: 100%; padding: 6px; font-size: var(--font-ui-smaller); white-space: nowrap; }
+.istart-agent-mobile .istart-agent-context .istart-agent-context-chip { flex: 0 1 auto; min-width: 0; border-radius: 9px; background: var(--background-secondary); }
+.istart-agent-mobile .istart-agent-context-chip > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.istart-agent-mobile .istart-agent-context .istart-agent-add-reference { flex-shrink: 0; margin-left: auto; color: var(--text-muted); background: transparent; border: 0; }
+.istart-agent-mobile .istart-agent-status { text-align: center; padding: 2px 10px 6px; font-size: var(--font-ui-smaller); }
+.istart-agent-mobile .istart-agent-status.is-error { text-align: left; color: var(--text-error); }
+.istart-agent-mobile .istart-agent-messages { padding: 12px 18px 18px; }
+.istart-agent-mobile .istart-agent-messages:has(> .istart-agent-empty) { display: flex; flex-direction: column; }
+.istart-agent-mobile .istart-agent-empty { margin-block: auto; width: 100%; padding: 18px 0; }
+.istart-agent-mobile .istart-agent-empty h3 { font-size: 21px; line-height: 1.4; }
+.istart-agent-mobile .istart-agent-empty p { line-height: 1.7; }
+.istart-agent-mobile .istart-agent-welcome-icon { display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; border-radius: 14px; background: var(--background-secondary); color: var(--text-accent); margin-bottom: 16px; }
+.istart-agent-mobile .istart-agent-welcome-icon svg { width: 23px; height: 23px; }
+.istart-agent-mobile .istart-agent-empty > button { border: 0; border-radius: 12px; background: var(--background-secondary); padding: 10px 12px; font-size: var(--font-ui-small); gap: 8px; }
+.istart-agent-mobile .istart-agent-empty > button:first-of-type { margin-top: 22px; }
+.istart-agent-mobile .istart-agent-empty > button span:last-child { min-width: 0; }
+.istart-agent-mobile.istart-sidebar-keyboard-visible > .istart-workbench-nav { display: none; }
+.istart-agent-mobile.istart-agent-task-active .istart-agent-composer { flex: 1 1 auto; max-height: none; }
+.istart-agent-mobile.istart-agent-task-active .istart-agent-composer-body { flex: 1 1 auto; }
+.istart-agent-mobile.istart-agent-task-active .istart-agent-input-row { justify-content: flex-end; }
+.istart-agent-mobile.istart-agent-task-active .istart-agent-send { width: auto; padding: 0 12px; border-radius: 10px; gap: 6px; }
+.istart-agent-mobile.istart-agent-task-active .istart-agent-send-label { display: inline; }
+
+/* Secondary workbench sections keep their primary actions near the content. */
+.istart-workbench-body > h4 { margin: 0 0 12px; font-size: var(--font-ui-medium); }
+.istart-workbench-body > details { margin-block: 8px; }
+.istart-workbench-body > details > summary { padding-block: 8px; color: var(--text-muted); font-size: var(--font-ui-small); cursor: pointer; }
+.istart-publishing-source { font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.istart-publishing-platforms .setting-item { flex-wrap: nowrap; gap: 8px; }
+.istart-workbench-body .istart-publishing-platforms .setting-item-info { flex: 1 1 0; min-width: 0; }
+.istart-workbench-body .istart-publishing-platforms .setting-item-control { width: auto; flex: 0 0 auto; min-height: 44px; }
+.istart-sidebar-mobile .istart-publishing-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.istart-sidebar-mobile .istart-publishing-actions > button { padding: 8px; font-size: var(--font-ui-small); }
+.istart-sidebar-mobile > .istart-publishing-send { flex-shrink: 0; margin: 0; padding: 10px 10px max(10px, env(safe-area-inset-bottom, 0px)); border-top: 1px solid var(--background-modifier-border); background: var(--background-primary); }
+.istart-sidebar-mobile .istart-workbench-heading { display: none; }
+.istart-sidebar-mobile > .istart-workbench-nav { padding: 0 8px; }
+.istart-sidebar-mobile .istart-workbench-tab-label { display: none; }
+.istart-sidebar-mobile .istart-workbench-short-label { display: inline; }
+.istart-sidebar-mobile .istart-workbench-nav .istart-workbench-tab { position: relative; flex-direction: row; white-space: nowrap; min-height: 44px; border-radius: 0; }
+.istart-sidebar-mobile .istart-workbench-nav .istart-workbench-tab.is-active { border-color: transparent; background: transparent; }
+.istart-sidebar-mobile .istart-workbench-nav .istart-workbench-tab.is-active::after { content: ""; position: absolute; bottom: 0; left: 20%; right: 20%; height: 2px; border-radius: 2px; background: var(--interactive-accent); }
+.istart-sidebar-mobile .istart-annotations-search { display: flex; align-items: center; gap: 8px; }
+.istart-sidebar-mobile .istart-annotations-search input { flex: 1; min-width: 0; }
+.istart-sidebar-mobile .istart-annotations-filter-select { display: block; flex: 0 0 auto; max-width: 92px; }
+.istart-sidebar-mobile .istart-annotations-filters { display: none; }
+
 @container istart-sidebar (max-width: 420px) {
   .istart-workbench-heading { display: none; }
-  .istart-workbench-nav .istart-workbench-tab { flex-direction: column; gap: 2px; min-height: 44px; padding: 4px 2px; }
+  .istart-workbench-root > .istart-workbench-nav { padding: 0 8px; }
+  .istart-workbench-tabs { grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 2px; }
+  .istart-workbench-nav .istart-workbench-tab { position: relative; flex-direction: row; gap: 4px; min-height: 44px; padding: 4px; border-radius: 0; white-space: nowrap; font-size: var(--font-ui-small); }
+  .istart-workbench-nav .istart-workbench-tab.is-active { background: transparent; border-color: transparent; }
+  .istart-workbench-nav .istart-workbench-tab.is-active::after { content: ""; position: absolute; bottom: 0; left: 20%; right: 20%; height: 2px; border-radius: 2px; background: var(--interactive-accent); }
   .istart-workbench-tab-label { display: none; }
   .istart-workbench-short-label { display: inline; }
   .istart-workbench-body { padding-inline: 10px; }
   .istart-workbench-body .setting-item-info { flex-basis: 100%; }
   .istart-workbench-body .setting-item-control { width: 100%; justify-content: flex-start; }
   .istart-workbench-body .setting-item-control :is(input:not([type="checkbox"]):not([type="radio"]), select) { width: 100%; }
-  .istart-sync-file-row { flex-wrap: wrap; }
-  .istart-sync-file-left { flex-basis: 100%; }
-  .istart-sync-file-actions { max-width: 100%; flex-wrap: wrap; }
+  .istart-sync-file-row { align-items: flex-start; gap: 8px; }
+  .istart-sync-file-left { flex: 1; min-width: 0; }
+  .istart-sync-file-actions { max-width: 50%; flex-wrap: wrap; }
   .istart-sync-file-name { white-space: normal; overflow-wrap: anywhere; }
   .istart-sync-btn-row > button { flex: 1 1 120px; }
   .istart-git-file-row { flex-wrap: wrap; }
   .istart-agent-root .istart-agent-composer-actions > .istart-agent-icon-button { min-width: 44px; min-height: 44px; }
-  .istart-agent-composer-actions > .istart-agent-icon-button:not(.mod-cta) { flex-direction: column; gap: 2px; }
-  .istart-agent-composer-actions .istart-agent-action-label { display: inline; font-size: var(--font-smallest); }
+  .istart-agent-composer-actions > .istart-agent-icon-button:not(.mod-cta) { gap: 4px; }
   .istart-agent-composer-meta select { width: 100%; }
   .istart-agent-task-heading { flex-wrap: wrap; }
   .istart-agent-message-actions .istart-agent-touch-label { display: inline; }

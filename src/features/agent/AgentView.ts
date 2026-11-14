@@ -17,6 +17,12 @@ import { AgentPositionModal } from "./AgentPositionModal";
 import { messageText, conversationText } from "../../core/agent/ClipboardText";
 
 export const AGENT_VIEW_TYPE = WORKBENCH_VIEWS.assistant;
+const AGENT_SHORTCUTS = [
+  ["continue-writing-settings", "续写"], ["insert-writing-settings", "插写"], ["polish-writing", "润色"],
+  ["summarize-note", "总结"], ["check-typos", "校对"], ["beautify-note", "美化"], ["ai-annotation", "AI 批注"],
+  ["question-with-graph", "知识提问"], ["knowledge-debt", "知识债务"], ["scan-empty-concepts", "空概念"],
+  ["new-reading-project", "阅读项目"], ["new-writing-project", "新建作品"], ["create-artifact", "实用模板"],
+] as const;
 export class AgentView extends ItemView {
   private controller: AgentController;
   private unsubscribe?: () => void;
@@ -34,6 +40,10 @@ export class AgentView extends ItemView {
   private modelEl!: HTMLElement;
   private optionsSummary!: HTMLElement;
   private storySettings!: HTMLButtonElement;
+  private mobileMode?: HTMLButtonElement;
+  private mobileSearch?: HTMLButtonElement;
+  private inputObserver?: ResizeObserver;
+  private inputSizeKey = "";
   private historyOpen = false;
   private query = "";
   private showArchived = false;
@@ -52,6 +62,7 @@ export class AgentView extends ItemView {
   getIcon(): string { return "istart-assistant"; }
   async onOpen(): Promise<void> {
     this.renderedTask = "";
+    this.inputSizeKey = "";
     this.activeId = ""; this.renderedMessages = ""; this.frame = undefined;
     const root = this.contentEl; root.empty(); root.addClass("istart-agent-root");
     if (Platform.isMobile) root.addClass("istart-agent-mobile");
@@ -69,50 +80,56 @@ export class AgentView extends ItemView {
     archived.addEventListener("change", () => { this.showArchived = archived.checked; this.renderHistory(); });
     this.historyList = this.historyEl.createDiv({ cls: "istart-agent-history-list" });
     this.conversationEl = root.createDiv({ cls: "istart-agent-conversation" });
-    this.contextEl = this.conversationEl.createDiv({ cls: "istart-agent-context" });
+    this.contextEl = this.conversationEl.createDiv({ cls: "istart-agent-context", attr: { "aria-label": "本轮引用笔记" } });
     this.messagesEl = this.conversationEl.createDiv({ cls: "istart-agent-messages", attr: { "aria-label": "对话消息" } });
     const composer = this.conversationEl.createDiv({ cls: "istart-agent-composer" });
+    if (Platform.isMobile) composer.appendChild(this.contextEl);
     const body = composer.createDiv({ cls: "istart-agent-composer-body" });
     const shortcuts = body.createEl("details", { cls: "istart-agent-shortcuts" });
     shortcuts.createEl("summary", { text: "任务快捷入口" });
     const taskChoices = shortcuts.createDiv({ cls: "istart-agent-shortcut-list" });
-    for (const [id, label] of [
-      ["continue-writing-settings", "续写"], ["insert-writing-settings", "插写"], ["polish-writing", "润色"],
-      ["summarize-note", "总结"], ["check-typos", "校对"], ["beautify-note", "美化"], ["ai-annotation", "AI 批注"],
-      ["question-with-graph", "知识提问"], ["knowledge-debt", "知识债务"], ["scan-empty-concepts", "空概念"],
-      ["new-reading-project", "阅读项目"], ["new-writing-project", "新建作品"], ["create-artifact", "实用模板"],
-    ]) this.button(taskChoices, label, "sparkles", () => this.plugin.startAgentAction(id, null), true);
+    for (const [id, label] of AGENT_SHORTCUTS) this.button(taskChoices, label, "sparkles", () => this.plugin.startAgentAction(id, null), true);
     this.button(taskChoices, "导入原稿", "file-input", () => this.plugin.openImportNovel(), true);
     this.taskEl = body.createDiv({ cls: "istart-agent-task" });
     this.taskEl.addEventListener("keydown", event => {
       if (!event.isComposing && (event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); this.send(); }
     });
-    this.input = body.createEl("textarea", { attr: { placeholder: "描述任务，或输入 @ 引用笔记…", rows: "3", "aria-label": "发送给 AI 助手" } });
-    this.input.addEventListener("input", () => { const s = this.controller.active; if (s) this.controller.updateDraft(s.id, this.input.value); });
+    const shell = Platform.isMobile ? composer.createDiv({ cls: "istart-agent-input-shell" }) : body;
+    const inputRow = shell.createDiv({ cls: "istart-agent-input-row" });
+    this.input = inputRow.createEl("textarea", { attr: { placeholder: "描述任务，或输入 @ 引用笔记…", rows: Platform.isMobile ? "1" : "3", "aria-label": "发送给 AI 助手" } });
+    this.input.addEventListener("input", () => { const s = this.controller.active; if (s) this.controller.updateDraft(s.id, this.input.value); this.resizeInput(); this.updateSendState(); });
     this.input.addEventListener("keydown", event => {
       if (!event.isComposing && (event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); this.send(); }
       if (!event.isComposing && event.key === "@") { event.preventDefault(); this.pickNote(); }
     });
-    const actions = composer.createDiv({ cls: "istart-agent-composer-actions" });
-    const reference = this.button(actions, "引用笔记", "at-sign", () => this.pickNote());
-    reference.createSpan({ text: "引用", cls: "istart-agent-action-label" });
-    const current = this.button(actions, "引用当前笔记或选区", "text-select", () => { const ref = this.controller.captureCurrent(); if (!ref) throw new Error("请先打开一篇笔记"); this.controller.attach(ref); });
-    current.createSpan({ text: "当前", cls: "istart-agent-action-label" });
-    const position = this.button(actions, "设置插入位置", "text-cursor-input", () => {
-      const session = this.controller.active; if (!session) return;
-      const current = this.controller.captureCurrent();
-      const refs = session.references.length ? session.references : current ? [current] : [];
-      new AgentPositionModal(this.plugin, session.id, refs).open();
-    });
-    position.createSpan({ text: "位置", cls: "istart-agent-action-label" });
+    const actions = (Platform.isMobile ? shell : composer).createDiv({ cls: "istart-agent-composer-actions" });
+    if (Platform.isMobile) {
+      this.button(actions, "添加引用与任务快捷入口", "plus", event => this.composerMenu(event));
+      this.mobileMode = this.button(actions, "模式与检索设置", "", event => this.modeMenu(event));
+      this.mobileMode.addClass("istart-agent-mobile-mode");
+      this.mobileSearch = this.button(actions, "检索知识库", "book-open", () => {
+        const s = this.controller.active;
+        if (s && !this.search.disabled) this.controller.update(s.id, { searchVault: !s.searchVault });
+      });
+      this.mobileSearch.addClass("istart-agent-mobile-search");
+      this.mobileSearch.createSpan({ text: "知识库" });
+    } else {
+      const reference = this.button(actions, "引用笔记", "at-sign", () => this.pickNote());
+      reference.createSpan({ text: "引用", cls: "istart-agent-action-label" });
+      const current = this.button(actions, "引用当前笔记或选区", "text-select", () => this.attachCurrent());
+      current.createSpan({ text: "当前", cls: "istart-agent-action-label" });
+      const position = this.button(actions, "设置插入位置", "text-cursor-input", () => this.choosePosition());
+      position.createSpan({ text: "位置", cls: "istart-agent-action-label" });
+    }
     const dismiss = this.button(actions, "收起键盘", "keyboard", () => {
       const active = root.ownerDocument.activeElement as HTMLElement | null;
       if (active && root.contains(active)) active.blur();
     });
     dismiss.addClass("istart-sidebar-dismiss-keyboard");
     dismiss.createSpan({ text: "收起", cls: "istart-agent-action-label" });
-    this.sendButton = this.button(actions, "发送", "arrow-up", () => this.send()); this.sendButton.addClass("mod-cta");
-    const options = body.createEl("details", { cls: "istart-agent-input-options" });
+    this.sendButton = this.button(Platform.isMobile ? inputRow : actions, "发送", "arrow-up", () => this.send()); this.sendButton.addClass("mod-cta", "istart-agent-send");
+    this.sendButton.addEventListener("pointerdown", event => { if (Platform.isMobile && root.ownerDocument.activeElement === this.input) event.preventDefault(); });
+    const options = shell.createEl("details", { cls: "istart-agent-input-options" });
     options.open = !Platform.isMobile;
     this.optionsSummary = options.createEl("summary", { text: "模式与检索设置" });
     const meta = options.createDiv({ cls: "istart-agent-composer-meta" });
@@ -134,11 +151,20 @@ export class AgentView extends ItemView {
     this.registerDomEvent(this.contentEl.ownerDocument, "selectionchange", () => this.scheduleRender());
     this.cleanupViewport = bindSidebarViewport(root);
     this.render();
+    if (Platform.isMobile) {
+      let width = 0;
+      this.inputObserver = new ResizeObserver(() => {
+        if (this.input.clientWidth === width) return;
+        width = this.input.clientWidth; this.resizeInput();
+      });
+      this.inputObserver.observe(this.input);
+    }
   }
   async onClose(): Promise<void> {
     this.storyViews.clear();
     this.unsubscribe?.(); this.unsubscribe = undefined;
     this.cleanupViewport?.();
+    this.inputObserver?.disconnect(); this.inputObserver = undefined;
     if (this.frame !== undefined) window.clearTimeout(this.frame);
     this.frame = undefined;
     if (this.markdown) { this.removeChild(this.markdown); this.markdown = undefined; }
@@ -150,6 +176,62 @@ export class AgentView extends ItemView {
   private perform(callback: () => unknown): void {
     try { const task = callback(); if (task instanceof Promise) void task.catch(error => new Notice(error instanceof Error ? error.message : String(error))); }
     catch (error) { new Notice(error instanceof Error ? error.message : String(error)); }
+  }
+  private resizeInput(): void {
+    if (!Platform.isMobile || !this.input) return;
+    const key = `${this.input.clientWidth}/${this.input.value}`;
+    if (key === this.inputSizeKey) return;
+    this.inputSizeKey = key;
+    this.input.setCssProps({ "--istart-agent-input-height": "0px" });
+    this.input.setCssProps({ "--istart-agent-input-height": `${Math.min(128, Math.max(44, this.input.scrollHeight))}px` });
+  }
+  private updateSendState(): void {
+    const s = this.controller.active;
+    this.sendButton.disabled = !s || s.archived || (Platform.isMobile && !s.pendingTask && (!this.controller.isRunning(s.id) || !!this.controller.openStory(s.id)) && !this.input.value.trim());
+  }
+  private attachCurrent(): void {
+    const ref = this.controller.captureCurrent();
+    if (!ref) throw new Error("请先打开一篇笔记");
+    this.controller.attach(ref);
+  }
+  private choosePosition(): void {
+    const s = this.controller.active; if (!s) return;
+    const current = this.controller.captureCurrent();
+    new AgentPositionModal(this.plugin, s.id, s.references.length ? s.references : current ? [current] : []).open();
+  }
+  private composerMenu(event: MouseEvent): void {
+    const menu = new Menu();
+    menu.addItem(i => i.setTitle("引用笔记").setIcon("at-sign").onClick(() => this.pickNote()));
+    menu.addItem(i => i.setTitle("引用当前笔记或选区").setIcon("text-select").onClick(() => this.perform(() => this.attachCurrent())));
+    menu.addItem(i => i.setTitle("设置插入位置").setIcon("text-cursor-input").onClick(() => this.choosePosition()));
+    menu.addSeparator();
+    for (const [id, label] of AGENT_SHORTCUTS) menu.addItem(i => i.setTitle(label).setIcon("sparkles").onClick(() => this.perform(() => this.plugin.startAgentAction(id, null))));
+    menu.addItem(i => i.setTitle("导入原稿").setIcon("file-input").onClick(() => this.perform(() => this.plugin.openImportNovel())));
+    menu.showAtMouseEvent(event);
+  }
+  private modeMenu(event: MouseEvent): void {
+    const s = this.controller.active; if (!s) return;
+    const menu = new Menu();
+    for (const [mode, label] of [["agent", "Agent"], ["ask", "问答 · 只读"], ["story", "小说演绎"]] as const) {
+      menu.addItem(i => i.setTitle(label).setChecked(s.mode === mode).setDisabled(this.mode.disabled).onClick(() => this.perform(() => this.controller.update(s.id, { mode }))));
+    }
+    menu.addSeparator();
+    menu.addItem(i => i.setTitle("检索知识库").setIcon("book-open").setChecked(s.searchVault).setDisabled(this.search.disabled).onClick(() => this.perform(() => this.controller.update(s.id, { searchVault: !s.searchVault }))));
+    if (s.mode === "story") menu.addItem(i => i.setTitle("参演设置").setIcon("users").setDisabled(this.storySettings.disabled).onClick(() => this.storySettings.click()));
+    if (s.mode === "story") menu.addItem(i => i.setTitle(`小说章节在首个引用 · ${s.storyConfig?.characterPaths.length ? `${s.storyConfig.characterPaths.length}名角色` : "自动选择角色"} · 最多推进 ${s.storyConfig?.maxTurns ?? 6} 次`).setDisabled(true));
+    menu.addItem(i => i.setTitle(`模型：${this.plugin.settings.model}`).setDisabled(true));
+    menu.showAtMouseEvent(event);
+  }
+  private referenceMenu(event: MouseEvent): void {
+    const s = this.controller.active; if (!s) return;
+    const menu = new Menu();
+    for (const ref of s.references) {
+      menu.addItem(i => i.setTitle(ref.path).setIcon(ref.selection ? "text-select" : "file-text").onClick(() => this.perform(() => this.openSource(ref.path))));
+      menu.addItem(i => i.setTitle(`移除 ${ref.path}`).setIcon("x").setDisabled(this.controller.isRunning(s.id) || !!this.controller.openStory(s.id)).onClick(() => this.perform(() => this.controller.detach(ref.path))));
+      menu.addSeparator();
+    }
+    menu.addItem(i => i.setTitle("引用笔记").setIcon("at-sign").onClick(() => this.pickNote()));
+    menu.showAtMouseEvent(event);
   }
   private button(parent: HTMLElement, label: string, icon: string, action: (event: MouseEvent) => unknown, text = false): HTMLButtonElement {
     const button = parent.createEl("button", { cls: text ? "istart-agent-text-button" : "istart-agent-icon-button", attr: { type: "button", "aria-label": label, "data-tooltip-position": "top" } });
@@ -168,7 +250,7 @@ export class AgentView extends ItemView {
   private render(): void {
     if (!this.input) return;
     const s = this.controller.active;
-    this.statusEl.setText(this.controller.error || this.controller.saveError || (s && this.controller.isRunning(s.id) ? "正在处理…可切换到其他会话" : (Platform.isMobile ? "上下文按本轮固定 · 点击发送" : "上下文按本轮固定 · Ctrl/Cmd+Enter 发送")));
+    this.statusEl.setText(this.controller.error || this.controller.saveError || (s && this.controller.isRunning(s.id) ? "正在处理…可切换到其他会话" : (Platform.isMobile ? s?.references.length ? "本轮使用以上引用 · 可随时调整" : "未引用笔记 · @ 添加上下文" : "上下文按本轮固定 · Ctrl/Cmd+Enter 发送")));
     this.statusEl.toggleClass("is-error", !!(this.controller.error || this.controller.saveError));
     if (this.controller.error) {
       this.conversationEl.hide(); this.historyEl.hide();
@@ -194,27 +276,52 @@ export class AgentView extends ItemView {
     this.taskEl.toggle(!!s.pendingTask);
     this.input.toggle(!s.pendingTask);
     this.modelEl.setText(this.plugin.settings.model);
-    this.sendButton.disabled = s.archived;
+    this.updateSendState();
+    this.resizeInput();
     if (s.archived) this.statusEl.setText("会话已归档，可在会话操作中恢复后继续");
     const openStory = this.controller.openStory(s.id);
     this.optionsSummary.setText(`${s.mode === "story" ? "小说演绎" : s.mode === "ask" ? "问答" : "Agent"} · 模式与检索设置`);
     this.mode.value = s.mode; this.mode.disabled = busy || !!s.pendingTask || !!openStory; this.search.checked = s.searchVault; this.search.disabled = busy || s.mode === "story";
     this.search.parentElement?.toggle(s.mode !== "story");
     this.storySettings.toggle(s.mode === "story"); this.storySettings.disabled = busy || s.archived || !!openStory;
-    this.input.placeholder = openStory ? "输入导演指令，在下一次回应前生效…" : s.mode === "story" ? "描述场景、冲突和本场目标，让角色开始演绎…" : "描述任务，或输入 @ 引用笔记…";
+    if (this.mobileMode) {
+      this.mobileMode.empty();
+      this.mobileMode.createSpan({ text: s.mode === "story" ? "小说演绎" : s.mode === "ask" ? "问答" : "Agent" });
+      setIcon(this.mobileMode.createSpan(), "chevron-down");
+    }
+    if (this.mobileSearch) {
+      this.mobileSearch.disabled = this.search.disabled;
+      this.mobileSearch.setAttribute("aria-pressed", String(s.searchVault));
+      this.mobileSearch.toggle(s.mode !== "story");
+    }
+    this.input.placeholder = openStory ? "输入导演指令，在下一次回应前生效…" : s.mode === "story" ? "描述场景、冲突和本场目标，让角色开始演绎…" : Platform.isMobile ? "描述任务，@ 引用笔记…" : "描述任务，或输入 @ 引用笔记…";
     this.sendButton.empty(); setIcon(this.sendButton.createSpan(), busy && !openStory ? "square" : "arrow-up"); this.sendButton.setAttribute("aria-label", openStory ? "发送导演指令" : busy ? "停止生成" : s.pendingTask ? "开始任务" : "发送");
     const sendLabel = openStory ? "发送指令" : busy ? "停止" : s.pendingTask ? "开始任务" : "发送";
-    this.sendButton.createSpan({ text: sendLabel });
+    this.sendButton.createSpan({ text: sendLabel, cls: "istart-agent-send-label" });
     this.sendButton.title = sendLabel;
     this.contextEl.empty();
-    for (const ref of s.references) {
+    if (Platform.isMobile) {
+      const first = s.references[0];
+      if (first) {
+        const name = first.path.split("/").pop()?.replace(/\.md$/i, "") ?? first.path;
+        const chip = this.button(this.contextEl, `${name}${first.selection ? " · 选区" : first.cursor ? " · 位置" : ""}`, first.selection ? "text-select" : "file-text", event => this.referenceMenu(event), true);
+        chip.addClass("istart-agent-context-chip"); chip.title = first.path;
+        chip.setAttribute("aria-label", `管理引用：${first.path}${first.selection ? " · 选区" : ""}`);
+        if (s.references.length > 1) {
+          const more = this.button(this.contextEl, `+${s.references.length - 1}`, "", event => this.referenceMenu(event), true);
+          more.setAttribute("aria-label", `查看全部 ${s.references.length} 篇引用笔记`);
+        }
+      }
+      const add = this.button(this.contextEl, "引用笔记", "at-sign", () => this.pickNote(), true);
+      add.addClass("istart-agent-add-reference");
+    } else for (const ref of s.references) {
       const chip = this.contextEl.createDiv({ cls: "istart-agent-context-chip" });
       const position = ref.cursor ? ref.cursor.content.slice(0, ref.cursor.offset).split("\n") : null;
       const location = position ? ` · 第 ${position.length} 行，第 ${position[position.length - 1].length + 1} 列` : "";
       this.button(chip, `${ref.path}${ref.selection ? " · 选区" : location}`, ref.selection ? "text-select" : "file-text", () => this.openSource(ref.path), true);
       const remove = this.button(chip, `移除引用 ${ref.path}`, "x", () => this.controller.detach(ref.path)); remove.disabled = busy || !!openStory;
     }
-    if (!s.references.length) this.contextEl.createSpan({ cls: "istart-agent-muted", text: "未引用笔记 · @ 添加上下文" });
+    if (!Platform.isMobile && !s.references.length) this.contextEl.createSpan({ cls: "istart-agent-muted", text: "未引用笔记 · @ 添加上下文" });
     if (s.mode === "story") this.contextEl.createDiv({ cls: "istart-agent-story-hint", text: `请将小说章节放在首个引用 · ${s.storyConfig?.characterPaths.length ? `${s.storyConfig.characterPaths.length}名角色` : "自动选择角色"} · 每次最多推进${s.storyConfig?.maxTurns ?? 6}次 · 剧情确认后推演角色变化` });
     if (this.historyOpen) this.renderHistory();
     this.renderMessages(s);
@@ -280,9 +387,12 @@ export class AgentView extends ItemView {
         empty.createEl("p", { text: "在下方填写本次任务参数，点击「开始任务」。结果会保留在此会话，可继续追问和调整；文件修改先预览再应用。" });
         return;
       }
-      const empty = this.messagesEl.createDiv({ cls: "istart-agent-empty" }); empty.createEl("h3", { text: s.mode === "story" ? "让角色推动故事" : "从一个问题开始" }); empty.createEl("p", { text: s.mode === "story" ? "引用小说章节，选择参演角色，描述场景。完整对白与场景叙述实时交错展开；确认剧情后生成有依据的角色卡更新预览。" : "围绕笔记提问，或让 Agent 帮你完成具体任务。" });
-      const prompts = s.mode === "story" ? ["在本章的雨夜重逢场景中，让参演角色围绕一封未寄出的信发生冲突；保留各自的动机，结尾留下一个选择。", "承接已确认剧情，让角色就刚才的决定展开对话，表现信任关系的微妙变化。"] : ["总结引用笔记，并指出值得继续研究的问题", "基于引用笔记和知识库生成一份可执行的检查表", "续写当前章节，保持原有文风", "根据选区草拟一条阅读批注"];
-      for (const prompt of prompts) this.button(empty, prompt, "arrow-up-right", () => { this.input.value = prompt; this.input.focus(); this.controller.update(s.id, { draft: prompt }); }, true);
+      const empty = this.messagesEl.createDiv({ cls: "istart-agent-empty" });
+      if (Platform.isMobile) setIcon(empty.createDiv({ cls: "istart-agent-welcome-icon" }), "sparkles");
+      empty.createEl("h3", { text: s.mode === "story" ? "让角色推动故事" : Platform.isMobile && s.references.length ? "从这篇笔记开始" : "从一个问题开始" });
+      empty.createEl("p", { text: s.mode === "story" ? "引用小说章节，选择参演角色，描述场景。完整对白与场景叙述实时交错展开；确认剧情后生成有依据的角色卡更新预览。" : "围绕笔记提问，或让 Agent 帮你完成具体任务。" });
+      const prompts = s.mode === "story" ? ["在本章的雨夜重逢场景中，让参演角色围绕一封未寄出的信发生冲突；保留各自的动机，结尾留下一个选择。", "承接已确认剧情，让角色就刚才的决定展开对话，表现信任关系的微妙变化。"] : Platform.isMobile ? ["续写当前章节，保持原有文风", "根据选区草拟一条阅读批注", "总结引用笔记，并指出值得继续研究的问题"] : ["总结引用笔记，并指出值得继续研究的问题", "基于引用笔记和知识库生成一份可执行的检查表", "续写当前章节，保持原有文风", "根据选区草拟一条阅读批注"];
+      for (const prompt of prompts) this.button(empty, prompt, "arrow-up-right", () => { this.input.value = prompt; this.resizeInput(); this.input.focus(); this.controller.update(s.id, { draft: prompt }); }, true);
     }
     for (const message of s.messages) this.renderMessage(s, message);
     if (this.controller.isRunning(s.id) && s.messages[s.messages.length - 1]?.role === "user") this.messagesEl.createDiv({ cls: "istart-agent-muted", text: "正在读取本轮上下文…" });

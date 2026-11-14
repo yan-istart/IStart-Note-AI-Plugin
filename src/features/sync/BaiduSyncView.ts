@@ -1,4 +1,4 @@
-import { ItemView, Modal, Notice, Setting, TFile, WorkspaceLeaf } from "obsidian";
+import { ItemView, Modal, Notice, Platform, Setting, TFile, WorkspaceLeaf } from "obsidian";
 import { BaiduSyncService } from "./BaiduSyncService";
 import { SyncAction } from "./BaiduSyncMeta";
 import { BaiduPanClient } from "./BaiduPanClient";
@@ -31,6 +31,9 @@ export class BaiduSyncView extends ItemView {
   private renderGeneration = 0;
   private unmountChanges?: () => void;
   private cleanupViewport?: () => void;
+  private advancedOpen = false;
+  private historyOpen = !Platform.isMobile;
+  private scopeOpen = !Platform.isMobile;
 
   constructor(leaf: WorkspaceLeaf, plugin: DeepSeekPlugin) {
     super(leaf);
@@ -86,7 +89,7 @@ export class BaiduSyncView extends ItemView {
 
     // 标题栏
     const header = root.createDiv({ cls: "istart-sync-header" });
-    header.createEl("h4", { text: "IStart 数据同步" });
+    header.createEl("h4", { text: "数据同步" });
 
     const cfg = this.plugin.settings.baiduSync;
     header.createSpan({
@@ -94,31 +97,37 @@ export class BaiduSyncView extends ItemView {
       cls: "istart-sync-mode",
     });
     root.createEl("p", { text: "存储服务：百度网盘", cls: "istart-sync-hint" });
-    if (cfg.enabled && cfg.syncEngine === "git") {
-      this.unmountChanges = mountGitChangesPanel(root.createDiv(), this.plugin.gitChanges);
-    }
     if (!cfg.enabled || !cfg.accessToken) {
       root.createEl("p", {
         text: "请先在设置 → 数据同步中启用 IStart 数据同步，并在百度网盘配置中完成授权。",
         cls: "istart-sync-hint",
       });
+      if (cfg.enabled && cfg.syncEngine === "git") this.unmountChanges = mountGitChangesPanel(root.createDiv(), this.plugin.gitChanges);
       return;
     }
 
     if (cfg.syncEngine === "git") {
       const service = new BaiduGitSyncService(this.app, cfg);
-      root.createEl("p", { text: `同步范围：整个笔记库「${this.app.vault.getName()}」，包括所有子目录的笔记与附件。`, cls: "istart-sync-hint" });
-      try {
-        const scope = service.scope();
-        root.createEl("p", { text: `本地可同步 ${scope.included} 个文件，按规则排除 ${scope.excluded} 个文件。配置与隐藏文件不参与同步。`, cls: "istart-sync-hint" });
-      } catch (error) { root.createEl("p", { text: (error as Error).message }); }
-      root.createEl("p", { text: cfg.autoSync ? "Git 版本同步 · 前台自动同步已开启" : "Git 版本同步 · 自动同步已关闭", cls: "istart-sync-hint" });
+      root.createEl("p", { text: cfg.autoSync ? "前台自动同步已开启" : "自动同步已关闭", cls: "istart-sync-hint" });
       const buttons = root.createDiv({ cls: "istart-sync-btn-row" });
       this.makeBtn(buttons, "手动同步整库", "cta", () => {
         void runGitSync(this.app, cfg, () => this.plugin.saveSettings()).then(() => this.render());
       });
       this.makeBtn(buttons, "整库版本历史", "default", () => new GitHistoryModal(this.app, cfg, () => this.render()).open());
-      const history = root.createDiv();
+      const scope = root.createEl("details", { cls: "istart-sync-scope" });
+      scope.open = this.scopeOpen;
+      scope.createEl("summary", { text: "同步范围与说明" });
+      scope.addEventListener("toggle", () => { if (scope.isConnected) this.scopeOpen = scope.open; });
+      scope.createEl("p", { text: `同步范围：整个笔记库「${this.app.vault.getName()}」，包括所有子目录的笔记与附件。`, cls: "istart-sync-hint" });
+      try {
+        const counts = service.scope();
+        scope.createEl("p", { text: `本地可同步 ${counts.included} 个文件，按规则排除 ${counts.excluded} 个文件。配置与隐藏文件不参与同步。`, cls: "istart-sync-hint" });
+      } catch (error) { scope.createEl("p", { text: (error as Error).message }); }
+      this.unmountChanges = mountGitChangesPanel(root.createDiv(), this.plugin.gitChanges);
+      const history = root.createEl("details", { cls: "istart-sync-history" });
+      history.open = this.historyOpen;
+      history.createEl("summary", { text: "最近版本" });
+      history.addEventListener("toggle", () => { if (history.isConnected) this.historyOpen = history.open; });
       void service.history().then((entries) => {
         if (!this.viewIsOpen || generation !== this.renderGeneration) return;
         if (!entries.length) history.createEl("p", { text: "尚无提交，点击手动同步整库保存第一个版本。" });
@@ -139,11 +148,16 @@ export class BaiduSyncView extends ItemView {
     // 操作按钮行
     const btnRow = root.createDiv({ cls: "istart-sync-btn-row" });
 
-    this.makeBtn(btnRow, "扫描状态", "default", () => { void this.scan(); });
-    this.makeBtn(btnRow, "强制备份", "default", () => { void this.forceBackup(); });
-    this.makeBtn(btnRow, "强制更新", "default", () => { void this.forceUpdate(); });
     this.makeBtn(btnRow, "双向同步", "cta", () => { void this.runSync(); });
-    this.makeBtn(btnRow, "强制覆盖", "default", () => { void this.forceOverwrite(); });
+    this.makeBtn(btnRow, "扫描状态", "default", () => { void this.scan(); });
+    const advanced = root.createEl("details", { cls: "istart-sync-advanced" });
+    advanced.open = this.advancedOpen;
+    advanced.createEl("summary", { text: "备份与恢复" });
+    advanced.addEventListener("toggle", () => { if (advanced.isConnected) this.advancedOpen = advanced.open; });
+    const advancedButtons = advanced.createDiv({ cls: "istart-sync-btn-row" });
+    this.makeBtn(advancedButtons, "强制备份", "default", () => { void this.forceBackup(); });
+    this.makeBtn(advancedButtons, "强制更新", "default", () => { void this.forceUpdate(); });
+    this.makeBtn(advancedButtons, "强制覆盖", "default", () => { void this.forceOverwrite(); });
 
     // 上次扫描时间
     if (this.lastScanTime) {
@@ -198,11 +212,13 @@ export class BaiduSyncView extends ItemView {
     // 状态图标 + 文件名
     const left = row.createDiv({ cls: "istart-sync-file-left" });
     left.createSpan({ text: this.actionIcon(item.action), cls: "istart-sync-file-icon" });
-    left.createSpan({
+    const name = left.createDiv({ cls: "istart-sync-file-info" });
+    name.createSpan({
       text: item.path.split("/").pop() ?? item.path,
       cls: "istart-sync-file-name",
       attr: { title: item.path },
     });
+    if (item.path.includes("/")) name.createSpan({ cls: "istart-sync-file-folder", text: item.path.slice(0, item.path.lastIndexOf("/")) });
 
     // 操作按钮
     const right = row.createDiv({ cls: "istart-sync-file-actions" });

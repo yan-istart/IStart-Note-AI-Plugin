@@ -55,6 +55,7 @@ export class AnnotationView extends ItemView {
   private listEl: HTMLElement | null = null;
   private statusEl: HTMLElement | null = null;
   private countEl: HTMLElement | null = null;
+  private filterSelect: HTMLSelectElement | null = null;
   private opened = false;
   private bodyEl: HTMLElement | null = null;
   private cleanupViewport?: () => void;
@@ -325,9 +326,16 @@ export class AnnotationView extends ItemView {
     this.createFilter(filters, "全部", "all");
     this.createFilter(filters, "高亮", "highlight");
     this.createFilter(filters, "批注", "note");
-    this.countEl = filters.createSpan({ cls: "istart-annotations-count" });
-
-    this.statusEl = body.createDiv({ cls: "istart-annotations-status" });
+    this.filterSelect = searchWrap.createEl("select", { cls: "istart-annotations-filter-select", attr: { "aria-label": "筛选批注类型" } });
+    for (const [value, label] of [["all", "全部"], ["highlight", "高亮"], ["note", "批注"]]) this.filterSelect.createEl("option", { value, text: label });
+    this.filterSelect.value = this.typeFilter;
+    this.filterSelect.addEventListener("change", () => {
+      const value = this.filterSelect!.value;
+      this.setFilter(value === "highlight" || value === "note" ? value : "all");
+    });
+    const summary = body.createDiv({ cls: "istart-annotations-summary" });
+    this.statusEl = summary.createDiv({ cls: "istart-annotations-status" });
+    this.countEl = summary.createSpan({ cls: "istart-annotations-count", attr: { "aria-live": "polite" } });
     this.listEl = body.createDiv({ cls: "istart-annotations-list" });
     this.renderList();
   }
@@ -360,11 +368,21 @@ export class AnnotationView extends ItemView {
       cls: `istart-annotations-chip${this.typeFilter === filter ? " is-active" : ""}`,
       attr: { type: "button", "aria-pressed": String(this.typeFilter === filter) },
     });
+    button.dataset.filter = filter;
     button.addEventListener("click", () => {
-      if (this.typeFilter === filter) return;
-      this.typeFilter = filter;
-      this.render();
+      this.setFilter(filter);
     });
+  }
+
+  private setFilter(filter: AnnotationTypeFilter): void {
+    if (this.typeFilter === filter) return;
+    this.typeFilter = filter;
+    if (this.filterSelect) this.filterSelect.value = filter;
+    this.contentEl.querySelectorAll<HTMLButtonElement>(".istart-annotations-chip").forEach(button => {
+      button.toggleClass("is-active", button.dataset.filter === filter);
+      button.setAttribute("aria-pressed", String(button.dataset.filter === filter));
+    });
+    this.renderList();
   }
 
   private renderList(): void {

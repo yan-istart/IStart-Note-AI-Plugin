@@ -1,4 +1,3 @@
-import { Setting } from "obsidian";
 import { CHANGE_LABELS, GitChangesController } from "./GitChangesController";
 
 export function mountGitChangesPanel(root: HTMLElement, controller: GitChangesController): () => void {
@@ -29,8 +28,12 @@ export function mountGitChangesPanel(root: HTMLElement, controller: GitChangesCo
     }
   };
   const filters = root.createDiv({ cls: "istart-git-change-filters" }); root.insertBefore(filters, list);
-  new Setting(filters).addText(text => text.setPlaceholder("筛选文件路径").onChange(value => { query = value.toLowerCase(); limit = 100; render(); }))
-    .addDropdown(drop => drop.addOptions({ all: "全部改动", added: "新增", modified: "修改", deleted: "删除" }).onChange(value => { kind = value; limit = 100; render(); }))
-    .addButton(btn => btn.setButtonText("刷新").onClick(() => { void controller.refresh(); }));
+  const search = filters.createEl("input", { type: "search", attr: { placeholder: "筛选文件路径", "aria-label": "筛选文件路径" } });
+  search.addEventListener("input", () => { query = search.value.toLowerCase(); limit = 100; render(); });
+  const select = filters.createEl("select", { attr: { "aria-label": "筛选改动类型" } });
+  for (const [value, text] of Object.entries({ all: "全部改动", added: "新增", modified: "修改", deleted: "删除" })) select.createEl("option", { value, text });
+  select.addEventListener("change", () => { kind = select.value; limit = 100; render(); });
+  const refresh = filters.createEl("button", { text: "刷新", attr: { type: "button", "aria-label": "刷新本地改动" } });
+  refresh.addEventListener("click", () => { void controller.refresh(); });
   return controller.subscribe(render);
 }
