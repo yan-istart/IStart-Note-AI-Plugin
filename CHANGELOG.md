@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Add community scorecard lint checks to local/CI validation and update development dependencies with a vulnerability-free lockfile.
 
 ### Added
+- Allow the release workflow to be started manually from GitHub Actions, reusing an existing tag or creating it at the selected commit after validating it against `manifest.json`; rerunning an existing release replaces its assets.
 - Complete Agent migration for document beautification, readonly proofreading with durable source locations, knowledge-debt statistics, existing annotation rewriting/suggestions, and manuscript classification/analysis. Remove the separate All features panel; keep existing command IDs as assistant aliases and provide inline task shortcuts.
 - Copy messages, tool results, role turns, complete previews and entire conversations; preserve text selection while streaming. Stable editor snapshots and an inline source-position picker keep insertion usable after switching focus, including inserting an existing answer at an explicitly chosen location.
 - AI typo checking for the current note or selection, with a right-sidebar original/correction list, verified source positions, click-to-select navigation, chunked long-note checking, cancellation, and stale-result protection. Available in the command palette, editor menu, and Agent shortcuts; suggestions do not modify notes.

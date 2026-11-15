@@ -4,6 +4,12 @@ on:
   push:
     tags:
       - "*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Tag to release (x.y.z). Defaults to manifest.json; created at the selected ref if missing."
+        required: false
+        type: string
 
 jobs:
   build:
@@ -14,6 +20,8 @@ jobs:
       attestations: write
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Use Node.js
         uses: actions/setup-node@v4
@@ -21,12 +29,35 @@ jobs:
           node-version: "22.x"
           cache: "npm"
 
+      - name: Resolve release tag
+        id: release
+        env:
+          INPUT_TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          tag="${INPUT_TAG:-$(node -p 'require("./manifest.json").version')}"
+          if [[ ! "$tag" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::Invalid release tag '$tag'; expected x.y.z."
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "Using existing tag $tag."
+            git checkout --force "refs/tags/$tag"
+          else
+            echo "Tag $tag will be created at $(git rev-parse --short HEAD) after a successful build."
+          fi
+          manifest_version="$(node -p 'require("./manifest.json").version')"
+          if [ "$tag" != "$manifest_version" ]; then
+            echo "::error::Tag $tag does not match manifest.json version $manifest_version at $tag."
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
       - name: Build plugin
         run: |
           npm ci
           npm run ci
           cmp manifest.json dist/manifest.json
-          test "${GITHUB_REF_NAME}" = "$(node -p 'require("./manifest.json").version')"
 
       - name: Generate artifact attestations
         uses: actions/attest-build-provenance@v4
@@ -38,16 +69,37 @@ jobs:
             dist/publishing-service.cjs
             dist/publishing-mcp.cjs
 
-      - name: Create release
+      - name: Publish release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ steps.release.outputs.tag }}
         run: |
-          tag="${GITHUB_REF#refs/tags/}"
-          assets="dist/main.js dist/manifest.json dist/publishing-service.cjs dist/publishing-mcp.cjs dist/THIRD_PARTY_NOTICES.md dist/THIRD_PARTY_PUBLISHING_NOTICES.txt"
-          if [ -f "dist/styles.css" ]; then
-            assets="$assets dist/styles.css"
+          set -euo pipefail
+          if ! git rev-parse -q --verify "refs/tags/$TAG" >/dev/null; then
+            echo "Creating tag $TAG at $(git rev-parse --short HEAD)."
+            git config user.name "github-actions[bot]"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git tag -a "$TAG" -m "$TAG"
+            git push origin "refs/tags/$TAG"
           fi
-          gh release create "$tag" \
-            --title="$tag" \
-            --generate-notes \
-            $assets
+          assets=(
+            dist/main.js
+            dist/manifest.json
+            dist/publishing-service.cjs
+            dist/publishing-mcp.cjs
+            dist/THIRD_PARTY_NOTICES.md
+            dist/THIRD_PARTY_PUBLISHING_NOTICES.txt
+          )
+          if [ -f "dist/styles.css" ]; then
+            assets+=(dist/styles.css)
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; updating assets."
+            gh release upload "$TAG" --clobber "${assets[@]}"
+          else
+            gh release create "$TAG" \
+              --verify-tag \
+              --title="$TAG" \
+              --generate-notes \
+              "${assets[@]}"
+          fi

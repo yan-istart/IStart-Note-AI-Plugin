@@ -85,13 +85,15 @@ If your change is non-trivial, please describe how you manually verified it in t
 
 ## Releasing (maintainers)
 
-Releases are tag-driven. Pushing a tag triggers `.github/workflows/release.yml`, which validates the plugin, builds `dist/`, attests all three assets, and creates a draft release. Review and publish that draft after the workflow succeeds. The release script queues this workflow and never uploads local assets.
+Releases are tag-driven. Pushing a tag triggers `.github/workflows/release.yml`, which validates the plugin, builds `dist/`, attests the assets, and publishes the GitHub release. The release script queues this workflow and never uploads local assets.
 
 Recommended flow:
 
 ```bash
-npm run release        # interactive: bump version, build, tag, push; CI creates the draft
+npm run release        # interactive: bump version, build, tag, push; CI publishes the release
 ```
+
+You can also start the same workflow manually from **Actions → Release Obsidian Plugin → Run workflow**. Select the branch or tag to build from and optionally enter a release tag (defaults to the version in `manifest.json`). The version must already be committed and match `manifest.json`; if the tag does not exist, the workflow creates it at the selected commit after a successful build. Rerunning an existing release replaces its assets.
 
 The release workflow uses `npm ci`, so any change that requires a new lockfile must be committed first.
 
