@@ -40,8 +40,8 @@ export class AgentView extends ItemView {
   private modelEl!: HTMLElement;
   private optionsSummary!: HTMLElement;
   private storySettings!: HTMLButtonElement;
-  private mobileMode?: HTMLButtonElement;
-  private mobileSearch?: HTMLButtonElement;
+  private modeButton?: HTMLButtonElement;
+  private searchButton?: HTMLButtonElement;
   private inputObserver?: ResizeObserver;
   private inputSizeKey = "";
   private historyOpen = false;
@@ -83,7 +83,7 @@ export class AgentView extends ItemView {
     this.contextEl = this.conversationEl.createDiv({ cls: "istart-agent-context", attr: { "aria-label": "本轮引用笔记" } });
     this.messagesEl = this.conversationEl.createDiv({ cls: "istart-agent-messages", attr: { "aria-label": "对话消息" } });
     const composer = this.conversationEl.createDiv({ cls: "istart-agent-composer" });
-    if (Platform.isMobile) composer.appendChild(this.contextEl);
+    composer.appendChild(this.contextEl);
     const body = composer.createDiv({ cls: "istart-agent-composer-body" });
     const shortcuts = body.createEl("details", { cls: "istart-agent-shortcuts" });
     shortcuts.createEl("summary", { text: "任务快捷入口" });
@@ -94,43 +94,34 @@ export class AgentView extends ItemView {
     this.taskEl.addEventListener("keydown", event => {
       if (!event.isComposing && (event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); this.send(); }
     });
-    const shell = Platform.isMobile ? composer.createDiv({ cls: "istart-agent-input-shell" }) : body;
+    const shell = composer.createDiv({ cls: "istart-agent-input-shell" });
     const inputRow = shell.createDiv({ cls: "istart-agent-input-row" });
-    this.input = inputRow.createEl("textarea", { attr: { placeholder: "描述任务，或输入 @ 引用笔记…", rows: Platform.isMobile ? "1" : "3", "aria-label": "发送给 AI 助手" } });
+    this.input = inputRow.createEl("textarea", { attr: { placeholder: "描述任务，@ 引用笔记…", rows: "1", "aria-label": "发送给 AI 助手" } });
     this.input.addEventListener("input", () => { const s = this.controller.active; if (s) this.controller.updateDraft(s.id, this.input.value); this.resizeInput(); this.updateSendState(); });
     this.input.addEventListener("keydown", event => {
       if (!event.isComposing && (event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); this.send(); }
       if (!event.isComposing && event.key === "@") { event.preventDefault(); this.pickNote(); }
     });
-    const actions = (Platform.isMobile ? shell : composer).createDiv({ cls: "istart-agent-composer-actions" });
-    if (Platform.isMobile) {
-      this.button(actions, "添加引用与任务快捷入口", "plus", event => this.composerMenu(event));
-      this.mobileMode = this.button(actions, "模式与检索设置", "", event => this.modeMenu(event));
-      this.mobileMode.addClass("istart-agent-mobile-mode");
-      this.mobileSearch = this.button(actions, "检索知识库", "book-open", () => {
-        const s = this.controller.active;
-        if (s && !this.search.disabled) this.controller.update(s.id, { searchVault: !s.searchVault });
-      });
-      this.mobileSearch.addClass("istart-agent-mobile-search");
-      this.mobileSearch.createSpan({ text: "知识库" });
-    } else {
-      const reference = this.button(actions, "引用笔记", "at-sign", () => this.pickNote());
-      reference.createSpan({ text: "引用", cls: "istart-agent-action-label" });
-      const current = this.button(actions, "引用当前笔记或选区", "text-select", () => this.attachCurrent());
-      current.createSpan({ text: "当前", cls: "istart-agent-action-label" });
-      const position = this.button(actions, "设置插入位置", "text-cursor-input", () => this.choosePosition());
-      position.createSpan({ text: "位置", cls: "istart-agent-action-label" });
-    }
+    const actions = shell.createDiv({ cls: "istart-agent-composer-actions" });
+    this.button(actions, "添加引用与任务快捷入口", "plus", event => this.composerMenu(event)).addClass("istart-agent-composer-menu");
+    this.modeButton = this.button(actions, "模式与检索设置", "", event => this.modeMenu(event));
+    this.modeButton.addClass("istart-agent-mode-button");
+    this.searchButton = this.button(actions, "检索知识库", "book-open", () => {
+      const s = this.controller.active;
+      if (s && !this.search.disabled) this.controller.update(s.id, { searchVault: !s.searchVault });
+    });
+    this.searchButton.addClass("istart-agent-search-button");
+    this.searchButton.createSpan({ text: "知识库" });
     const dismiss = this.button(actions, "收起键盘", "keyboard", () => {
       const active = root.ownerDocument.activeElement as HTMLElement | null;
       if (active && root.contains(active)) active.blur();
     });
     dismiss.addClass("istart-sidebar-dismiss-keyboard");
     dismiss.createSpan({ text: "收起", cls: "istart-agent-action-label" });
-    this.sendButton = this.button(Platform.isMobile ? inputRow : actions, "发送", "arrow-up", () => this.send()); this.sendButton.addClass("mod-cta", "istart-agent-send");
+    this.sendButton = this.button(inputRow, "发送", "arrow-up", () => this.send()); this.sendButton.addClass("mod-cta", "istart-agent-send");
     this.sendButton.addEventListener("pointerdown", event => { if (Platform.isMobile && root.ownerDocument.activeElement === this.input) event.preventDefault(); });
     const options = shell.createEl("details", { cls: "istart-agent-input-options" });
-    options.open = !Platform.isMobile;
+    options.open = false;
     this.optionsSummary = options.createEl("summary", { text: "模式与检索设置" });
     const meta = options.createDiv({ cls: "istart-agent-composer-meta" });
     this.mode = meta.createEl("select", { attr: { "aria-label": "执行模式" } });
@@ -151,14 +142,12 @@ export class AgentView extends ItemView {
     this.registerDomEvent(this.contentEl.ownerDocument, "selectionchange", () => this.scheduleRender());
     this.cleanupViewport = bindSidebarViewport(root);
     this.render();
-    if (Platform.isMobile) {
-      let width = 0;
-      this.inputObserver = new ResizeObserver(() => {
-        if (this.input.clientWidth === width) return;
-        width = this.input.clientWidth; this.resizeInput();
-      });
-      this.inputObserver.observe(this.input);
-    }
+    let width = 0;
+    this.inputObserver = new ResizeObserver(() => {
+      if (this.input.clientWidth === width) return;
+      width = this.input.clientWidth; this.resizeInput();
+    });
+    this.inputObserver.observe(this.input);
   }
   async onClose(): Promise<void> {
     this.storyViews.clear();
@@ -178,7 +167,7 @@ export class AgentView extends ItemView {
     catch (error) { new Notice(error instanceof Error ? error.message : String(error)); }
   }
   private resizeInput(): void {
-    if (!Platform.isMobile || !this.input) return;
+    if (!this.input) return;
     const key = `${this.input.clientWidth}/${this.input.value}`;
     if (key === this.inputSizeKey) return;
     this.inputSizeKey = key;
@@ -187,7 +176,7 @@ export class AgentView extends ItemView {
   }
   private updateSendState(): void {
     const s = this.controller.active;
-    this.sendButton.disabled = !s || s.archived || (Platform.isMobile && !s.pendingTask && (!this.controller.isRunning(s.id) || !!this.controller.openStory(s.id)) && !this.input.value.trim());
+    this.sendButton.disabled = !s || s.archived || (!s.pendingTask && (!this.controller.isRunning(s.id) || !!this.controller.openStory(s.id)) && !this.input.value.trim());
   }
   private attachCurrent(): void {
     const ref = this.controller.captureCurrent();
@@ -284,44 +273,37 @@ export class AgentView extends ItemView {
     this.mode.value = s.mode; this.mode.disabled = busy || !!s.pendingTask || !!openStory; this.search.checked = s.searchVault; this.search.disabled = busy || s.mode === "story";
     this.search.parentElement?.toggle(s.mode !== "story");
     this.storySettings.toggle(s.mode === "story"); this.storySettings.disabled = busy || s.archived || !!openStory;
-    if (this.mobileMode) {
-      this.mobileMode.empty();
-      this.mobileMode.createSpan({ text: s.mode === "story" ? "小说演绎" : s.mode === "ask" ? "问答" : "Agent" });
-      setIcon(this.mobileMode.createSpan(), "chevron-down");
+    if (this.modeButton) {
+      this.modeButton.empty();
+      this.modeButton.createSpan({ text: s.mode === "story" ? "小说演绎" : s.mode === "ask" ? "问答" : "Agent" });
+      setIcon(this.modeButton.createSpan(), "chevron-down");
     }
-    if (this.mobileSearch) {
-      this.mobileSearch.disabled = this.search.disabled;
-      this.mobileSearch.setAttribute("aria-pressed", String(s.searchVault));
-      this.mobileSearch.toggle(s.mode !== "story");
+    if (this.searchButton) {
+      this.searchButton.disabled = this.search.disabled;
+      this.searchButton.setAttribute("aria-pressed", String(s.searchVault));
+      this.searchButton.toggle(s.mode !== "story");
     }
-    this.input.placeholder = openStory ? "输入导演指令，在下一次回应前生效…" : s.mode === "story" ? "描述场景、冲突和本场目标，让角色开始演绎…" : Platform.isMobile ? "描述任务，@ 引用笔记…" : "描述任务，或输入 @ 引用笔记…";
+    this.input.placeholder = openStory ? "输入导演指令，在下一次回应前生效…" : s.mode === "story" ? "描述场景、冲突和本场目标，让角色开始演绎…" : "描述任务，@ 引用笔记…";
     this.sendButton.empty(); setIcon(this.sendButton.createSpan(), busy && !openStory ? "square" : "arrow-up"); this.sendButton.setAttribute("aria-label", openStory ? "发送导演指令" : busy ? "停止生成" : s.pendingTask ? "开始任务" : "发送");
     const sendLabel = openStory ? "发送指令" : busy ? "停止" : s.pendingTask ? "开始任务" : "发送";
     this.sendButton.createSpan({ text: sendLabel, cls: "istart-agent-send-label" });
     this.sendButton.title = sendLabel;
     this.contextEl.empty();
-    if (Platform.isMobile) {
-      const first = s.references[0];
-      if (first) {
-        const name = first.path.split("/").pop()?.replace(/\.md$/i, "") ?? first.path;
-        const chip = this.button(this.contextEl, `${name}${first.selection ? " · 选区" : first.cursor ? " · 位置" : ""}`, first.selection ? "text-select" : "file-text", event => this.referenceMenu(event), true);
-        chip.addClass("istart-agent-context-chip"); chip.title = first.path;
-        chip.setAttribute("aria-label", `管理引用：${first.path}${first.selection ? " · 选区" : ""}`);
-        if (s.references.length > 1) {
-          const more = this.button(this.contextEl, `+${s.references.length - 1}`, "", event => this.referenceMenu(event), true);
-          more.setAttribute("aria-label", `查看全部 ${s.references.length} 篇引用笔记`);
-        }
-      }
-      const add = this.button(this.contextEl, "引用笔记", "at-sign", () => this.pickNote(), true);
-      add.addClass("istart-agent-add-reference");
-    } else for (const ref of s.references) {
-      const chip = this.contextEl.createDiv({ cls: "istart-agent-context-chip" });
-      const position = ref.cursor ? ref.cursor.content.slice(0, ref.cursor.offset).split("\n") : null;
+    const first = s.references[0];
+    if (first) {
+      const name = first.path.split("/").pop()?.replace(/\.md$/i, "") ?? first.path;
+      const position = first.cursor ? first.cursor.content.slice(0, first.cursor.offset).split("\n") : null;
       const location = position ? ` · 第 ${position.length} 行，第 ${position[position.length - 1].length + 1} 列` : "";
-      this.button(chip, `${ref.path}${ref.selection ? " · 选区" : location}`, ref.selection ? "text-select" : "file-text", () => this.openSource(ref.path), true);
-      const remove = this.button(chip, `移除引用 ${ref.path}`, "x", () => this.controller.detach(ref.path)); remove.disabled = busy || !!openStory;
+      const chip = this.button(this.contextEl, `${name}${first.selection ? " · 选区" : location}`, first.selection ? "text-select" : "file-text", event => this.referenceMenu(event), true);
+      chip.addClass("istart-agent-context-chip"); chip.title = first.path;
+      chip.setAttribute("aria-label", `管理引用：${first.path}${first.selection ? " · 选区" : first.cursor ? " · 位置" : ""}`);
+      if (s.references.length > 1) {
+        const more = this.button(this.contextEl, `+${s.references.length - 1}`, "", event => this.referenceMenu(event), true);
+        more.setAttribute("aria-label", `查看全部 ${s.references.length} 篇引用笔记`);
+      }
     }
-    if (!Platform.isMobile && !s.references.length) this.contextEl.createSpan({ cls: "istart-agent-muted", text: "未引用笔记 · @ 添加上下文" });
+    const add = this.button(this.contextEl, "引用笔记", "at-sign", () => this.pickNote(), true);
+    add.addClass("istart-agent-add-reference");
     if (s.mode === "story") this.contextEl.createDiv({ cls: "istart-agent-story-hint", text: `请将小说章节放在首个引用 · ${s.storyConfig?.characterPaths.length ? `${s.storyConfig.characterPaths.length}名角色` : "自动选择角色"} · 每次最多推进${s.storyConfig?.maxTurns ?? 6}次 · 剧情确认后推演角色变化` });
     if (this.historyOpen) this.renderHistory();
     this.renderMessages(s);
@@ -388,10 +370,10 @@ export class AgentView extends ItemView {
         return;
       }
       const empty = this.messagesEl.createDiv({ cls: "istart-agent-empty" });
-      if (Platform.isMobile) setIcon(empty.createDiv({ cls: "istart-agent-welcome-icon" }), "sparkles");
-      empty.createEl("h3", { text: s.mode === "story" ? "让角色推动故事" : Platform.isMobile && s.references.length ? "从这篇笔记开始" : "从一个问题开始" });
+      setIcon(empty.createDiv({ cls: "istart-agent-welcome-icon" }), "sparkles");
+      empty.createEl("h3", { text: s.mode === "story" ? "让角色推动故事" : s.references.length ? "从这篇笔记开始" : "从一个问题开始" });
       empty.createEl("p", { text: s.mode === "story" ? "引用小说章节，选择参演角色，描述场景。完整对白与场景叙述实时交错展开；确认剧情后生成有依据的角色卡更新预览。" : "围绕笔记提问，或让 Agent 帮你完成具体任务。" });
-      const prompts = s.mode === "story" ? ["在本章的雨夜重逢场景中，让参演角色围绕一封未寄出的信发生冲突；保留各自的动机，结尾留下一个选择。", "承接已确认剧情，让角色就刚才的决定展开对话，表现信任关系的微妙变化。"] : Platform.isMobile ? ["续写当前章节，保持原有文风", "根据选区草拟一条阅读批注", "总结引用笔记，并指出值得继续研究的问题"] : ["总结引用笔记，并指出值得继续研究的问题", "基于引用笔记和知识库生成一份可执行的检查表", "续写当前章节，保持原有文风", "根据选区草拟一条阅读批注"];
+      const prompts = s.mode === "story" ? ["在本章的雨夜重逢场景中，让参演角色围绕一封未寄出的信发生冲突；保留各自的动机，结尾留下一个选择。", "承接已确认剧情，让角色就刚才的决定展开对话，表现信任关系的微妙变化。"] : ["续写当前章节，保持原有文风", "根据选区草拟一条阅读批注", "总结引用笔记，并指出值得继续研究的问题"];
       for (const prompt of prompts) this.button(empty, prompt, "arrow-up-right", () => { this.input.value = prompt; this.resizeInput(); this.input.focus(); this.controller.update(s.id, { draft: prompt }); }, true);
     }
     for (const message of s.messages) this.renderMessage(s, message);

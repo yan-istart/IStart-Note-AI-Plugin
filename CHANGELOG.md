@@ -53,6 +53,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - `PlanExecutor.ts`: applies plans to the vault and persists execution logs under `Knowledge/_Executions/`.
 
 ### Changed
+- Unify the IStart workbench sidebar across desktop and mobile: compact icon navigation, a single rounded composer with references, mode and knowledge-base controls, auto-growing input and inline send, and a pinned publishing action bar. Touch sizing and keyboard handling remain mobile-specific.
 - Agent response parsing tolerates literal newlines inside JSON strings and redundant closing braces, preserves embedded Markdown code fences, and limits format correction to two retries without consuming tool steps. Tool arguments and mode permissions remain validated.
 - Generation actions now launch existing Agent tools directly from the feature panel, commands, editor menus, floating toolbar, and writing status bar. Shared inline task cards replace separate parameter flows for projects, questions, templates, and writing settings; previews, follow-up draft revisions, regeneration, and interrupted-task recovery stay in the conversation.
 - Consolidated the panel, AI assistant, annotations, and sync ribbon entries into one IStart workbench. Assistant/Agent, annotations, and sync share one sidebar with persistent navigation; duplicate legacy sidebars are merged while existing commands and hotkeys remain available.

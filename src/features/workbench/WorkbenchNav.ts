@@ -7,8 +7,6 @@ export function renderWorkbenchNav(root: HTMLElement, plugin: DeepSeekPlugin, ac
   root.addClass("istart-sidebar-root", "istart-workbench-root");
   root.toggleClass("istart-sidebar-mobile", Platform.isMobile);
   const nav = root.createEl("nav", { cls: "istart-workbench-nav", attr: { "aria-label": "IStart 工作台" } });
-  const heading = nav.createDiv({ cls: "istart-workbench-heading" });
-  heading.createEl("strong", { text: "IStart 工作台" });
   const tabs = nav.createDiv({ cls: "istart-workbench-tabs" });
   const sections: { id: WorkbenchSection; label: string; icon: string; open: () => Promise<unknown> }[] = [
     { id: "assistant", label: "AI 助手", icon: "messages-square", open: () => plugin.activateAgentView() },

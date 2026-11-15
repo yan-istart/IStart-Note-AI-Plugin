@@ -84,7 +84,7 @@ export class PublishingView extends ItemView {
             if (value) controller.selected.add(platform.id); else controller.selected.delete(platform.id);
           }));
       }
-      const send = (Platform.isMobile ? container : root).createDiv({ cls: "istart-publishing-actions istart-publishing-send" });
+      const send = container.createDiv({ cls: "istart-publishing-actions istart-publishing-send" });
       this.button(send, "保存分发快照", () => controller.saveSnapshot());
       this.button(send, "发送到所选平台草稿", () => controller.send()).addClass("mod-cta");
     }
