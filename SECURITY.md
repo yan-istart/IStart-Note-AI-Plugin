@@ -2,7 +2,7 @@
 
 ## Supported versions
 
-Only the latest released version of IStart-Note-AI receives fixes. Please make sure you are on the latest release before reporting an issue.
+Only the latest released version of IStart Notes (启点笔记) receives fixes. Please make sure you are on the latest release before reporting an issue.
 
 | Version | Supported |
 | --- | --- |

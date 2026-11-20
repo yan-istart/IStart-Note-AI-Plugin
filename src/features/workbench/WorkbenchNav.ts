@@ -6,7 +6,7 @@ import type { WorkbenchSection } from "./WorkbenchController";
 export function renderWorkbenchNav(root: HTMLElement, plugin: DeepSeekPlugin, active: WorkbenchSection): void {
   root.addClass("istart-sidebar-root", "istart-workbench-root");
   root.toggleClass("istart-sidebar-mobile", Platform.isMobile);
-  const nav = root.createEl("nav", { cls: "istart-workbench-nav", attr: { "aria-label": "IStart 工作台" } });
+  const nav = root.createEl("nav", { cls: "istart-workbench-nav", attr: { "aria-label": "启点笔记" } });
   const tabs = nav.createDiv({ cls: "istart-workbench-tabs" });
   const sections: { id: WorkbenchSection; label: string; icon: string; open: () => Promise<unknown> }[] = [
     { id: "assistant", label: "AI 助手", icon: "messages-square", open: () => plugin.activateAgentView() },
@@ -14,6 +14,7 @@ export function renderWorkbenchNav(root: HTMLElement, plugin: DeepSeekPlugin, ac
     { id: "sync", label: "数据同步", icon: "cloud", open: () => plugin.activateSyncView() },
     { id: "publishing", label: "内容分发", icon: "send", open: () => plugin.activatePublishingView() },
   ];
+  if (!Platform.isMobile) sections.push({ id: "terminal", label: "终端", icon: "terminal", open: () => plugin.activateTerminalView() });
   for (const section of sections) {
     const button = tabs.createEl("button", {
       cls: `istart-workbench-tab${section.id === active ? " is-active" : ""}`,
@@ -21,7 +22,7 @@ export function renderWorkbenchNav(root: HTMLElement, plugin: DeepSeekPlugin, ac
     });
     setIcon(button.createSpan({ attr: { "aria-hidden": "true" } }), section.icon);
     button.createSpan({ text: section.label, cls: "istart-workbench-tab-label" });
-    button.createSpan({ text: ({ assistant: "AI 助手", annotations: "批注", sync: "同步", publishing: "分发" })[section.id], cls: "istart-workbench-short-label", attr: { "aria-hidden": "true" } });
+    button.createSpan({ text: ({ assistant: "AI 助手", annotations: "批注", sync: "同步", publishing: "分发", terminal: "终端" })[section.id], cls: "istart-workbench-short-label", attr: { "aria-hidden": "true" } });
     button.addEventListener("click", () => {
       if (section.id === active) return;
       void section.open().catch(error => new Notice(`无法切换工作台：${error instanceof Error ? error.message : String(error)}`));

@@ -1,13 +1,14 @@
 import type { SettingDefinitionItem } from "obsidian";
-import { App, Notice, PluginSettingTab, Setting, requireApiVersion } from "obsidian";
+import { App, Notice, Platform, PluginSettingTab, Setting, requireApiVersion } from "obsidian";
 import type DeepSeekPlugin from "../main";
 import type { DeepSeekSettings } from "../types";
 import type { SkillDefinition } from "../core/skills/types";
+import type { TerminalSettings } from "../features/terminal/types";
 import { BaiduAuthModal } from "../features/sync/BaiduAuthModal";
 import { renderPublishingConnection } from "../features/publishing/PublishingSettings";
 import { publishingFolder } from "../core/publishing/types";
 
-type SettingsSection = "knowledge" | "writing" | "skill" | "annotation" | "interface" | "sync" | "publishing" | "auxiliary";
+type SettingsSection = "knowledge" | "writing" | "skill" | "annotation" | "interface" | "sync" | "publishing" | "terminal" | "auxiliary";
 
 const SETTINGS_SECTIONS: { id: SettingsSection; label: string; aliases: string[] }[] = [
   { id: "publishing", label: "内容分发", aliases: ["分发服务地址", "连接本机服务", "本机服务端口", "服务访问令牌", "部署说明", "分发目录", "Wechatsync", "图文分发"] },
@@ -17,6 +18,7 @@ const SETTINGS_SECTIONS: { id: SettingsSection; label: string; aliases: string[]
   { id: "annotation", label: "批注", aliases: ["侧边栏批注", "默认批注形式", "移动端跳转后收起侧栏", "打开批注侧边栏", "使用方式"] },
   { id: "interface", label: "界面", aliases: ["悬浮工具栏", "启用悬浮工具栏", "选中文字时显示", "光标空闲时显示入口", "移动端启用"] },
   { id: "sync", label: "数据同步", aliases: ["IStart 数据同步", "启用 IStart 数据同步", "存储服务", "同步方式", "自动 Git 同步", "手动 Git 整库同步", "自动备份", "忽略规则", "单文件大小限制（MB）", "跨设备配置同步", "启动时自动拉取配置", "百度网盘配置", "App ID", "App Secret", "授权状态", "远端路径"] },
+  { id: "terminal", label: "终端", aliases: ["在终端打开", "打开终端", "命令控制台", "终端应用", "Linux 终端", "默认打开位置", "opencode", "codex"] },
   { id: "auxiliary", label: "辅助", aliases: ["AI 服务", "API Key", "Base URL", "模型", "输出风格", "Agent 对话", "打开 AI 助手侧边栏", "流式输出", "每轮工具步数上限", "上下文资料预算", "共享会话历史", "隐私与诊断"] },
 ];
 
@@ -31,7 +33,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
 
   /** Index legacy sections without rendering controls or scanning skills during registration. */
   getSettingDefinitions(): SettingDefinitionItem[] {
-    return SETTINGS_SECTIONS.map(section => ({
+    return this.visibleSections().map(section => ({
       type: "page",
       name: section.label,
       items: [{
@@ -46,6 +48,16 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
         },
       }],
     }));
+  }
+
+  /** Terminal is a desktop-only section; keep it out of mobile settings. */
+  private visibleSections() {
+    return SETTINGS_SECTIONS.filter(section => section.id !== "terminal" || Platform.isDesktopApp);
+  }
+
+  /** Let other features (e.g. the workbench terminal page) jump to a section. */
+  openSection(section: SettingsSection): void {
+    this.activeSection = section;
   }
 
   private refresh(): void {
@@ -75,7 +87,7 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
   }
 
   private renderNav(container: HTMLElement): void {
-    for (const sec of SETTINGS_SECTIONS) {
+    for (const sec of this.visibleSections()) {
       const item = container.createDiv({
         cls: `istart-settings-nav-item${this.activeSection === sec.id ? " is-active" : ""}`,
       });
@@ -110,6 +122,9 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
       case "sync":
         this.renderSync(container);
         break;
+      case "terminal":
+        this.renderTerminal(container);
+        break;
       case "auxiliary":
         this.renderAuxiliary(container);
         break;
@@ -134,6 +149,57 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
   }
 
   hide(): void { this.publishingUnsubscribe?.(); this.publishingUnsubscribe = null; }
+
+  // ══════════════════════════════════════════════════════════════
+  //  终端(桌面)
+  // ══════════════════════════════════════════════════════════════
+
+  private renderTerminal(el: HTMLElement): void {
+    new Setting(el).setName("终端（桌面）").setHeading();
+    el.createEl("p", {
+      text: "在系统终端中打开当前笔记所在目录或 Vault 根，快捷使用 opencode、codex 等命令行工具。插件只负责定位目录，不在终端中执行命令；本组设置为设备本地配置，不参与跨设备同步。",
+      attr: { style: "color: var(--text-muted); font-size: 13px; line-height: 1.5;" },
+    });
+
+    new Setting(el)
+      .setName("默认打开位置")
+      .setDesc("决定命令「在终端打开」使用的目录；「在终端打开当前笔记所在目录」与「在终端打开 Vault」始终使用明确目录，无活动笔记时回退 Vault 根。")
+      .addDropdown(dropdown => dropdown
+        .addOption("note", "当前笔记所在目录")
+        .addOption("vault", "总是 Vault 根")
+        .setValue(this.plugin.settings.terminal.defaultLocation)
+        .onChange(async value => {
+          this.plugin.settings.terminal.defaultLocation = value as TerminalSettings["defaultLocation"];
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(el)
+      .setName("终端应用（macOS）")
+      .setDesc("传给 open -a 的应用名，如 Terminal 或 iTerm。")
+      .addText(text => text
+        .setPlaceholder("Terminal")
+        .setValue(this.plugin.settings.terminal.macTerminalApp)
+        .onChange(async value => {
+          this.plugin.settings.terminal.macTerminalApp = value.trim() || "Terminal";
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(el)
+      .setName("终端命令模板（Linux）")
+      .setDesc("为空时依次尝试 gnome-terminal、konsole、x-terminal-emulator。模板按空格拆分为命令与参数，{{dir}} 代表目标目录。")
+      .addText(text => text
+        .setPlaceholder("kitty --directory {{dir}}")
+        .setValue(this.plugin.settings.terminal.linuxTerminalTemplate)
+        .onChange(async value => {
+          this.plugin.settings.terminal.linuxTerminalTemplate = value.trim();
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(el)
+      .setName("终端侧栏页")
+      .setDesc("打开侧栏「终端」页，查看当前定位目录并一键打开终端。")
+      .addButton(button => button.setButtonText("打开").onClick(() => { void this.plugin.activateTerminalView(); }));
+  }
 
   // ══════════════════════════════════════════════════════════════
   //  知识

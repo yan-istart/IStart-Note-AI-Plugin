@@ -1,8 +1,8 @@
 # 写作 Skill
 
-IStart-Note-AI 支持读取标准 **Agent Skills**。同一份 `SKILL.md` 可以同时用于：
+启点笔记(IStart Notes,原 IStart-Note-AI)支持读取标准 **Agent Skills**。同一份 `SKILL.md` 可以同时用于：
 
-- IStart-Note-AI 的写作类 AI 请求
+- 启点笔记的写作类 AI 请求
 - Codex CLI
 - OpenCode
 
@@ -162,6 +162,8 @@ Agent 的自动调用依赖 `description`。需要保证某次使用某个 Skill
 - OpenCode：`@work-example`
 
 插件端不需要显式调用，会根据 `scope` 自动注入。
+
+桌面端可从侧栏「终端」页、命令面板或右键菜单，一键在系统终端中打开当前笔记所在目录或 Vault 根，直接运行 `opencode` / `codex`（插件只定位目录，不执行命令）。
 
 ## 同步
 

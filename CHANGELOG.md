@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 - Add community scorecard lint checks to local/CI validation and update development dependencies with a vulnerability-free lockfile.
 
 ### Added
+- Assistant composer Skill panel: expand 写作 Skill in the assistant sidebar to review discovered writing skills, per-skill enable state, and the expected per-turn injection for the current note, with an inline rescan and a jump to Skill settings.
+- Desktop terminal launcher (desktop only): a sidebar 终端 tab with a launcher panel, commands (在终端打开 / 在终端打开当前笔记所在目录 / 在终端打开 Vault), and editor/file context-menu entries. Opens the system terminal in the active note's folder or the vault root without executing commands; macOS `open -a`, Windows `cmd /K`, and Linux terminal fallbacks with a clipboard-path fallback on failure. Settings include the default location, macOS terminal app, and a Linux terminal template.
 - Allow the release workflow to be started manually from GitHub Actions, reusing an existing tag or creating it at the selected commit after validating it against `manifest.json`; rerunning an existing release replaces its assets.
 - Complete Agent migration for document beautification, readonly proofreading with durable source locations, knowledge-debt statistics, existing annotation rewriting/suggestions, and manuscript classification/analysis. Remove the separate All features panel; keep existing command IDs as assistant aliases and provide inline task shortcuts.
 - Copy messages, tool results, role turns, complete previews and entire conversations; preserve text selection while streaming. Stable editor snapshots and an inline source-position picker keep insertion usable after switching focus, including inserting an existing answer at an explicitly chosen location.
@@ -54,6 +56,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
   - `PlanExecutor.ts`: applies plans to the vault and persists execution logs under `Knowledge/_Executions/`.
 
 ### Changed
+- Rename the plugin display name to 启点笔记 (IStart Notes). The plugin ID (`istart-note-ai`), install folder, command IDs, and stored data are unchanged.
 - Unify the IStart workbench sidebar across desktop and mobile: compact icon navigation, a single rounded composer with references, mode and knowledge-base controls, auto-growing input and inline send, and a pinned publishing action bar. Touch sizing and keyboard handling remain mobile-specific.
 - Agent response parsing tolerates literal newlines inside JSON strings and redundant closing braces, preserves embedded Markdown code fences, and limits format correction to two retries without consuming tool steps. Tool arguments and mode permissions remain validated.
 - Generation actions now launch existing Agent tools directly from the feature panel, commands, editor menus, floating toolbar, and writing status bar. Shared inline task cards replace separate parameter flows for projects, questions, templates, and writing settings; previews, follow-up draft revisions, regeneration, and interrupted-task recovery stay in the conversation.

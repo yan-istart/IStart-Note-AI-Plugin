@@ -1556,7 +1556,7 @@ button.istart-import-merge {
   background: var(--background-primary);
   border-bottom: 1px solid var(--background-modifier-border);
 }
-.istart-workbench-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 2px; }
+.istart-workbench-tabs { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; }
 .istart-workbench-nav .istart-workbench-tab { position: relative; display: flex; align-items: center; justify-content: center; gap: 4px; min-width: 0; min-height: 44px; padding: 4px; height: auto; font-size: var(--font-ui-small); white-space: nowrap; box-shadow: none; border: 1px solid transparent; border-radius: 0; background: transparent; }
 .istart-workbench-tab svg { width: 16px; height: 16px; vertical-align: middle; }
 .istart-workbench-nav .istart-workbench-tab.is-active { color: var(--text-accent); background: transparent; border-color: transparent; }
@@ -1943,7 +1943,7 @@ button.istart-import-merge {
 .istart-sidebar-mobile .istart-annotations-filters { display: none; }
 
 @container istart-sidebar (max-width: 420px) {
-  .istart-workbench-tabs { grid-template-columns: auto repeat(3, minmax(0, 1fr)); gap: 2px; }
+  .istart-workbench-tabs { grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px; }
   .istart-workbench-body { padding-inline: 10px; }
   .istart-workbench-body .setting-item-info { flex-basis: 100%; }
   .istart-workbench-body .setting-item-control { width: 100%; justify-content: flex-start; }
@@ -1973,3 +1973,27 @@ button.istart-import-merge {
   .istart-agent-message-actions .istart-agent-touch-label { display: inline; }
   .istart-agent-message-actions .istart-agent-icon-button { gap: 4px; }
 }
+
+/* Desktop terminal launcher panel. */
+.istart-terminal-note { color: var(--text-muted); font-size: 13px; line-height: 1.5; }
+.istart-terminal-target { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px; border: 1px solid var(--background-modifier-border); border-radius: 8px; }
+.istart-terminal-target-label { font-size: var(--font-ui-smaller); color: var(--text-muted); }
+.istart-terminal-path { font-size: var(--font-ui-small); overflow-wrap: anywhere; user-select: text; }
+.istart-terminal-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-block: 4px 8px; }
+.istart-terminal-actions button { white-space: normal; overflow-wrap: anywhere; height: auto; }
+
+/* Skill overview panel in the assistant composer. */
+.istart-agent-skill-details { border-top: 1px solid var(--background-modifier-border); }
+.istart-agent-skill-details > summary { padding: 8px 4px; color: var(--text-muted); font-size: var(--font-ui-small); cursor: pointer; }
+.istart-agent-skill-panel { display: flex; flex-direction: column; gap: 6px; padding: 2px 4px 8px; }
+.istart-agent-skill-note { margin: 0; color: var(--text-muted); font-size: var(--font-ui-smaller); line-height: 1.5; }
+.istart-agent-skill-row { display: flex; flex-direction: column; gap: 2px; padding: 6px 8px; border: 1px solid var(--background-modifier-border); border-radius: 6px; cursor: pointer; }
+.istart-agent-skill-row:hover { background: var(--background-modifier-hover); }
+.istart-agent-skill-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.istart-agent-skill-name { font-size: var(--font-ui-small); font-weight: var(--font-semibold); overflow-wrap: anywhere; }
+.istart-agent-skill-status { flex-shrink: 0; font-size: var(--font-ui-smaller); color: var(--text-accent); }
+.istart-agent-skill-status.is-off { color: var(--text-faint); }
+.istart-agent-skill-desc { font-size: var(--font-ui-smaller); color: var(--text-muted); overflow-wrap: anywhere; }
+.istart-agent-skill-preview { display: flex; flex-wrap: wrap; gap: 4px; font-size: var(--font-ui-smaller); color: var(--text-muted); line-height: 1.5; }
+.istart-agent-skill-preview-label { color: var(--text-faint); }
+.istart-agent-skill-actions { display: flex; flex-wrap: wrap; gap: 8px; }

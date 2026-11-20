@@ -1,6 +1,6 @@
-# Contributing to IStart-Note-AI
+# Contributing to IStart Notes (启点笔记)
 
-Thanks for your interest in improving IStart-Note-AI. This document covers how to set up the project, the conventions we follow, and how to send a change.
+Thanks for your interest in improving IStart Notes (formerly IStart-Note-AI). This document covers how to set up the project, the conventions we follow, and how to send a change.
 
 ## Setup
 

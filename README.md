@@ -1,4 +1,6 @@
-# IStart-Note-AI
+# IStart Notes (启点笔记)
+
+> Formerly IStart-Note-AI. The plugin ID `istart-note-ai` and the manual-install folder remain unchanged.
 
 <p align="center">
   <strong>Turn your Obsidian vault into a personal knowledge system and writing studio.</strong>
@@ -22,13 +24,13 @@
 
 ---
 
-IStart-Note-AI is an Obsidian plugin built around three business scenarios: **Knowledge** (read in), **Writing** (write out), and **Auxiliary** (cross-device support).
+IStart Notes (启点笔记, formerly IStart-Note-AI) is an Obsidian plugin built around three business scenarios: **Knowledge** (read in), **Writing** (write out), and **Auxiliary** (cross-device support).
 
 - Knowledge: turn scattered notes into a searchable, interlinked knowledge system
 - Writing: turn ideas into works — web novels, papers, long-form articles — with shared and work-specific writing skills
 - Auxiliary: AI assistant, sidebar annotations, typo checking, document beautification, model settings, IStart Data Sync
 
-> Documentation reflects the current source tree. `package.json` and `manifest.json` declare version **2.7.1**; minimum Obsidian version: **1.7.2**. The UI currently uses Chinese labels; English names below describe those controls.
+> Documentation reflects the current source tree. `package.json` and `manifest.json` declare version **2.8.6**; minimum Obsidian version: **1.7.2**. The UI currently uses Chinese labels; English names below describe those controls.
 
 ---
 
@@ -45,6 +47,7 @@ Implemented features are grouped below by capability. AI capabilities run as too
 - **Selection toolbar** — annotate, polish, expand, or explain selected text.
 - **Cursor-idle entry** — optionally expand continuation, insertion, summary, and other cursor actions.
 - **Writing status bar** — continue or generate the next chapter from chapter notes.
+- **Desktop terminal launcher** — a sidebar tab, commands, and context menus open the system terminal in the current note's folder or the vault root for quick CLI use (desktop only; the plugin only opens the directory and never runs commands).
 
 ### Agent conversations and tasks
 
@@ -61,6 +64,7 @@ Implemented features are grouped below by capability. AI capabilities run as too
 - **Task recovery** — stop generation, regenerate, or continue from saved tool checkpoints.
 - **Persistent history** — save sessions and task cards locally; optionally share history without model or Baidu credentials.
 - **Streaming replies** — optionally display incremental answers, with a full-response fallback when browser CORS prevents streaming.
+- **Skill overview panel** — expand 写作 Skill in the composer to review discovered skills, their on/off state, and this turn's expected injection; rows jump to Skill settings, with an inline rescan.
 
 ### Knowledge and reading
 
@@ -135,6 +139,7 @@ Implemented features are grouped below by capability. AI capabilities run as too
 - **Directory settings** — configure Q&A, question indexes, concepts, and writing roots.
 - **Agent preferences** — adjust streaming, tool steps, context budget, and shared history.
 - **Mobile layout** — sidebar drawers, touch controls, source navigation, keyboard sizing, and an optional floating toolbar.
+- **Desktop terminal settings** — default location, macOS terminal app, and Linux terminal template; device-local and excluded from configuration sync.
 - **Local data and privacy** — Markdown notes, separate session/settings storage, no telemetry or plugin-operated server; see [Privacy](#privacy) for data flows.
 
 ---
@@ -164,14 +169,15 @@ Beautification, proofreading, knowledge-debt checks, annotation rewriting/sugges
 - Creating an annotation requires a text selection in editing mode. Text selection in reading mode is not supported for creation, though sidebar navigation works in both modes. There is no custom highlight-color picker; existing `<mark>` colors are displayed. The vault tab reads every Markdown note on first scan and lists at most 300 results, so use search and filters in large vaults. Selections crossing blank lines, heading/list blocks, or code blocks must be annotated in smaller parts.
 - Writing skills inject only the `SKILL.md` body; `references/` and `scripts/` are not read or executed by the plugin. Codex/OpenCode auto-invocation depends on the description and is not guaranteed. `.agents` is hidden and the plugin's Git sync excludes hidden paths by default, so keep `Skills/` as the visible canonical root.
 - The floating toolbar currently covers editing mode only; reading mode uses Obsidian's native menu. It is off on mobile by default to avoid overlapping the native selection menu, handles, and keyboard toolbar. The cursor-idle trigger is off by default.
+- The terminal launcher is desktop-only. It opens the system terminal at a directory without executing commands. The macOS App Store sandboxed build may block terminal launching; the directory path is copied to the clipboard as a fallback.
 
 ---
 
 ## Quick Start
 
 1. Install the plugin (see [Installation](#installation)).
-2. Go to **Settings → IStart-Note-AI → Auxiliary → AI Service** and enter your API key.
-3. Click the single **IStart 工作台** ribbon icon to open the AI assistant, or run **打开 IStart 工作台** from Obsidian's command palette.
+2. Go to **Settings → IStart Notes → Auxiliary → AI Service** and enter your API key.
+3. Click the single **启点笔记** ribbon icon to open the AI assistant, or run **打开启点笔记** from Obsidian's command palette.
 4. Type a request in natural language, or expand **任务快捷入口** in the assistant composer.
 5. To take reading notes, select text and run **Add annotation** or **AI annotation**; switch to **批注** in the workspace to browse them.
 6. To standardize writing rules, add a `SKILL.md` under `Skills/`, then open **Settings → Skill → Rescan**.
@@ -183,7 +189,7 @@ Beautification, proofreading, knowledge-debt checks, annotation rewriting/sugges
 
 ### Community plugins
 
-If **IStart-Note-AI** appears in Settings → Community plugins → Browse, install and enable it there. Otherwise use manual installation or build from source.
+If **启点笔记 (IStart Notes)** appears in Settings → Community plugins → Browse, install and enable it there. Otherwise use manual installation or build from source.
 
 ### Manual
 
@@ -209,7 +215,7 @@ Default AI settings: Base URL `https://api.deepseek.com`, model `deepseek-flash`
 
 The model dropdown offers `deepseek-flash` (DeepSeek V4.1 Flash, recommended), `deepseek-v4-pro`, and the legacy `deepseek-v4-flash` name. On the official DeepSeek endpoint, both Flash names currently route to DeepSeek V4.1 Flash; existing selections are preserved. Model versions on other compatible endpoints depend on the provider. There is no custom-model input or provider manager. See the [official model details](https://api-docs.deepseek.com/quick_start/pricing/).
 
-Settings are organized into eight tabs:
+Settings are organized into nine tabs:
 
 | Tab | Key settings |
 | --- | --- |
@@ -220,6 +226,7 @@ Settings are organized into eight tabs:
 | **Annotations** | Default inline/footnote comment style, collapse sidebar after mobile navigation, open annotation sidebar |
 | **Interface** | Floating toolbar toggle, show on selection, cursor-idle trigger, mobile enable |
 | **Data Sync** | IStart Data Sync toggle, sync mode and rules, Baidu Pan configuration, cross-device configuration transfer |
+| **Terminal** | Default location, macOS terminal app, Linux terminal template (desktop only) |
 | **Auxiliary** | API key, Base URL, model, output style |
 
 **IStart Data Sync** is the feature name; Baidu Pan is its currently supported storage service. **Settings → Data Sync** separates:
@@ -291,6 +298,7 @@ OpenCode can also use `"skills": ["./Skills"]`. Then open **Settings → Skill �
 - Beautification and AI annotation rewriting/suggestions produce Agent previews; ordinary annotation editing remains local.
 - File-menu tasks capture the clicked note. Git badges, diffs and version history remain in the file explorer and sync page.
 - The import wizard handles source selection, splitting, cleanup and import. Classification and metadata analysis are recorded Agent tasks; closing/cancelling the wizard stops requests.
+- The sidebar 终端 tab, command palette entries, and editor/file menus open the system terminal in the active note's folder or the vault root; terminal settings stay local to the device.
 
 ### Mobile
 
@@ -305,7 +313,7 @@ OpenCode can also use `"skills": ["./Skills"]`. Then open **Settings → Skill �
 
 ### Typo checking walkthrough
 
-1. Configure your API key under **Settings → IStart-Note-AI → Auxiliary → AI Service**, open a Markdown note, and switch to editing mode.
+1. Configure your API key under **Settings → IStart Notes → Auxiliary → AI Service**, open a Markdown note, and switch to editing mode.
 2. Clear the selection to check the whole note, or select the passage you want to check.
 3. Run **错别字甄别** from Obsidian's command palette, the editor context menu, or the assistant's **校对** shortcut. Long notes are checked in chunks; the conversation shows task status and supports stopping.
 4. Click **查看校对定位** in the conversation to review the original text → correction list, for example `再接再励 → 再接再厉`, with its source line and column. Click a suggestion to open the original note and select the text. If that note is now in reading mode, navigation switches it back to editing mode.
@@ -368,7 +376,7 @@ Annotations do not create a separate folder or index. They live inside the sourc
 
 ### Multi-platform article distribution
 
-Open **IStart 工作台 → 内容分发** to preview a Markdown note and send image articles to WeChat Official Accounts, Zhihu and Bilibili column drafts through Wechatsync. No AI API key is required. Desktop connects to an independently started local service or a configured HTTPS service URL; mobile uses a remote HTTPS service URL. The companion service requires Node.js 22+ and is distributed separately; the plugin does not install or start it. The browser extension and platform logins remain required.
+Open **启点笔记 → 内容分发** to preview a Markdown note and send image articles to WeChat Official Accounts, Zhihu and Bilibili column drafts through Wechatsync. No AI API key is required. Desktop connects to an independently started local service or a configured HTTPS service URL; mobile uses a remote HTTPS service URL. The companion service requires Node.js 22+ and is distributed separately; the plugin does not install or start it. The browser extension and platform logins remain required.
 
 Publishing snapshots and image copies are created on demand under configurable `IStart/Publishing/`, with per-attempt records and recovery after lost responses. Generated publishing drafts are excluded from knowledge retrieval. Connection preferences are device-local; tokens use SecretStorage where supported, with session-only fallback on older Obsidian. Unknown delivery outcomes never trigger automatic resubmission. Setup, remote deployment, limitations and API details: [图文分发说明](./docs/publishing.md).
 
@@ -399,6 +407,8 @@ src/
     artifact/         Practical template builder
     dashboard/        Legacy dashboard component (entry moved to Agent)
     sync/             Baidu sync
+    publishing/       Article distribution (companion service connection)
+    terminal/         Desktop terminal launcher (sidebar page, commands, menus)
     command-panel/    Legacy component (no active entry)
     toolbar/          Floating editor toolbar (CodeMirror 6 ViewPlugin)
   vault/              Q&A and concept-note writer

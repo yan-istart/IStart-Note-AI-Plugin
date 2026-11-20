@@ -39,6 +39,8 @@ import { AGENT_TASKS, createAgentTask } from "./core/agent/AgentTasks";
 import { PublishingController } from "./features/publishing/PublishingController";
 import { PublishingView, PUBLISHING_VIEW_TYPE } from "./features/publishing/PublishingView";
 import { loadPublishingSettings } from "./core/publishing/types";
+import { registerTerminal } from "./features/terminal/register";
+import { loadTerminalSettings } from "./features/terminal/types";
 
 export default class DeepSeekPlugin extends Plugin {
   publishing!: PublishingController;
@@ -49,6 +51,7 @@ export default class DeepSeekPlugin extends Plugin {
   skillRegistry!: SkillRegistry;
   agent!: AgentController;
   private workbench?: WorkbenchController;
+  private settingsTab?: DeepSeekSettingsTab;
   private automaticSyncRunning = false;
   gitChanges!: GitChangesController;
   private automaticSyncMessage = "";
@@ -77,7 +80,7 @@ export default class DeepSeekPlugin extends Plugin {
       this.agent.importResult(content, reference);
       void this.activateAgentView();
     });
-    this.addCommand({ id: "open-workbench", name: "打开 IStart 工作台", callback: () => this.openAssistant() });
+    this.addCommand({ id: "open-workbench", name: "打开启点笔记", callback: () => this.openAssistant() });
     this.addCommand({ id: "agent-new-session", name: "新建 AI 会话", callback: () => { void this.activateAgentView(undefined, true); } });
     this.addCommand({ id: "agent-stop", name: "停止当前 AI 会话生成", callback: () => { const s = this.agent.active; if (s) this.agent.stop(s.id); } });
     this.addCommand({ id: "ai-assistant-quick", name: "打开 AI 助手（兼容快捷命令）", callback: () => this.openQuickAssistant() });
@@ -122,12 +125,14 @@ export default class DeepSeekPlugin extends Plugin {
     this.registerView(PUBLISHING_VIEW_TYPE, leaf => new PublishingView(leaf, this));
     this.registerView(ANNOTATION_VIEW_TYPE, (leaf) => new AnnotationView(leaf, this));
     this.registerView(TYPO_CHECK_VIEW_TYPE, (leaf) => new TypoCheckView(leaf, this));
+    registerTerminal(this);
     this.app.workspace.onLayoutReady(() => {
-      void this.workbenchController.consolidate().catch(error => new Notice(`工作台恢复失败：${(error as Error).message}`));
+      void this.workbenchController.consolidate().catch(error => new Notice(`侧栏恢复失败：${(error as Error).message}`));
     });
     this.registerInterval(window.setInterval(() => { void this.runAutomaticGitSync(); }, 60_000));
     this.app.workspace.onLayoutReady(() => { void this.runAutomaticGitSync(); });
-    this.addSettingTab(new DeepSeekSettingsTab(this.app, this));
+    this.settingsTab = new DeepSeekSettingsTab(this.app, this);
+    this.addSettingTab(this.settingsTab);
     registerQuickIcons();
     registerAllActions(this, ALL_ACTIONS);
     this.registerEditorExtension(createFloatingToolbarExtension(this));
@@ -370,6 +375,30 @@ export default class DeepSeekPlugin extends Plugin {
     if (file) await this.publishing.action(() => this.publishing.prepare(file));
   }
 
+  // ── 终端(桌面) ────────────────────────────────────────────
+
+  /** 打开侧栏「终端」页,一键在系统终端中打开当前笔记目录或 Vault 根。 */
+  async activateTerminalView(): Promise<void> {
+    await this.activateWorkbench("terminal");
+  }
+
+  /** 打开设置并定位到「终端」分组(由终端侧栏页跳转)。 */
+  openTerminalSettings(): void {
+    this.openSettingsSection("terminal");
+  }
+
+  /** 打开设置并定位到「Skill」分组(由助手 Skill 面板跳转)。 */
+  openSkillSettings(): void {
+    this.openSettingsSection("skill");
+  }
+
+  private openSettingsSection(section: "terminal" | "skill"): void {
+    this.settingsTab?.openSection(section);
+    const setting = (this.app as unknown as { setting: { open(): void; openTabById(id: string): void } }).setting;
+    setting.open();
+    setting.openTabById("istart-note-ai");
+  }
+
   async beautifyCurrentNote() { await this.startAgentAction("beautify-note"); }
 
   // ── 执行模块入口已移除(v3.0)——原 ExecutionPlan 管线失效,详见 docs/design-writing-scenario.md
@@ -385,6 +414,7 @@ export default class DeepSeekPlugin extends Plugin {
     this.settings.baiduSync = loadBaiduSyncConfig(saved?.baiduSync);
     this.settings.agent = loadAgentSettings(saved?.agent);
     this.settings.publishing = loadPublishingSettings(saved?.publishing);
+    this.settings.terminal = loadTerminalSettings(saved?.terminal);
     if (this.settings.baiduSync.enabled && this.settings.baiduSync.accessToken && this.settings.baiduSync.autoPullConfig) {
       void this.pullConfig(true);
     }

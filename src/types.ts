@@ -1,8 +1,10 @@
 import { DEFAULT_AGENT_SETTINGS, type AgentSettings } from "./core/agent/types";
 import { DEFAULT_PUBLISHING_SETTINGS, type PublishingSettings } from "./core/publishing/types";
+import { DEFAULT_TERMINAL_SETTINGS, type TerminalSettings } from "./features/terminal/types";
 export interface DeepSeekSettings {
   publishing: PublishingSettings;
   agent: AgentSettings;
+  terminal: TerminalSettings;
   apiKey: string;
   baseUrl: string;
   model: "deepseek-flash" | "deepseek-v4-flash" | "deepseek-v4-pro";
@@ -142,6 +144,7 @@ export function loadBaiduSyncConfig(saved?: Partial<BaiduSyncConfig>): BaiduSync
 export const DEFAULT_SETTINGS: DeepSeekSettings = {
   publishing: { ...DEFAULT_PUBLISHING_SETTINGS },
   agent: { ...DEFAULT_AGENT_SETTINGS },
+  terminal: { ...DEFAULT_TERMINAL_SETTINGS },
   apiKey: "",
   baseUrl: "https://api.deepseek.com",
   model: "deepseek-flash",

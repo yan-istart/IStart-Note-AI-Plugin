@@ -7,6 +7,7 @@ vi.mock("obsidian", () => ({
   PluginSettingTab: class { containerEl = { addClass: vi.fn() }; },
   Setting: class {},
   Notice: class {},
+  Platform: { isDesktopApp: true },
   requireApiVersion: vi.fn(),
 }));
 vi.mock("../features/sync/BaiduAuthModal", () => ({ BaiduAuthModal: class {} }));
@@ -17,9 +18,9 @@ describe("settings search compatibility", () => {
     const plugin = new Proxy({}, { get: () => { throw new Error("Search indexing must not access plugin services"); } });
     const tab = new DeepSeekSettingsTab({} as App, plugin as DeepSeekPlugin);
     const pages = tab.getSettingDefinitions();
-    expect(pages).toHaveLength(8);
+    expect(pages).toHaveLength(9);
     const aliases = pages.flatMap(page => "type" in page && page.type === "page" ? page.items?.flatMap(item => "aliases" in item ? item.aliases ?? [] : []) ?? [] : []);
-    expect(aliases).toEqual(expect.arrayContaining(["API Key", "Base URL", "默认续写字数", "Skill 根目录", "默认批注形式", "移动端启用", "同步方式", "App Secret", "分发服务地址", "连接本机服务", "部署说明"]));
+    expect(aliases).toEqual(expect.arrayContaining(["API Key", "Base URL", "默认续写字数", "Skill 根目录", "默认批注形式", "移动端启用", "同步方式", "App Secret", "分发服务地址", "连接本机服务", "部署说明", "在终端打开"]));
   });
 
   it("renders a search result in the matching section only when opened", () => {

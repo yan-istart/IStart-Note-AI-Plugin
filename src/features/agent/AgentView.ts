@@ -15,6 +15,9 @@ import { renderAgentTaskForm } from "./AgentTaskForm";
 import { destructiveButton } from "../../ui/compat";
 import { AgentPositionModal } from "./AgentPositionModal";
 import { messageText, conversationText } from "../../core/agent/ClipboardText";
+import { selectSkills } from "../../core/skills/SkillSelector";
+import { resolveWritingScope } from "../../core/skills/WritingScope";
+import type { SkillDefinition } from "../../core/skills/types";
 
 export const AGENT_VIEW_TYPE = WORKBENCH_VIEWS.assistant;
 const AGENT_SHORTCUTS = [
@@ -52,13 +55,18 @@ export class AgentView extends ItemView {
   private markdown?: Component;
   private renderedMessages = "";
   private openDetails = new Set<string>();
+  private skillDetails!: HTMLDetailsElement;
+  private skillSummary!: HTMLElement;
+  private skillPanel!: HTMLElement;
+  private skillGeneration = 0;
+  private skillSummaryGeneration = 0;
   private cleanupViewport?: () => void;
   private taskEl!: HTMLElement;
   private renderedTask = "";
   private storyViews = new Map<string, StorySceneView>();
   constructor(leaf: WorkspaceLeaf, private plugin: DeepSeekPlugin) { super(leaf); this.controller = plugin.agent; }
   getViewType(): string { return AGENT_VIEW_TYPE; }
-  getDisplayText(): string { return "IStart 工作台"; }
+  getDisplayText(): string { return "启点笔记"; }
   getIcon(): string { return "istart-assistant"; }
   async onOpen(): Promise<void> {
     this.renderedTask = "";
@@ -90,6 +98,10 @@ export class AgentView extends ItemView {
     const taskChoices = shortcuts.createDiv({ cls: "istart-agent-shortcut-list" });
     for (const [id, label] of AGENT_SHORTCUTS) this.button(taskChoices, label, "sparkles", () => this.plugin.startAgentAction(id, null), true);
     this.button(taskChoices, "导入原稿", "file-input", () => this.plugin.openImportNovel(), true);
+    this.skillDetails = body.createEl("details", { cls: "istart-agent-skill-details" });
+    this.skillSummary = this.skillDetails.createEl("summary", { text: "写作 Skill" });
+    this.skillPanel = this.skillDetails.createDiv({ cls: "istart-agent-skill-panel" });
+    this.skillDetails.addEventListener("toggle", () => { if (this.skillDetails.open) void this.renderSkillPanel(); });
     this.taskEl = body.createDiv({ cls: "istart-agent-task" });
     this.taskEl.addEventListener("keydown", event => {
       if (!event.isComposing && (event.metaKey || event.ctrlKey) && event.key === "Enter") { event.preventDefault(); this.send(); }
@@ -265,6 +277,7 @@ export class AgentView extends ItemView {
     this.taskEl.toggle(!!s.pendingTask);
     this.input.toggle(!s.pendingTask);
     this.modelEl.setText(this.plugin.settings.model);
+    this.refreshSkillSummary();
     this.updateSendState();
     this.resizeInput();
     if (s.archived) this.statusEl.setText("会话已归档，可在会话操作中恢复后继续");
@@ -319,6 +332,78 @@ export class AgentView extends ItemView {
       this.button(row, `管理会话 ${s.title}`, "more-horizontal", event => this.sessionMenu(event, s));
     }
     if (!sessions.length) this.historyList.createDiv({ cls: "istart-agent-empty", text: "没有匹配的会话" });
+  }
+
+  /** 更新输入区「写作 Skill」折叠条的摘要:已启用 / 已发现数量。 */
+  private refreshSkillSummary(): void {
+    const generation = ++this.skillSummaryGeneration;
+    void this.plugin.skillRegistry.ensureLoaded().then(skills => {
+      if (generation !== this.skillSummaryGeneration || !this.skillSummary?.isConnected) return;
+      const settings = this.plugin.settings.skills;
+      const enabledCount = skills.filter(skill => !settings.disabledSkillIds.includes(skill.id)).length;
+      this.skillSummary.setText(settings.enabled
+        ? `写作 Skill · ${enabledCount} / ${skills.length} 已启用`
+        : "写作 Skill · 已关闭");
+    }).catch(() => {});
+  }
+
+  /** 渲染 Skill 面板:已发现技能清单、启停状态与本轮预计注入预览。 */
+  private async renderSkillPanel(): Promise<void> {
+    const container = this.skillPanel;
+    const generation = ++this.skillGeneration;
+    container.empty();
+    const settings = this.plugin.settings.skills;
+    const skills = await this.plugin.skillRegistry.ensureLoaded().catch(() => [] as SkillDefinition[]);
+    if (generation !== this.skillGeneration || !container.isConnected) return;
+    container.empty();
+
+    if (!settings.enabled) {
+      container.createEl("p", { text: "Skill 自动附带已关闭。开启后，符合条件的写作 Skill 会注入写作类 AI 请求。", cls: "istart-agent-skill-note" });
+    }
+    if (!skills.length) {
+      container.createEl("p", { text: "还没有发现 Skill。新建 Skills/<id>/SKILL.md，或把 Skill 放到 .agents/skills。", cls: "istart-agent-skill-note" });
+    }
+
+    const disabled = new Set(settings.disabledSkillIds);
+    for (const skill of skills) {
+      const row = container.createDiv({ cls: "istart-agent-skill-row", attr: { title: "点击打开设置 → Skill" } });
+      const head = row.createDiv({ cls: "istart-agent-skill-head" });
+      head.createSpan({ text: skill.name, cls: "istart-agent-skill-name" });
+      const off = disabled.has(skill.id);
+      head.createSpan({ text: off ? "已停用" : "已启用", cls: `istart-agent-skill-status${off ? " is-off" : ""}` });
+      row.createSpan({ text: `${this.skillScopeLabel(skill)} · ${skill.description || "无描述"}`, cls: "istart-agent-skill-desc" });
+      row.addEventListener("click", () => this.plugin.openSkillSettings());
+    }
+
+    const preview = container.createDiv({ cls: "istart-agent-skill-preview" });
+    preview.createSpan({ text: "本轮预计注入：", cls: "istart-agent-skill-preview-label" });
+    const previewText = preview.createSpan();
+    previewText.setText("根据当前笔记与模式计算中…");
+    const activeFile = this.app.workspace.getActiveFile();
+    void resolveWritingScope(this.app, activeFile).then(scope => {
+      if (generation !== this.skillGeneration || !previewText.isConnected) return;
+      if (!settings.enabled) {
+        previewText.setText("已关闭");
+        return;
+      }
+      const selected = selectSkills(skills, { feature: scope ? "writing" : "assistant", userPrompt: "", writingScope: scope }, settings);
+      previewText.setText(selected.length
+        ? selected.map(skill => skill.name).join(" · ")
+        : "无（非写作场景，或没有匹配且启用的 Skill）");
+    });
+
+    const actions = container.createDiv({ cls: "istart-agent-skill-actions" });
+    this.button(actions, "重新扫描", "refresh-cw", async () => {
+      this.plugin.skillRegistry.invalidate();
+      await this.renderSkillPanel();
+    }, true);
+    this.button(actions, "管理 Skill", "settings", () => this.plugin.openSkillSettings(), true);
+  }
+
+  private skillScopeLabel(skill: SkillDefinition): string {
+    if (skill.scope === "project") return `作品：${skill.project || skill.projectPath || skill.id}`;
+    if (skill.scope === "genre") return `体裁：${skill.genre || "全部"}`;
+    return "通用";
   }
   private async copy(text: string): Promise<void> {
     const clipboard = this.contentEl.ownerDocument.defaultView?.navigator.clipboard;

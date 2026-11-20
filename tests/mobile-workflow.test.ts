@@ -126,7 +126,7 @@ describe("unified workbench entry points", () => {
     });
     registerAllActions(doc.plugin, ALL_ACTIONS);
     expect(ribbons).toHaveLength(1);
-    expect(ribbons[0][1]).toBe("IStart 工作台");
+    expect(ribbons[0][1]).toBe("启点笔记");
     ribbons[0][2]();
     expect(assistant).toHaveBeenCalledTimes(1);
     expect(ui.panels).toHaveLength(0);

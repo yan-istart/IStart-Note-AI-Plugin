@@ -50,7 +50,7 @@ export function registerAllActions(plugin: DeepSeekPlugin, actions: ActionDef[])
       for (const action of visible) {
         menu.addItem((item) => {
           item
-            .setTitle(`IStart-Note-AI: ${action.label}`)
+            .setTitle(`启点笔记：${action.label}`)
             .setIcon(action.icon)
             .onClick(() => action.run(ctx));
         });
@@ -72,7 +72,7 @@ export function registerAllActions(plugin: DeepSeekPlugin, actions: ActionDef[])
       for (const action of visible) {
         menu.addItem((item) => {
           item
-            .setTitle(`IStart-Note-AI: ${action.label}`)
+            .setTitle(`启点笔记：${action.label}`)
             .setIcon(action.icon)
             .onClick(() => action.run(ctx));
         });
@@ -88,7 +88,7 @@ export function registerAllActions(plugin: DeepSeekPlugin, actions: ActionDef[])
     callback: () => openPanel(plugin, actions),
   });
 
-  plugin.addRibbonIcon("istart-assistant", "IStart 工作台", () => plugin.openAssistant());
+  plugin.addRibbonIcon("istart-assistant", "启点笔记", () => plugin.openAssistant());
 }
 
 /** Compatibility alias for integrations that used the removed panel. */

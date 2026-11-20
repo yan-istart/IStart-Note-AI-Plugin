@@ -65,7 +65,7 @@ export class AnnotationView extends ItemView {
   }
 
   getViewType(): string { return ANNOTATION_VIEW_TYPE; }
-  getDisplayText(): string { return "IStart 工作台"; }
+  getDisplayText(): string { return "启点笔记"; }
   getIcon(): string { return "istart-assistant"; }
 
   onOpen(): Promise<void> {
