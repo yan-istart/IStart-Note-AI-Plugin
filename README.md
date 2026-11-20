@@ -1,6 +1,6 @@
 # IStart Notes (启点笔记)
 
-> Formerly IStart-Note-AI. The plugin ID `istart-note-ai` and the manual-install folder remain unchanged.
+> Brand name: 启点笔记 (IStart Notes). The community store requires the `manifest.json` display name to stay **IStart-Note-AI**, so Obsidian settings and the store keep showing that name. The plugin ID `istart-note-ai` and the manual-install folder remain unchanged.
 
 <p align="center">
   <strong>Turn your Obsidian vault into a personal knowledge system and writing studio.</strong>
@@ -24,7 +24,7 @@
 
 ---
 
-IStart Notes (启点笔记, formerly IStart-Note-AI) is an Obsidian plugin built around three business scenarios: **Knowledge** (read in), **Writing** (write out), and **Auxiliary** (cross-device support).
+IStart Notes (启点笔记) is an Obsidian plugin built around three business scenarios: **Knowledge** (read in), **Writing** (write out), and **Auxiliary** (cross-device support). The community store listing and Obsidian settings keep the display name IStart-Note-AI.
 
 - Knowledge: turn scattered notes into a searchable, interlinked knowledge system
 - Writing: turn ideas into works — web novels, papers, long-form articles — with shared and work-specific writing skills
@@ -176,7 +176,7 @@ Beautification, proofreading, knowledge-debt checks, annotation rewriting/sugges
 ## Quick Start
 
 1. Install the plugin (see [Installation](#installation)).
-2. Go to **Settings → IStart Notes → Auxiliary → AI Service** and enter your API key.
+2. Go to **Settings → IStart-Note-AI → Auxiliary → AI Service** and enter your API key.
 3. Click the single **启点笔记** ribbon icon to open the AI assistant, or run **打开启点笔记** from Obsidian's command palette.
 4. Type a request in natural language, or expand **任务快捷入口** in the assistant composer.
 5. To take reading notes, select text and run **Add annotation** or **AI annotation**; switch to **批注** in the workspace to browse them.
@@ -189,7 +189,7 @@ Beautification, proofreading, knowledge-debt checks, annotation rewriting/sugges
 
 ### Community plugins
 
-If **启点笔记 (IStart Notes)** appears in Settings → Community plugins → Browse, install and enable it there. Otherwise use manual installation or build from source.
+If **IStart-Note-AI** (brand name 启点笔记 / IStart Notes) appears in Settings → Community plugins → Browse, install and enable it there. Otherwise use manual installation or build from source.
 
 ### Manual
 
@@ -313,7 +313,7 @@ OpenCode can also use `"skills": ["./Skills"]`. Then open **Settings → Skill �
 
 ### Typo checking walkthrough
 
-1. Configure your API key under **Settings → IStart Notes → Auxiliary → AI Service**, open a Markdown note, and switch to editing mode.
+1. Configure your API key under **Settings → IStart-Note-AI → Auxiliary → AI Service**, open a Markdown note, and switch to editing mode.
 2. Clear the selection to check the whole note, or select the passage you want to check.
 3. Run **错别字甄别** from Obsidian's command palette, the editor context menu, or the assistant's **校对** shortcut. Long notes are checked in chunks; the conversation shows task status and supports stopping.
 4. Click **查看校对定位** in the conversation to review the original text → correction list, for example `再接再励 → 再接再厉`, with its source line and column. Click a suggestion to open the original note and select the text. If that note is now in reading mode, navigation switches it back to editing mode.

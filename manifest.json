@@ -1,9 +1,9 @@
 {
   "id": "istart-note-ai",
-  "name": "启点笔记",
-  "version": "2.9.0",
+  "name": "IStart-Note-AI",
+  "version": "2.9.1",
   "minAppVersion": "1.7.2",
-  "description": "知识沉淀、创作写作与跨设备辅助的 AI 笔记插件(原 IStart-Note-AI):Agent 助手、写作规划、写作 Skill、批注、错别字甄别、数据同步、内容分发与桌面终端快捷入口.",
+  "description": "知识沉淀、创作写作与跨设备辅助的 AI 笔记插件(品牌名「启点笔记 / IStart Notes」):Agent 助手、写作规划、写作 Skill、批注、错别字甄别、数据同步、内容分发与桌面终端快捷入口.",
   "author": "Yan",
   "isDesktopOnly": false
 }

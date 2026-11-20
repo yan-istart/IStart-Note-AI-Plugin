@@ -2,7 +2,7 @@
 
 _最近更新：2026-11-14。[English →](./PRIVACY.md)_
 
-本文档描述启点笔记(IStart Notes,原名 IStart-Note-AI)处理哪些数据、数据流向哪里、以及如何控制。插件运行在 Obsidian 客户端内，连接独立部署的配套分发服务。没有开发者运营的服务器，不收集分析数据，也不上报遥测。
+本文档描述启点笔记(IStart Notes;Obsidian 中显示名保持 IStart-Note-AI)处理哪些数据、数据流向哪里、以及如何控制。插件运行在 Obsidian 客户端内，连接独立部署的配套分发服务。没有开发者运营的服务器，不收集分析数据，也不上报遥测。
 
 ## 概览
 
@@ -23,7 +23,7 @@ _最近更新：2026-11-14。[English →](./PRIVACY.md)_
 
 ## 发送到 AI 服务的数据
 
-触发 AI 功能时，插件会向**设置 → 启点笔记 → Base URL**（默认 `https://api.deepseek.com/v1/chat/completions`）发起 HTTPS 请求。
+触发 AI 功能时，插件会向**设置 → IStart-Note-AI → Base URL**（默认 `https://api.deepseek.com/v1/chat/completions`）发起 HTTPS 请求。
 
 请求体可能包含：
 
@@ -64,7 +64,7 @@ Agent 请求会把预算内的对话历史或摘要、引用内容、工具结�
 
 ## 上传到百度网盘的数据
 
-IStart 数据同步**默认关闭**。在**设置 → 启点笔记 → 数据同步**中启用，并在「百度网盘配置」中授权时，你需要提供：
+IStart 数据同步**默认关闭**。在**设置 → IStart-Note-AI → 数据同步**中启用，并在「百度网盘配置」中授权时，你需要提供：
 
 - 在 [百度网盘开放平台](https://pan.baidu.com/union) 注册的 **App ID** 与 **App Secret**。
 - 一次性 OAuth 授权码，插件会换取 `accessToken` 与 `refreshToken`。

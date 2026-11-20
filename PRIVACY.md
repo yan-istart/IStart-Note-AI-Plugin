@@ -2,7 +2,7 @@
 
 _Last updated: 2026-11-14. [简体中文版本 →](./PRIVACY.zh-CN.md)_
 
-This document describes what data IStart Notes (启点笔记, formerly IStart-Note-AI) handles, where it goes, and how to control it. The plugin runs inside your Obsidian client and connects to an independently deployed companion publishing service. There are no developer-operated servers, analytics, or telemetry.
+This document describes what data IStart Notes (启点笔记; the Obsidian display name stays IStart-Note-AI) handles, where it goes, and how to control it. The plugin runs inside your Obsidian client and connects to an independently deployed companion publishing service. There are no developer-operated servers, analytics, or telemetry.
 
 ## Summary
 
@@ -24,7 +24,7 @@ Disconnects and uncertain outcomes do not automatically resubmit articles. Query
 
 ## What is sent to the AI provider
 
-When you trigger an AI feature, the plugin makes an HTTPS request to the chat completions endpoint configured under **Settings → IStart Notes → Base URL** (default: `https://api.deepseek.com/v1/chat/completions`).
+When you trigger an AI feature, the plugin makes an HTTPS request to the chat completions endpoint configured under **Settings → IStart-Note-AI → Base URL** (default: `https://api.deepseek.com/v1/chat/completions`).
 
 The request body may include:
 
@@ -65,7 +65,7 @@ Shared history is off by default. Enabling it writes `IStart/Agent Sessions/hist
 
 ## What is sent to Baidu Cloud
 
-IStart Data Sync is **disabled by default**. Baidu Pan is the currently supported storage service. When you enable sync under **Settings → IStart Notes → Data Sync** and authorize it under **Baidu Pan configuration**, you supply:
+IStart Data Sync is **disabled by default**. Baidu Pan is the currently supported storage service. When you enable sync under **Settings → IStart-Note-AI → Data Sync** and authorize it under **Baidu Pan configuration**, you supply:
 
 - An **App ID** and **App Secret** from the [Baidu Pan Open Platform](https://pan.baidu.com/union).
 - An OAuth authorization code that the plugin exchanges for an `accessToken` and `refreshToken`.

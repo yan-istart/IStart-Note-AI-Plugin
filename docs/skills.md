@@ -1,6 +1,6 @@
 # 写作 Skill
 
-启点笔记(IStart Notes,原 IStart-Note-AI)支持读取标准 **Agent Skills**。同一份 `SKILL.md` 可以同时用于：
+启点笔记(IStart Notes)支持读取标准 **Agent Skills**。同一份 `SKILL.md` 可以同时用于：
 
 - 启点笔记的写作类 AI 请求
 - Codex CLI
