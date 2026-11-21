@@ -7,6 +7,9 @@ import { BaiduPanClient, BaiduFileEntry } from "./BaiduPanClient";
 import { BaiduSyncMeta } from "./BaiduSyncMeta";
 import { ensureDirectory } from "./ObsidianGitFs";
 import { withFileSyncLock } from "./FileSyncLock";
+import {
+  CONFIG_FILENAME, controlDir, CONTROL_PATH_PATTERN, legacyMetaRemotePath, META_FILENAME, metaRemotePath,
+} from "./SyncPaths";
 
 export interface FileConflict extends SyncConflict {
   localBytes?: ArrayBuffer;
@@ -35,8 +38,8 @@ export class FileConflictService {
     if (this.scope !== this.settingsKey() || !this.config.enabled || this.config.syncEngine === "git") throw new Error("同步设置已变化，请重新扫描冲突");
     assertNotePath(path);
     if (path === this.app.vault.configDir || path.startsWith(`${this.app.vault.configDir}/`)
-      || /^(?:_istart-git|_plugin|_obsidian-config)(?:\/|$)/.test(path)
-      || path === "istart-sync-meta.json" || path === "istart-config.json"
+      || CONTROL_PATH_PATTERN.test(path)
+      || path === META_FILENAME || path === CONFIG_FILENAME
       || size > this.config.fileSizeLimitMB * 1024 * 1024
       || (this.config.ignorePattern && new RegExp(this.config.ignorePattern).test(path))) {
       throw new Error(`文件超出同步范围：${path}`);
@@ -118,10 +121,14 @@ export class FileConflictService {
     await this.app.vault.adapter.write(`${recoveryPath}/manifest.json`, JSON.stringify({ createdAt: new Date().toISOString(), remotePath: this.root, files: manifest }, null, 2));
     // Backup I/O can take time; check the whole batch again before starting writes.
     await verify();
-    const metaPath = `${this.root}/istart-sync-meta.json`;
+    const metaPath = metaRemotePath(this.root);
+    const legacyPath = legacyMetaRemotePath(this.root);
     const metaEntries = await this.entries();
-    const metaBytes = metaEntries.has(metaPath) ? await this.client.downloadFile(metaPath) : undefined;
+    let metaBytes = metaEntries.has(metaPath) ? await this.client.downloadFile(metaPath) : undefined;
     if (metaBytes === null) throw new Error("读取同步元数据失败，未应用冲突方案");
+    const legacyBytes = metaBytes === undefined && metaEntries.has(legacyPath) ? await this.client.downloadFile(legacyPath) : undefined;
+    if (legacyBytes === null) throw new Error("读取同步元数据失败，未应用冲突方案");
+    if (metaBytes === undefined && legacyBytes !== undefined) metaBytes = legacyBytes;
     const meta = new BaiduSyncMeta(metaBytes ? new TextDecoder().decode(metaBytes) : undefined);
     const resolvedKeys: string[] = [], errors: string[] = [];
     const completed: { conflict: FileConflict; bytes?: ArrayBuffer; mtime: number }[] = [];
@@ -168,7 +175,9 @@ export class FileConflictService {
         else if (entry) meta.recordSync(conflict.path, mtime, entry.server_mtime, bytes.byteLength);
         resolvedKeys.push(conflict.key);
       }
+      await this.client.mkdir(controlDir(this.root));
       const saved = await this.client.uploadFile(new TextEncoder().encode(meta.toJSON()).buffer, metaPath);
+      if (saved && legacyBytes !== undefined) await this.client.deleteFile(legacyPath);
       if (!saved) throw new Error("冲突内容已写入，但同步元数据保存失败，请重新读取冲突并确认");
     } catch (error) { throw new Error(`${(error as Error).message}。恢复副本：${recoveryPath}`); }
 

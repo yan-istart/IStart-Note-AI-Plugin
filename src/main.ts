@@ -41,6 +41,7 @@ import { PublishingView, PUBLISHING_VIEW_TYPE } from "./features/publishing/Publ
 import { loadPublishingSettings } from "./core/publishing/types";
 import { registerTerminal } from "./features/terminal/register";
 import { loadTerminalSettings } from "./features/terminal/types";
+import { TerminalEnvironment, systemTerminalIo } from "./features/terminal/environment";
 
 export default class DeepSeekPlugin extends Plugin {
   publishing!: PublishingController;
@@ -50,6 +51,8 @@ export default class DeepSeekPlugin extends Plugin {
   /** Local Agent Skills discovered from Skills/ and .agents/skills. */
   skillRegistry!: SkillRegistry;
   agent!: AgentController;
+  /** 桌面端内嵌终端环境(服务下载/启动/复用),移动端不创建。 */
+  terminal!: TerminalEnvironment;
   private workbench?: WorkbenchController;
   private settingsTab?: DeepSeekSettingsTab;
   private automaticSyncRunning = false;
@@ -66,6 +69,7 @@ export default class DeepSeekPlugin extends Plugin {
     this.registerSkillRuntime();
 
     this.agent = new AgentController(this);
+    this.terminal = new TerminalEnvironment(systemTerminalIo(), this.manifest.version, () => this.settings.terminal, () => this.terminalPluginDir());
     const activeMarkdown = this.app.workspace.getActiveViewOfType(MarkdownView);
     if (activeMarkdown) this.agent.trackView(activeMarkdown);
     await this.agent.load();
@@ -385,6 +389,17 @@ export default class DeepSeekPlugin extends Plugin {
   /** 打开设置并定位到「终端」分组(由终端侧栏页跳转)。 */
   openTerminalSettings(): void {
     this.openSettingsSection("terminal");
+  }
+
+  /** 插件安装目录的绝对路径(桌面端),用于查找自带的服务包。 */
+  private terminalPluginDir(): string {
+    const adapter = this.app.vault.adapter as unknown as { getBasePath?: () => string };
+    const base = adapter?.getBasePath?.() ?? "";
+    if (!base) return "";
+    const root = base.replace(/[\\/]+$/, "");
+    // manifest.dir is already vault-relative and includes the config/plugins prefix.
+    const dir = this.manifest.dir;
+    return dir ? `${root}/${dir}` : `${root}/${this.app.vault.configDir}/plugins/${this.manifest.id}`;
   }
 
   /** 打开设置并定位到「Skill」分组(由助手 Skill 面板跳转)。 */

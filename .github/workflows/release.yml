@@ -68,6 +68,8 @@ jobs:
             dist/styles.css
             dist/publishing-service.cjs
             dist/publishing-mcp.cjs
+            dist/terminal-service-*.zip
+            dist/TERMINAL_SERVICE_NOTICES.txt
 
       - name: Publish release
         env:
@@ -87,8 +89,10 @@ jobs:
             dist/manifest.json
             dist/publishing-service.cjs
             dist/publishing-mcp.cjs
+            dist/terminal-service-*.zip
             dist/THIRD_PARTY_NOTICES.md
             dist/THIRD_PARTY_PUBLISHING_NOTICES.txt
+            dist/TERMINAL_SERVICE_NOTICES.txt
           )
           if [ -f "dist/styles.css" ]; then
             assets+=(dist/styles.css)

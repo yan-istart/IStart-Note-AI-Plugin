@@ -197,8 +197,74 @@ export class DeepSeekSettingsTab extends PluginSettingTab {
 
     new Setting(el)
       .setName("终端侧栏页")
-      .setDesc("打开侧栏「终端」页，查看当前定位目录并一键打开终端。")
+      .setDesc("打开侧栏「终端」页，使用内嵌控制台，或一键在系统终端中打开目录。")
       .addButton(button => button.setButtonText("打开").onClick(() => { void this.plugin.activateTerminalView(); }));
+
+    new Setting(el)
+      .setName("Node.js 路径（可选）")
+      .setDesc("留空自动检测(直接查找、常见安装目录、登录 shell 解析)。在 Obsidian 中提示未检测到 Node.js 时,可填绝对路径,如 /opt/homebrew/bin/node 或 ~/.nvm 下的 node 路径。")
+      .addText(text => text
+        .setPlaceholder("/opt/homebrew/bin/node")
+        .setValue(this.plugin.settings.terminal.nodePath)
+        .onChange(async value => {
+          this.plugin.settings.terminal.nodePath = value.trim();
+          await this.plugin.saveSettings();
+        }));
+
+    new Setting(el).setName("内嵌终端后端").setHeading();
+    el.createEl("p", {
+      text: "侧栏「终端」页的内嵌控制台由本机 Node.js 24+ 服务提供；首次使用会自动检查环境、下载并启动，进度在终端页显示，已安装的服务按版本复用、不重复下载。服务只监听 127.0.0.1，鉴权令牌保存在 ~/.istart-terminal/config.json。",
+      attr: { style: "color: var(--text-muted); font-size: 13px; line-height: 1.5;" },
+    });
+    const envStatus = el.createEl("p", { cls: "istart-terminal-env-status", attr: { role: "status" } });
+    envStatus.setText("检查环境状态…");
+    void this.plugin.terminal.status().then(status => {
+      if (!envStatus.isConnected) return;
+      envStatus.setText({
+        "missing-node": "未检测到 Node.js。内嵌终端需要 Node.js 24+。",
+        "outdated-node": `Node.js 版本过低(${status.nodeVersion ?? "未知"}),内嵌终端需要 24+。`,
+        "no-service": `已检测到 Node.js(${status.nodeVersion ?? ""}),终端服务尚未安装。`,
+        "stale-service": "运行中的终端服务版本与插件不一致,下次启动终端页时自动更新。",
+        "stopped": "终端服务已安装但未运行,打开终端页会自动启动。",
+        "starting": "终端服务启动中。",
+        ready: `终端服务运行中(v${status.serviceVersion ?? ""})。`,
+        failed: `环境异常:${status.error ?? "未知错误"}`,
+      }[status.state] ?? "状态未知");
+    }).catch(() => { if (envStatus.isConnected) envStatus.setText("环境检查失败"); });
+    new Setting(el)
+      .setName("安装并启动")
+      .setDesc("缺少环境时自动下载终端服务并启动；已就绪则直接复用。")
+      .addButton(button => button.setButtonText("安装 / 启动").onClick(async () => {
+        const status = await this.plugin.terminal.ensure(() => {});
+        new Notice(status.state === "ready" ? "终端服务已就绪，可打开侧栏「终端」页使用" : `终端服务未就绪：${status.error ?? status.state}`);
+        this.refresh();
+      }));
+    new Setting(el)
+      .setName("从本地 zip 安装")
+      .setDesc("离线安装：选择本地构建的 terminal-service-<版本>.zip（仓库 dist/ 目录，npm run build 生成），无需发布 Release 或联网。")
+      .addButton(button => button.setButtonText("选择 zip 文件").onClick(() => {
+        const input = el.createEl("input", { type: "file", attr: { accept: ".zip", style: "display: none;" } });
+        input.addEventListener("change", () => {
+          const file = input.files?.[0];
+          input.remove();
+          if (!file) return;
+          void (async () => {
+            try {
+              await this.plugin.terminal.installFromZip(new Uint8Array(await file.arrayBuffer()));
+              await this.plugin.saveSettings();
+              new Notice("终端服务包已安装，打开侧栏「终端」页即可使用");
+              this.refresh();
+            } catch (error) {
+              new Notice(`安装失败：${error instanceof Error ? error.message : String(error)}`);
+            }
+          })();
+        });
+        input.click();
+      }));
+    new Setting(el)
+      .setName("停止服务")
+      .setDesc("停止本机终端服务；下次使用终端页时会自动重新启动。")
+      .addButton(button => button.setButtonText("停止").onClick(() => void this.plugin.terminal.stop().then(() => new Notice("终端服务已停止"))));
   }
 
   // ══════════════════════════════════════════════════════════════

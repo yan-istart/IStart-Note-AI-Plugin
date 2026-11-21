@@ -3,9 +3,10 @@ import { BaiduSyncConfig, DeepSeekSettings, SyncableConfig } from "../../types";
 import { BaiduPanClient } from "./BaiduPanClient";
 import { BaiduSyncMeta, SyncAction, SyncPlan } from "./BaiduSyncMeta";
 import { withFileSyncLock } from "./FileSyncLock";
-
-const META_FILENAME = "istart-sync-meta.json";
-const CONFIG_FILENAME = "istart-config.json";
+import {
+  CONFIG_FILENAME, configRemotePath, controlDir, CONTROL_PATH_PATTERN,
+  legacyConfigRemotePath, legacyMetaRemotePath, META_FILENAME, metaRemotePath,
+} from "./SyncPaths";
 
 export interface SyncResult {
   uploaded: number;
@@ -231,14 +232,22 @@ export class BaiduSyncService {
     };
 
     const bytes = new TextEncoder().encode(JSON.stringify(syncable, null, 2));
-    const remotePath = `${this.config.remotePath}/${CONFIG_FILENAME}`.replace(/\/+/g, "/");
-    return this.client.uploadFile(bytes.buffer, remotePath);
+    await this.client.mkdir(controlDir(this.config.remotePath));
+    return this.client.uploadFile(bytes.buffer, configRemotePath(this.config.remotePath));
   }
 
   async pullConfig(localUpdatedAt?: string): Promise<SyncableConfig | null> {
-    const remotePath = `${this.config.remotePath}/${CONFIG_FILENAME}`.replace(/\/+/g, "/");
     try {
-      const buf = await this.client.downloadFile(remotePath);
+      const fresh = await this.client.downloadFile(configRemotePath(this.config.remotePath));
+      const legacy = fresh ? null : await this.client.downloadFile(legacyConfigRemotePath(this.config.remotePath));
+      if (legacy) {
+        // 旧版根目录配置迁移到 _istart/，失败不影响本次拉取
+        await this.client.mkdir(controlDir(this.config.remotePath));
+        if (await this.client.uploadFile(legacy, configRemotePath(this.config.remotePath))) {
+          await this.client.deleteFile(legacyConfigRemotePath(this.config.remotePath));
+        }
+      }
+      const buf = fresh ?? legacy;
       if (!buf) return null;
 
       const parsed: unknown = JSON.parse(new TextDecoder().decode(buf));
@@ -342,16 +351,15 @@ export class BaiduSyncService {
 
   // ── Meta 持久化 ────────────────────────────────────────────
 
-  private metaRemotePath(): string {
-    return `${this.config.remotePath}/${META_FILENAME}`.replace(/\/+/g, "/");
-  }
-
   private async loadMeta(): Promise<BaiduSyncMeta> {
     try {
-      const content = await this.client.downloadFile(this.metaRemotePath());
-      if (content) {
-        const text = new TextDecoder().decode(content);
-        return new BaiduSyncMeta(text);
+      const fresh = await this.client.downloadFile(metaRemotePath(this.config.remotePath));
+      if (fresh) return new BaiduSyncMeta(new TextDecoder().decode(fresh));
+      const legacy = await this.client.downloadFile(legacyMetaRemotePath(this.config.remotePath));
+      if (legacy) {
+        const meta = new BaiduSyncMeta(new TextDecoder().decode(legacy));
+        await this.migrateMeta(legacy);
+        return meta;
       }
     } catch {
       // 首次同步，meta 不存在
@@ -359,9 +367,22 @@ export class BaiduSyncService {
     return new BaiduSyncMeta();
   }
 
+  /** 旧版将元数据放在 remotePath 根目录，读取后尽力迁移到 _istart/ 下 */
+  private async migrateMeta(bytes: ArrayBuffer): Promise<void> {
+    try {
+      await this.client.mkdir(controlDir(this.config.remotePath));
+      if (await this.client.uploadFile(bytes, metaRemotePath(this.config.remotePath))) {
+        await this.client.deleteFile(legacyMetaRemotePath(this.config.remotePath));
+      }
+    } catch {
+      // 迁移失败不影响本次同步，下次重试
+    }
+  }
+
   private async saveMeta(meta: BaiduSyncMeta) {
+    await this.client.mkdir(controlDir(this.config.remotePath));
     const bytes = new TextEncoder().encode(meta.toJSON());
-    await this.client.uploadFile(bytes.buffer, this.metaRemotePath());
+    await this.client.uploadFile(bytes.buffer, metaRemotePath(this.config.remotePath));
   }
 
   // ── 文件映射构建 ───────────────────────────────────────────
@@ -417,7 +438,7 @@ export class BaiduSyncService {
   private shouldIgnorePath(path: string, size: number): boolean {
     if (!path || /[\\:]/.test(path) || Array.from(path).some(char => char.charCodeAt(0) < 32) || path.split("/").some(part => !part || part.startsWith("."))) return true;
     if (path === this.app.vault.configDir || path.startsWith(`${this.app.vault.configDir}/`)) return true;
-    if (/^(?:_istart-git|_plugin|_obsidian-config)(?:\/|$)/.test(path) || path === META_FILENAME || path === CONFIG_FILENAME) return true;
+    if (CONTROL_PATH_PATTERN.test(path) || path === META_FILENAME || path === CONFIG_FILENAME) return true;
     if (size > this.config.fileSizeLimitMB * 1024 * 1024) return true;
     if (this.config.ignorePattern && new RegExp(this.config.ignorePattern).test(path)) return true;
     return false;

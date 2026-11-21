@@ -152,7 +152,7 @@ describe("legacy file conflict application", () => {
   it("retains both originals and exposes the recovery directory if metadata saving fails after application", async () => {
     const a = device(); a.note("a.md", "local"); remote("a.md", "cloud");
     const service = a.service(), conflicts = await service.prepare(["a.md"]);
-    cloud.failedUploads.add("/notes/istart-sync-meta.json");
+    cloud.failedUploads.add("/notes/_istart/istart-sync-meta.json");
     await expect(service.apply(conflicts, new Map([[conflicts[0].key, { choice: "remote" }]]))).rejects.toThrow("恢复副本：");
     expect(a.content("a.md")).toBe("cloud");
     const original = [...a.files].find(([path]) => path.endsWith("0.local.bin"));
@@ -171,6 +171,8 @@ describe("legacy file conflict application", () => {
       const result = await service.sync();
       expect(result.conflicts.sort()).toEqual(["local-deleted.md", "remote-deleted.md"]);
       expect(a.files.has("local-deleted.md")).toBe(false); expect(cloud.files.has("/notes/remote-deleted.md")).toBe(false);
+      expect(cloud.files.has("/notes/_istart/istart-sync-meta.json")).toBe(true);
+      expect(cloud.files.has("/notes/istart-sync-meta.json")).toBe(false);
     }
   });
 
@@ -198,14 +200,14 @@ describe("file restore boundaries", () => {
     const read = vi.spyOn(a.app.vault, "readBinary");
     expect(await new BaiduSyncService(a.app, a.config).backup()).toMatchObject({ uploaded: 1, failed: 0 });
     expect(read.mock.calls.map(([file]) => file.path)).toEqual(["note.md"]);
-    expect([...cloud.files.keys()].sort()).toEqual(["/notes/istart-sync-meta.json", "/notes/note.md"]);
+    expect([...cloud.files.keys()].sort()).toEqual(["/notes/_istart/istart-sync-meta.json", "/notes/note.md"]);
   });
   it.each([false, true])("restores notes with overwrite=%s without installing legacy plugin backups or hidden files", async overwrite => {
     const a = device(); Object.assign(a.config, { backupPlugin: true });
     a.note(".obsidian/plugins/istart-note-ai/main.js", "installed code");
     a.note(".obsidian/plugins/istart-note-ai/manifest.json", "installed manifest");
     a.note(".obsidian/app.json", "local settings");
-    const excluded = ["_plugin/main.js", "_plugin/manifest.json", "_plugin/data.json", "_obsidian-config/app.json", "_istart-git/pack", ".obsidian/plugins/istart-note-ai/main.js", ".obsidian/app.json", "folder/../../.obsidian/plugins/istart-note-ai/main.js", "folder\\..\\main.js", "istart-config.json", "istart-sync-meta.json"];
+    const excluded = ["_plugin/main.js", "_plugin/manifest.json", "_plugin/data.json", "_obsidian-config/app.json", "_istart-git/pack", "_istart/istart-config.json", "_istart/istart-sync-meta.json", ".obsidian/plugins/istart-note-ai/main.js", ".obsidian/app.json", "folder/../../.obsidian/plugins/istart-note-ai/main.js", "folder\\..\\main.js", "istart-config.json", "istart-sync-meta.json"];
     excluded.forEach(path => remote(path, "untrusted")); remote("folder/note.md", "restored note");
     const result = await new BaiduSyncService(a.app, a.config).restore("", overwrite);
     expect(result).toMatchObject({ downloaded: 1, skipped: excluded.length, failed: 0 });
@@ -226,7 +228,7 @@ describe("file restore boundaries", () => {
     expect(a.content("folder/existing.md")).toBe("cloud"); expect(a.files.has("new.md")).toBe(false);
   });
 
-  it.each([".obsidian/plugins/istart-note-ai", "_plugin", "../notes", "folder/../notes", "/notes", "folder\\notes"])("rejects excluded restore scope %s", async folder => {
+  it.each([".obsidian/plugins/istart-note-ai", "_plugin", "_istart", "../notes", "folder/../notes", "/notes", "folder\\notes"])("rejects excluded restore scope %s", async folder => {
     const a = device();
     await expect(new BaiduSyncService(a.app, a.config).restore(folder, true)).rejects.toThrow("目录超出笔记同步范围");
     expect(a.files.size).toBe(0);

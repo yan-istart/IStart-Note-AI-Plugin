@@ -168,7 +168,7 @@ export const DEFAULT_SETTINGS: DeepSeekSettings = {
 
 /**
  * 可跨设备同步的配置（不含凭证）
- * 存储在百度云：{remotePath}/istart-config.json
+ * 存储在百度云：{remotePath}/_istart/istart-config.json（旧版为 {remotePath}/istart-config.json，读取时自动迁移）
  */
 export interface SyncableConfig {
   // DeepSeek

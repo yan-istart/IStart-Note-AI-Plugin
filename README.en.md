@@ -47,7 +47,7 @@ Implemented features are grouped below by capability. AI capabilities run as too
 - **Selection toolbar** — annotate, polish, expand, or explain selected text.
 - **Cursor-idle entry** — optionally expand continuation, insertion, summary, and other cursor actions.
 - **Writing status bar** — continue or generate the next chapter from chapter notes.
-- **Desktop terminal launcher** — a sidebar tab, commands, and context menus open the system terminal in the current note's folder or the vault root for quick CLI use (desktop only; the plugin only opens the directory and never runs commands).
+- **Embedded terminal (desktop)** — the sidebar 终端 tab embeds an interactive console for running opencode, codex, and other CLI tools inside Obsidian. First use transparently checks Node.js 24+, downloads and starts the local terminal service (progress shown, versioned installs reused, existing environments reused); command palette, context menus, and an **Open system terminal** button remain as fallbacks.
 
 ### Agent conversations and tasks
 
@@ -139,7 +139,7 @@ Implemented features are grouped below by capability. AI capabilities run as too
 - **Directory settings** — configure Q&A, question indexes, concepts, and writing roots.
 - **Agent preferences** — adjust streaming, tool steps, context budget, and shared history.
 - **Mobile layout** — sidebar drawers, touch controls, source navigation, keyboard sizing, and an optional floating toolbar.
-- **Desktop terminal settings** — default location, macOS terminal app, and Linux terminal template; device-local and excluded from configuration sync.
+- **Desktop terminal settings** — default location, macOS terminal app, Linux terminal template, and embedded-terminal backend management (environment check, install/start, stop); device-local and excluded from configuration sync.
 - **Local data and privacy** — Markdown notes, separate session/settings storage, no telemetry or plugin-operated server; see [Privacy](#privacy) for data flows.
 
 ---
@@ -169,7 +169,7 @@ Beautification, proofreading, knowledge-debt checks, annotation rewriting/sugges
 - Creating an annotation requires a text selection in editing mode. Text selection in reading mode is not supported for creation, though sidebar navigation works in both modes. There is no custom highlight-color picker; existing `<mark>` colors are displayed. The vault tab reads every Markdown note on first scan and lists at most 300 results, so use search and filters in large vaults. Selections crossing blank lines, heading/list blocks, or code blocks must be annotated in smaller parts.
 - Writing skills inject only the `SKILL.md` body; `references/` and `scripts/` are not read or executed by the plugin. Codex/OpenCode auto-invocation depends on the description and is not guaranteed. `.agents` is hidden and the plugin's Git sync excludes hidden paths by default, so keep `Skills/` as the visible canonical root.
 - The floating toolbar currently covers editing mode only; reading mode uses Obsidian's native menu. It is off on mobile by default to avoid overlapping the native selection menu, handles, and keyboard toolbar. The cursor-idle trigger is off by default.
-- The terminal launcher is desktop-only. It opens the system terminal at a directory without executing commands. The macOS App Store sandboxed build may block terminal launching; the directory path is copied to the clipboard as a fallback.
+- The embedded terminal is desktop-only and requires Node.js 24+. First use downloads the terminal service bundle (with per-platform PTY binaries) from the repository release; the service listens on 127.0.0.1 only, its token lives in `~/.istart-terminal/config.json`, and terminal commands/output never leave the machine. The system-terminal fallback also works in the macOS App Store sandboxed build.
 
 ---
 
@@ -224,7 +224,7 @@ Settings are organized into nine tabs:
 | **Annotations** | Default inline/footnote comment style, collapse sidebar after mobile navigation, open annotation sidebar |
 | **Interface** | Floating toolbar toggle, show on selection, cursor-idle trigger, mobile enable |
 | **Data Sync** | IStart Data Sync toggle, sync mode and rules, Baidu Pan configuration, cross-device configuration transfer |
-| **Terminal** | Default location, macOS terminal app, Linux terminal template (desktop only) |
+| **Terminal** | Default location, macOS terminal app, Linux terminal template, embedded-terminal backend management (desktop only) |
 | **Auxiliary** | API key, Base URL, model, output style |
 
 **IStart Data Sync** is the feature name; Baidu Pan is its currently supported storage service. **Settings → Data Sync** separates:
@@ -296,7 +296,7 @@ OpenCode can also use `"skills": ["./Skills"]`. Then open **Settings → Skill �
 - Beautification and AI annotation rewriting/suggestions produce Agent previews; ordinary annotation editing remains local.
 - File-menu tasks capture the clicked note. Git badges, diffs and version history remain in the file explorer and sync page.
 - The import wizard handles source selection, splitting, cleanup and import. Classification and metadata analysis are recorded Agent tasks; closing/cancelling the wizard stops requests.
-- The sidebar 终端 tab, command palette entries, and editor/file menus open the system terminal in the active note's folder or the vault root; terminal settings stay local to the device.
+- The sidebar 终端 tab embeds an interactive console that runs in the current note's folder or the vault root; first use checks the environment and installs the local terminal service (Node.js 24+ required). The service bundle is resolved from a zip shipped in the plugin folder first, then from the GitHub release, with a manual Settings → Terminal → Install from local zip fallback for local testing and offline setups. Command palette entries and editor/file menus open the system terminal at the directory; terminal settings stay local to the device.
 
 ### Mobile
 
@@ -400,7 +400,7 @@ src/
     dashboard/        Legacy dashboard component (entry moved to Agent)
     sync/             Baidu sync
     publishing/       Article distribution (companion service connection)
-    terminal/         Desktop terminal launcher (sidebar page, commands, menus)
+    terminal/         Desktop terminal (embedded console, environment management, system-terminal fallback)
     command-panel/    Legacy component (no active entry)
     toolbar/          Floating editor toolbar (CodeMirror 6 ViewPlugin)
   vault/              Q&A and concept-note writer
@@ -413,7 +413,7 @@ src/
 
 ## Privacy
 
-AI features send your selection and partial note context to the configured chat-completions endpoint. AI annotations only use the network when you explicitly click **AI draft**, **AI rewrite**, run **AI annotation**, or request **AI suggestions**; ordinary highlights, annotation editing, and sidebar parsing are local. Sync features upload to your own Baidu Pan. Git sync excludes hidden paths, the Obsidian config directory, credentials, and Git metadata. History retains past content after deletion and has no additional encryption. Separate configuration sync excludes API keys and Baidu credentials. File backup excludes plugin executables, plugin `data.json`, and Obsidian configuration files. No telemetry. No plugin-operated servers. Full details in [PRIVACY.md](./PRIVACY.md).
+AI features send your selection and partial note context to the configured chat-completions endpoint. AI annotations only use the network when you explicitly click **AI draft**, **AI rewrite**, run **AI annotation**, or request **AI suggestions**; ordinary highlights, annotation editing, and sidebar parsing are local. Sync features upload to your own Baidu Pan. The embedded terminal runs a local shell; commands and output never leave the machine, the service listens on 127.0.0.1 only, and its token lives in the local `~/.istart-terminal/config.json`. Git sync excludes hidden paths, the Obsidian config directory, credentials, and Git metadata. History retains past content after deletion and has no additional encryption. Separate configuration sync excludes API keys and Baidu credentials. File backup excludes plugin executables, plugin `data.json`, and Obsidian configuration files. No telemetry. No plugin-operated servers. Full details in [PRIVACY.md](./PRIVACY.md).
 
 ---
 

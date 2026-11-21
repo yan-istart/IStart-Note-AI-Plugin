@@ -75,7 +75,7 @@ After enabling sync, the plugin can upload to your own Baidu Pan account at the 
 - **Notes**: the markdown files in the folders you choose to sync.
 - **Git mode**: version bundles containing included notes, attachments, and earlier versions (including deleted content), under `_istart-git/v1/`. Hidden files, the vault configuration directory, and plugin credentials are excluded from Git note synchronization.
 - **Plugin config (optional)**: a small JSON file containing non-secret plugin settings.
-Plugin executables, plugin `data.json`, and Obsidian configuration files are excluded from backup and restore. Older plugin-backup preferences are ignored. Existing cloud copies are not automatically deleted; remove legacy `_plugin/` and `_obsidian-config/` backups in Baidu Pan if no longer needed.
+Plugin executables, plugin `data.json`, and Obsidian configuration files are excluded from backup and restore. Older plugin-backup preferences are ignored. Sync control files (`istart-sync-meta.json`, `istart-config.json`) live under `_istart/` in the remote path; legacy root-level copies migrate there on first use. Existing cloud copies are not automatically deleted; remove legacy `_plugin/` and `_obsidian-config/` backups in Baidu Pan if no longer needed.
 
 Files are uploaded over HTTPS using the Baidu Pan REST API. The plugin **does not encrypt files end-to-end**; treat your Baidu Pan account security as the boundary.
 
